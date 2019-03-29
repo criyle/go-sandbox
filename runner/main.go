@@ -108,8 +108,12 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to create filter: ", err)
 	}
+	r := NewProgramRunner()
+	r.Args = os.Args[1:]
+	r.Filter = filter
+
 	// run in restricted mode
-	pid, err := ForkAndLoadSeccomp(os.Args[1:], filter)
+	pid, err := r.StartChild()
 	if err != nil {
 		log.Fatal("Failed to fork: ", err)
 	}
@@ -124,7 +128,9 @@ func main() {
 	defer timer.Stop()
 
 	// Set trace seccomp
-	unix.PtraceSetOptions(pid, unix.PTRACE_O_TRACESECCOMP)
+	unix.PtraceSetOptions(pid, unix.PTRACE_O_TRACESECCOMP|unix.PTRACE_O_EXITKILL|
+		unix.PTRACE_O_TRACEFORK|unix.PTRACE_O_TRACECLONE|unix.PTRACE_O_TRACEEXEC|
+		unix.PTRACE_O_TRACEVFORK)
 	log.Println("Strat trace pid: ", pid)
 
 	// trace unixs
@@ -144,16 +150,32 @@ func main() {
 			log.Println("Signal", wstatus.Signal())
 		}
 		if wstatus.Stopped() {
-			log.Println("Stopped")
-			if wstatus.TrapCause() == unix.PTRACE_EVENT_SECCOMP {
+			switch cause := wstatus.TrapCause(); cause {
+			case unix.PTRACE_EVENT_SECCOMP:
 				log.Println("Seccomp Traced")
 				msg, err := unix.PtraceGetEventMsg(pid)
 				if err != nil {
 					log.Fatalln(err)
 				}
 				log.Println("Ptrace Event: ", msg)
-			} else {
-				log.Println("Stop Cause: ", wstatus.TrapCause())
+
+			case unix.PTRACE_EVENT_CLONE:
+				log.Println("Ptrace stop clone")
+
+			case unix.PTRACE_EVENT_VFORK:
+				log.Println("Ptrace stop vfork")
+
+			case unix.PTRACE_EVENT_FORK:
+				log.Println("Ptrace stop fork")
+
+			case unix.PTRACE_EVENT_EXEC:
+				log.Println("Ptrace stop exec")
+
+			case -1:
+				log.Println("Ptrace stop signal: ", wstatus.StopSignal())
+
+			default:
+				log.Println("Ptrace trap cause: ", cause, wstatus)
 			}
 		}
 
