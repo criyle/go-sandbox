@@ -11,12 +11,24 @@ Features (same as uoj-judger):
 3. Restricted file access (read / write / access / exec)
 
 Planed features:
-1. Enhanced memory allocation check (trace brk)
-2. ...
+1. Enhanced memory allocation check (e.g. trace brk rtval)
+2. More architectures
+3. ...
 
 Default file access action:
 + check file read / write: `open`, `openat`
 + check file read: `readlink`, `readlinkat`
 + check file write: `unlink`, `unlinkat`, `chmod`, `rename`
-+ check file access: `stat`, `lstat`,
++ check file access: `stat`, `lstat`, `access`
 + check file exec: `execve`
+
+Build dependency:
++ install libseccomp-dev: `apt install libseccomp-dev` on ubuntu
++ ...
+
+Packages:
++ Tracee: fork-exec with seccomp loaded
++ Tracer: ptrace tracee and provides syscall trap
+
+Executable:
++ Runner: demo
