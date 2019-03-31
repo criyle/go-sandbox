@@ -1,4 +1,4 @@
-package main
+package tracee
 
 import (
 	"io/ioutil"
@@ -18,11 +18,12 @@ func FilterToBPF(filter *libseccomp.ScmpFilter) (*syscall.SockFprog, error) {
 	// export to pipe
 	go func() {
 		filter.ExportBPF(w)
-		filter.Release()
 		w.Close()
 	}()
+
 	// get BPF binary
 	bin, err := ioutil.ReadAll(r)
+	filter.Release()
 	if err != nil {
 		return nil, err
 	}

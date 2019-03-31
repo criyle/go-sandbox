@@ -1,13 +1,12 @@
-package main
+package tracee
 
 import (
 	libseccomp "github.com/seccomp/libseccomp-golang"
 )
 
-// ProgramRunner is the RunProgramConfig
-// including the exec path, argv
-// and resource limits
-type ProgramRunner struct {
+// Runner is the RunProgramConfig including the exec path, argv
+// and resource limits. It creates tracee for ptraced tracer
+type Runner struct {
 	// Resource limit set by set rlimit
 	TimeLimit     uint64 // second
 	RealTimeLimit uint64 // second
@@ -31,9 +30,9 @@ type ProgramRunner struct {
 	Filter *libseccomp.ScmpFilter
 }
 
-// NewProgramRunner creates program config with default setting
-func NewProgramRunner() ProgramRunner {
-	return ProgramRunner{
+// NewRunner creates program config with default setting
+func NewRunner() Runner {
+	return Runner{
 		TimeLimit:     1,
 		RealTimeLimit: 0,
 		MemoryLimit:   256,
@@ -42,7 +41,7 @@ func NewProgramRunner() ProgramRunner {
 	}
 }
 
-func (r *ProgramRunner) verify() {
+func (r *Runner) verify() {
 	if r.RealTimeLimit < r.TimeLimit {
 		r.RealTimeLimit = r.TimeLimit + 2
 	}
