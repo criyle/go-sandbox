@@ -56,6 +56,7 @@ const (
 	TraceCodeMLE
 	TraceCodeOLE
 	TraceCodeBan
+	TraceCodeRE
 	TraceCodeFatal
 )
 
@@ -69,6 +70,8 @@ func (t TraceCode) Error() string {
 		return "output limit exceeded"
 	case TraceCodeBan:
 		return "syscall banned"
+	case TraceCodeRE:
+		return "runtime error"
 	case TraceCodeFatal:
 		return "handle failed"
 	default:

@@ -33,6 +33,7 @@ func main() {
 	t := tracer.NewTracer()
 	t.Args = os.Args[1:]
 	t.TraceHandle = handle
+	//t.Debug = true
 	rt, err := t.StartTrace()
 	log.Println(rt, err)
 }

@@ -2,6 +2,11 @@ package tracer
 
 import libseccomp "github.com/seccomp/libseccomp-golang"
 
+const (
+	msgDisallow int16 = iota + 1
+	msgHandle
+)
+
 func addFilterAction(filter *libseccomp.ScmpFilter, name string, action libseccomp.ScmpAction) error {
 	syscallID, err := libseccomp.GetSyscallFromName(name)
 	if err != nil {
@@ -16,10 +21,10 @@ func addFilterAction(filter *libseccomp.ScmpFilter, name string, action libsecco
 
 func (r *Tracer) buildFilter() (*libseccomp.ScmpFilter, error) {
 	// make filter
-	//filter, err := libseccomp.NewFilter(libseccomp.ActErrno.SetReturnCode(int16(syscall.EPERM)))
 	var defaultAction libseccomp.ScmpAction
+	// if debug, allow all syscalls and output what was blocked
 	if r.Debug {
-		defaultAction = libseccomp.ActTrace.SetReturnCode(100)
+		defaultAction = libseccomp.ActTrace.SetReturnCode(msgDisallow)
 	} else {
 		defaultAction = libseccomp.ActKill
 	}
@@ -30,15 +35,13 @@ func (r *Tracer) buildFilter() (*libseccomp.ScmpFilter, error) {
 
 	for _, s := range r.Allow {
 		err := addFilterAction(filter, s, libseccomp.ActAllow)
-		//log.Println("[+] allow syscall: ", s)
 		if err != nil {
 			return nil, err
 		}
 	}
 
 	for _, s := range r.Trace {
-		err := addFilterAction(filter, s, libseccomp.ActTrace.SetReturnCode(10))
-		//log.Println("[+] trace syscall: ", s)
+		err := addFilterAction(filter, s, libseccomp.ActTrace.SetReturnCode(msgHandle))
 		if err != nil {
 			return nil, err
 		}
