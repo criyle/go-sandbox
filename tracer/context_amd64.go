@@ -43,3 +43,13 @@ func (c *Context) GetString(addr uint64) string {
 	syscall.PtracePeekData(c.pid, uintptr(addr), buff)
 	return string(buff[:clen(buff)])
 }
+
+// SetReturnValue set the return value if skip the syscall
+func (c *Context) SetReturnValue(retval int) {
+	c.regs.Rax = uint64(retval)
+}
+
+func (c *Context) skipSyscall() error {
+	c.regs.Orig_rax = uint64(1<<64 - 1) //-1
+	return syscall.PtraceSetRegs(c.pid, &c.regs)
+}

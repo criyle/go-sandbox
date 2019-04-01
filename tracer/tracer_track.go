@@ -152,16 +152,9 @@ func (r *Tracer) StartTrace() (result *TraceResult, err error) {
 				case unix.PTRACE_EVENT_SECCOMP:
 					if execved {
 						// give the customized handle for syscall
-						act, err := r.handleTrap(pid)
+						err := r.handleTrap(pid)
 						if err != nil {
 							return nil, err
-						}
-
-						switch act {
-						case TraceBan:
-							// TODO: action according to handler soft ban
-						case TraceKill:
-							return nil, TraceCodeBan
 						}
 					}
 
@@ -219,7 +212,7 @@ func (r *Tracer) verify() {
 }
 
 // handleTrap handles the seccomp trap including the custom handle
-func (r *Tracer) handleTrap(pid int) (TraceAction, error) {
+func (r *Tracer) handleTrap(pid int) error {
 	r.println("Seccomp Traced")
 	msg, err := unix.PtraceGetEventMsg(pid)
 	if err != nil {
@@ -240,16 +233,29 @@ func (r *Tracer) handleTrap(pid int) (TraceAction, error) {
 		if r.TraceHandle != nil {
 			ctx, err := getTrapContext(pid)
 			if err != nil {
-				return TraceKill, err
+				return err
 			}
-			return r.TraceHandle(ctx), nil
+			act := r.TraceHandle(ctx)
+
+			switch act {
+			case TraceBan:
+				// https://www.kernel.org/doc/Documentation/prctl/seccomp_filter.txt
+				// Set the syscallno to -1 and return value into register
+				err := ctx.skipSyscall()
+				if err != nil {
+					return err
+				}
+
+			case TraceKill:
+				return TraceCodeBan
+			}
 		}
 
 	default:
 		r.println("unknown message: ", msg)
 	}
 
-	return TraceAllow, nil
+	return nil
 }
 
 func setPtraceOption(pid int) error {

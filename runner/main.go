@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"syscall"
 
 	tracer "github.com/criyle/go-judger/tracer"
 	libseccomp "github.com/seccomp/libseccomp-golang"
@@ -17,6 +18,10 @@ func handle(ctx *tracer.Context) tracer.TraceAction {
 		fileptr := ctx.Arg0()
 		file := ctx.GetString(fileptr)
 		log.Println("open: ", file)
+		if file == "1" {
+			ctx.SetReturnValue(-int(syscall.EPERM))
+			return tracer.TraceBan
+		}
 	case "access":
 		fileptr := ctx.Arg0()
 		file := ctx.GetString(fileptr)
