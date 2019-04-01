@@ -23,7 +23,8 @@ type Tracer struct {
 	Env  []string
 
 	// whether to output debug information
-	Debug bool
+	ShowDetails bool
+	Unsafe      bool
 
 	// seccomp config
 	// if one syscall exists in both allow and trace, trace will overwrite it

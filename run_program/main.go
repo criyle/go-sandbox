@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"syscall"
 
@@ -34,7 +35,25 @@ func handle(ctx *tracer.Context) tracer.TraceAction {
 	return tracer.TraceAllow
 }
 
+type arrayFlags []string
+
+func (f *arrayFlags) String() string {
+	return fmt.Sprint([]string(*f))
+}
+
+func (f *arrayFlags) Set(value string) error {
+	*f = append(*f, value)
+	return nil
+}
+
+// TODO: syscall handle, file access checker
 func main() {
+	var (
+		addReadable, addWritable       arrayFlags
+		addRawReadable, addRawWritable arrayFlags
+		allowProc                      bool
+	)
+
 	t := tracer.NewTracer()
 	flag.Uint64Var(&t.TimeLimit, "tl", 1, "Set time limit (in second)")
 	flag.Uint64Var(&t.RealTimeLimit, "rtl", 1, "Set real time limit (in second)")
@@ -45,9 +64,16 @@ func main() {
 	flag.StringVar(&t.OutputFileName, "out", "", "Set output file name")
 	flag.StringVar(&t.ErrorFileName, "err", "", "Set error file name")
 	flag.StringVar(&t.WorkPath, "work-path", "", "Set the work path of the program")
-	_ = flag.String("type", "", "Set the program type...")
+	_ = flag.String("type", "", "Set the program type (for some program such as python)")
 	_ = flag.String("res", "", "Set the file name for output the result")
-	// ...
+	flag.Var(&addReadable, "add-readable", "Add a readable file")
+	flag.Var(&addWritable, "add-writable", "Add a writable file")
+	flag.BoolVar(&t.Unsafe, "unsafe", false, "Don't check dangerous syscalls")
+	flag.BoolVar(&t.ShowDetails, "show-trace-details", false, "Show trace details")
+	flag.BoolVar(&allowProc, "allow-proc", false, "Allow fork, exec... etc.")
+	flag.Var(&addRawReadable, "add-readable-raw", "Add a readable file (don't transform to its real path)")
+	flag.Var(&addRawWritable, "add-writable-raw", "Add a writable file (don't transform to its real path)")
+
 	flag.Parse()
 
 	t.Args = flag.Args()

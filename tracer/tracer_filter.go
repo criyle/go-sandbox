@@ -23,7 +23,7 @@ func (r *Tracer) buildFilter() (*libseccomp.ScmpFilter, error) {
 	// make filter
 	var defaultAction libseccomp.ScmpAction
 	// if debug, allow all syscalls and output what was blocked
-	if r.Debug {
+	if r.Unsafe || r.ShowDetails {
 		defaultAction = libseccomp.ActTrace.SetReturnCode(msgDisallow)
 	} else {
 		defaultAction = libseccomp.ActKill

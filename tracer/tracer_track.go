@@ -185,7 +185,7 @@ func (r *Tracer) StartTrace() (result *TraceResult, err error) {
 
 // println only print when debug flag is on
 func (r *Tracer) println(v ...interface{}) {
-	if r.Debug {
+	if r.ShowDetails {
 		log.Println(v...)
 	}
 }
@@ -227,6 +227,9 @@ func (r *Tracer) handleTrap(pid int) error {
 			syscallNo := ctx.SyscallNo()
 			syscallName, err := libseccomp.ScmpSyscall(syscallNo).GetName()
 			r.println("disallowed syscall: ", syscallNo, syscallName, err)
+		}
+		if !r.Unsafe {
+			return TraceCodeBan
 		}
 
 	case msgHandle:

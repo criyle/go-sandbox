@@ -1,7 +1,6 @@
 package tracee
 
 import (
-	"log"
 	"os"
 	"syscall"
 	"unsafe" // required for go:linkname.
