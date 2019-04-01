@@ -1,6 +1,7 @@
 package tracee
 
 import (
+	"log"
 	"os"
 	"syscall"
 	"unsafe" // required for go:linkname.
@@ -125,7 +126,7 @@ func (r *Runner) Start() (int, error) {
 	// the other file already marked as close on exec
 	for i, fd := range fds {
 		if fd != 0 {
-			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP, fd, uintptr(i), 0)
+			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP2, fd, uintptr(i), 0)
 			if err1 != 0 {
 				goto childerror
 			}

@@ -1,8 +1,8 @@
 package main
 
 import (
+	"flag"
 	"log"
-	"os"
 	"syscall"
 
 	tracer "github.com/criyle/go-judger/tracer"
@@ -36,7 +36,21 @@ func handle(ctx *tracer.Context) tracer.TraceAction {
 
 func main() {
 	t := tracer.NewTracer()
-	t.Args = os.Args[1:]
+	flag.Uint64Var(&t.TimeLimit, "tl", 1, "Set time limit (in second)")
+	flag.Uint64Var(&t.RealTimeLimit, "rtl", 1, "Set real time limit (in second)")
+	flag.Uint64Var(&t.MemoryLimit, "ml", 256, "Set memory limit (in mb)")
+	flag.Uint64Var(&t.OutputLimit, "ol", 64, "Set output limit (in mb)")
+	flag.Uint64Var(&t.StackLimit, "sl", 1024, "Set stack limit (in mb)")
+	flag.StringVar(&t.InputFileName, "in", "", "Set input file name")
+	flag.StringVar(&t.OutputFileName, "out", "", "Set output file name")
+	flag.StringVar(&t.ErrorFileName, "err", "", "Set error file name")
+	flag.StringVar(&t.WorkPath, "work-path", "", "Set the work path of the program")
+	_ = flag.String("type", "", "Set the program type...")
+	_ = flag.String("res", "", "Set the file name for output the result")
+	// ...
+	flag.Parse()
+
+	t.Args = flag.Args()
 	t.TraceHandle = handle
 	//t.Debug = true
 	rt, err := t.StartTrace()
