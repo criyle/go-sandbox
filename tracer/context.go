@@ -5,8 +5,8 @@ import "syscall"
 // Context is the context for current syscall trap
 // used to retrive syscall number and arguments
 type Context struct {
-	// current process pid
-	pid int
+	// Pid is current context process pid
+	Pid int
 	// current reg context (platform dependent)
 	regs syscall.PtraceRegs
 }
