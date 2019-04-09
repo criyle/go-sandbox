@@ -3,55 +3,19 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
-	"syscall"
+	"os"
 
 	tracer "github.com/criyle/go-judger/tracer"
-	libseccomp "github.com/seccomp/libseccomp-golang"
 )
-
-func handle(ctx *tracer.Context) tracer.TraceAction {
-	syscallNo := ctx.SyscallNo()
-	syscallName, err := libseccomp.ScmpSyscall(syscallNo).GetName()
-	log.Println("syscall: ", syscallNo, syscallName, err)
-	switch syscallName {
-	case "open":
-		fileptr := ctx.Arg0()
-		file := ctx.GetString(fileptr)
-		log.Println("open: ", file)
-		if file == "1" {
-			ctx.SetReturnValue(-int(syscall.EPERM))
-			return tracer.TraceBan
-		}
-	case "access":
-		fileptr := ctx.Arg0()
-		file := ctx.GetString(fileptr)
-		log.Println("access: ", file)
-	case "execve":
-		fileptr := ctx.Arg0()
-		file := ctx.GetString(fileptr)
-		log.Println("execve: ", file)
-	}
-	return tracer.TraceAllow
-}
-
-type arrayFlags []string
-
-func (f *arrayFlags) String() string {
-	return fmt.Sprint([]string(*f))
-}
-
-func (f *arrayFlags) Set(value string) error {
-	*f = append(*f, value)
-	return nil
-}
 
 // TODO: syscall handle, file access checker
 func main() {
 	var (
 		addReadable, addWritable       arrayFlags
 		addRawReadable, addRawWritable arrayFlags
+		addRead, addWrite              []string
 		allowProc                      bool
+		pType, result                  string
 	)
 
 	t := tracer.NewTracer()
@@ -64,8 +28,8 @@ func main() {
 	flag.StringVar(&t.OutputFileName, "out", "", "Set output file name")
 	flag.StringVar(&t.ErrorFileName, "err", "", "Set error file name")
 	flag.StringVar(&t.WorkPath, "work-path", "", "Set the work path of the program")
-	_ = flag.String("type", "", "Set the program type (for some program such as python)")
-	_ = flag.String("res", "", "Set the file name for output the result")
+	flag.StringVar(&pType, "type", "default", "Set the program type (for some program such as python)")
+	flag.StringVar(&result, "res", "stdout", "Set the file name for output the result")
 	flag.Var(&addReadable, "add-readable", "Add a readable file")
 	flag.Var(&addWritable, "add-writable", "Add a writable file")
 	flag.BoolVar(&t.Unsafe, "unsafe", false, "Don't check dangerous syscalls")
@@ -77,8 +41,52 @@ func main() {
 	flag.Parse()
 
 	t.Args = flag.Args()
+
+	for _, name := range addReadable {
+		addRead = append(addRead, realPath(name))
+	}
+
+	for _, name := range addRawReadable {
+		addRead = append(addRead, name)
+	}
+
+	for _, name := range addWritable {
+		addWrite = append(addWrite, realPath(name))
+	}
+
+	for _, name := range addRawWritable {
+		addWrite = append(addWrite, name)
+	}
+
+	handle := getHandle(&t, pType, addRead, addWrite, allowProc)
 	t.TraceHandle = handle
-	//t.Debug = true
+
+	var f *os.File
+	if result == "stdout" {
+		f = os.Stdout
+	} else if result == "stderr" {
+		f = os.Stderr
+	} else {
+		f, err := os.OpenFile(result, os.O_WRONLY|os.O_CREATE, 0755)
+		if err != nil {
+			fmt.Println("Failed to open result file: ", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+	}
+
 	rt, err := t.StartTrace()
-	log.Println(rt, err)
+	if err != nil {
+		c, ok := err.(tracer.TraceCode)
+		if !ok {
+			c = tracer.TraceCodeFatal
+		}
+
+		fmt.Fprintf(f, "%d %d %d %d\n", int(c), rt.UserTime, rt.UserMem, rt.ExitCode)
+		if c == tracer.TraceCodeFatal {
+			os.Exit(1)
+		}
+	} else {
+		fmt.Fprintf(f, "%d %d %d %d\n", 0, rt.UserTime, rt.UserMem, rt.ExitCode)
+	}
 }

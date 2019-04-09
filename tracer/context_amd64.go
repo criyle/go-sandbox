@@ -40,7 +40,7 @@ func (c *Context) Arg5() uint64 {
 // GetString get the string from process data segment
 func (c *Context) GetString(addr uint64) string {
 	buff := make([]byte, syscall.PathMax)
-	syscall.PtracePeekData(c.pid, uintptr(addr), buff)
+	syscall.PtracePeekData(c.Pid, uintptr(addr), buff)
 	return string(buff[:clen(buff)])
 }
 
@@ -51,5 +51,5 @@ func (c *Context) SetReturnValue(retval int) {
 
 func (c *Context) skipSyscall() error {
 	c.regs.Orig_rax = uint64(1<<64 - 1) //-1
-	return syscall.PtraceSetRegs(c.pid, &c.regs)
+	return syscall.PtraceSetRegs(c.Pid, &c.regs)
 }

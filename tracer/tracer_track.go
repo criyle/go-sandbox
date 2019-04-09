@@ -1,7 +1,8 @@
 package tracer
 
 import (
-	"log"
+	"fmt"
+	"os"
 	"runtime"
 	"time"
 
@@ -14,8 +15,8 @@ import (
 func (r *Tracer) StartTrace() (result *TraceResult, err error) {
 	// handle potential panic
 	defer func() {
-		if r := recover(); r != nil {
-			log.Fatal(err)
+		if err2 := recover(); err2 != nil {
+			r.println(err2)
 			err = TraceCodeFatal
 		}
 	}()
@@ -92,8 +93,10 @@ func (r *Tracer) StartTrace() (result *TraceResult, err error) {
 			r.println("Wait4 failed: ", err)
 			break
 		}
+		r.println("------ ", pid, " ------")
 		// Set option if the process is newly forked
 		if !pids[pid] {
+			r.println("Set ptrace option: ", pid)
 			pids[pid] = true
 			// Ptrace set option valid if the tracee is stopped
 			err = setPtraceOption(pid)
@@ -121,7 +124,8 @@ func (r *Tracer) StartTrace() (result *TraceResult, err error) {
 			r.println("Exited", pid, wstatus.ExitStatus())
 			if pid == rootPid {
 				if execved {
-					break
+					rt.ExitCode = wstatus.ExitStatus()
+					return &rt, nil
 				}
 				return nil, TraceCodeFatal
 			}
@@ -173,7 +177,11 @@ func (r *Tracer) StartTrace() (result *TraceResult, err error) {
 					r.println("Unexpected ptrace trap cause: ", cause)
 				}
 			} else {
-				r.println("Unexpected ptrace stop signal: ", stopSig)
+				if stopSig != unix.SIGSTOP {
+					r.println("Unexpected ptrace stop signal: ", stopSig)
+				} else {
+					r.println("Ptrace stopped")
+				}
 			}
 		}
 
@@ -186,7 +194,7 @@ func (r *Tracer) StartTrace() (result *TraceResult, err error) {
 // println only print when debug flag is on
 func (r *Tracer) println(v ...interface{}) {
 	if r.ShowDetails {
-		log.Println(v...)
+		fmt.Fprintln(os.Stderr, v...)
 	}
 }
 
@@ -226,7 +234,7 @@ func (r *Tracer) handleTrap(pid int) error {
 		} else {
 			syscallNo := ctx.SyscallNo()
 			syscallName, err := libseccomp.ScmpSyscall(syscallNo).GetName()
-			r.println("disallowed syscall: ", syscallNo, syscallName, err)
+			r.println("Disallowed syscall: ", syscallNo, syscallName, err)
 		}
 		if !r.Unsafe {
 			return TraceCodeBan

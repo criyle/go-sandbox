@@ -52,13 +52,13 @@ type TraceCode int
 
 // Different end condtion
 const (
-	TraceCodeInvalid TraceCode = iota
-	TraceCodeTLE
-	TraceCodeMLE
-	TraceCodeOLE
-	TraceCodeBan
+	TraceCodeInvalid TraceCode = iota + 2 // 2
+	TraceCodeMLE                          // 3
+	TraceCodeTLE                          // 4
+	TraceCodeOLE                          // 5
+	TraceCodeBan                          // 6
+	TraceCodeFatal                        // 7
 	TraceCodeRE
-	TraceCodeFatal
 )
 
 func (t TraceCode) Error() string {
@@ -83,6 +83,7 @@ func (t TraceCode) Error() string {
 // TraceResult is the result returned by strat trace
 type TraceResult struct {
 	UserTime, UserMem uint64
+	ExitCode          int
 }
 
 // NewTracer return new Tracer with default setting

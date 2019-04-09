@@ -27,7 +27,7 @@ func getTrapContext(pid int) (*Context, error) {
 		return nil, err
 	}
 	return &Context{
-		pid:  pid,
+		Pid:  pid,
 		regs: regs,
 	}, nil
 }
