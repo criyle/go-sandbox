@@ -14,7 +14,7 @@ func softBanSyscall(ctx *tracer.Context) tracer.TraceAction {
 	return tracer.TraceBan
 }
 
-func getFileMode(flags uint64) string {
+func getFileMode(flags uint) string {
 	switch flags & syscall.O_ACCMODE {
 	case syscall.O_RDONLY:
 		return "r "
@@ -49,8 +49,8 @@ func getHandle(t *tracer.Tracer, pType string, addRead []string, addWrite []stri
 		return tracer.TraceKill
 	}
 
-	checkOpen := func(ctx *tracer.Context, addr uint64, flags uint64) tracer.TraceAction {
-		fn := ctx.GetString(addr)
+	checkOpen := func(ctx *tracer.Context, addr uint, flags uint) tracer.TraceAction {
+		fn := ctx.GetString(uintptr(addr))
 		isReadOnly := (flags&syscall.O_ACCMODE == syscall.O_RDONLY) &&
 			(flags&syscall.O_CREAT == 0) &&
 			(flags&syscall.O_EXCL == 0) &&
@@ -69,8 +69,8 @@ func getHandle(t *tracer.Tracer, pType string, addRead []string, addWrite []stri
 		return tracer.TraceAllow
 	}
 
-	checkRead := func(ctx *tracer.Context, addr uint64) tracer.TraceAction {
-		fn := ctx.GetString(addr)
+	checkRead := func(ctx *tracer.Context, addr uint) tracer.TraceAction {
+		fn := ctx.GetString(uintptr(addr))
 		print("check read: ", fn)
 		if !fs.isReadableFile(&fn) {
 			return onDgsFileDetect(ctx, fn)
@@ -78,8 +78,8 @@ func getHandle(t *tracer.Tracer, pType string, addRead []string, addWrite []stri
 		return tracer.TraceAllow
 	}
 
-	checkWrite := func(ctx *tracer.Context, addr uint64) tracer.TraceAction {
-		fn := ctx.GetString(addr)
+	checkWrite := func(ctx *tracer.Context, addr uint) tracer.TraceAction {
+		fn := ctx.GetString(uintptr(addr))
 		print("check write: ", fn)
 		if !fs.isWritableFile(&fn) {
 			return onDgsFileDetect(ctx, fn)
@@ -87,8 +87,8 @@ func getHandle(t *tracer.Tracer, pType string, addRead []string, addWrite []stri
 		return tracer.TraceAllow
 	}
 
-	checkStat := func(ctx *tracer.Context, addr uint64) tracer.TraceAction {
-		fn := ctx.GetString(addr)
+	checkStat := func(ctx *tracer.Context, addr uint) tracer.TraceAction {
+		fn := ctx.GetString(uintptr(addr))
 		print("check stat: ", fn)
 		if !fs.isStatableFile(&fn) {
 			return onDgsFileDetect(ctx, fn)

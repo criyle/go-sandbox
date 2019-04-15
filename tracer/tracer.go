@@ -88,11 +88,6 @@ type TraceResult struct {
 
 // NewTracer return new Tracer with default setting
 func NewTracer() Tracer {
-	allow := make([]string, len(defaultAllows))
-	copy(allow, defaultAllows)
-
-	trace := make([]string, len(defaultTraces))
-	copy(trace, defaultTraces)
 	// default settings
 	return Tracer{
 		TimeLimit:     1,
@@ -101,7 +96,7 @@ func NewTracer() Tracer {
 		OutputLimit:   64,
 		StackLimit:    1024,
 
-		Allow: allow,
-		Trace: trace,
+		Allow: append([]string{}, defaultAllows...),
+		Trace: append([]string{}, defaultTraces...),
 	}
 }

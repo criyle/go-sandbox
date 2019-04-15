@@ -76,6 +76,10 @@ func main() {
 	}
 
 	rt, err := t.StartTrace()
+	if t.ShowDetails {
+		fmt.Fprintln(os.Stderr, "Used process_vm_readv: ", tracer.UseVMReadv)
+	}
+
 	if err != nil {
 		c, ok := err.(tracer.TraceCode)
 		if !ok {

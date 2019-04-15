@@ -1,47 +1,44 @@
 package tracer
 
-import "syscall"
+import (
+	"syscall"
+
+	unix "golang.org/x/sys/unix"
+)
 
 // SyscallNo get current syscall no
-func (c *Context) SyscallNo() int {
-	return int(c.regs.Orig_rax)
+func (c *Context) SyscallNo() uint {
+	return uint(c.regs.Orig_rax)
 }
 
 // Arg0 gets the arg0 for the current syscall
-func (c *Context) Arg0() uint64 {
-	return c.regs.Rdi
+func (c *Context) Arg0() uint {
+	return uint(c.regs.Rdi)
 }
 
 // Arg1 gets the arg1 for the current syscall
-func (c *Context) Arg1() uint64 {
-	return c.regs.Rsi
+func (c *Context) Arg1() uint {
+	return uint(c.regs.Rsi)
 }
 
 // Arg2 gets the arg2 for the current syscall
-func (c *Context) Arg2() uint64 {
-	return c.regs.Rdx
+func (c *Context) Arg2() uint {
+	return uint(c.regs.Rdx)
 }
 
 // Arg3 gets the arg3 for the current syscall
-func (c *Context) Arg3() uint64 {
-	return c.regs.R10
+func (c *Context) Arg3() uint {
+	return uint(c.regs.R10)
 }
 
 // Arg4 gets the arg4 for the current syscall
-func (c *Context) Arg4() uint64 {
-	return c.regs.R8
+func (c *Context) Arg4() uint {
+	return uint(c.regs.R8)
 }
 
 // Arg5 gets the arg5 for the current syscall
-func (c *Context) Arg5() uint64 {
-	return c.regs.R9
-}
-
-// GetString get the string from process data segment
-func (c *Context) GetString(addr uint64) string {
-	buff := make([]byte, syscall.PathMax)
-	syscall.PtracePeekData(c.Pid, uintptr(addr), buff)
-	return string(buff[:clen(buff)])
+func (c *Context) Arg5() uint {
+	return uint(c.regs.R9)
 }
 
 // SetReturnValue set the return value if skip the syscall
@@ -50,6 +47,15 @@ func (c *Context) SetReturnValue(retval int) {
 }
 
 func (c *Context) skipSyscall() error {
-	c.regs.Orig_rax = uint64(1<<64 - 1) //-1
+	c.regs.Orig_rax = ^uint64(0) //-1
 	return syscall.PtraceSetRegs(c.Pid, &c.regs)
+}
+
+func getIovecs(base *byte, l int) []unix.Iovec {
+	return []unix.Iovec{
+		unix.Iovec{
+			Base: base,
+			Len:  uint64(l),
+		},
+	}
 }
