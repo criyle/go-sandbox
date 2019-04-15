@@ -43,9 +43,10 @@ func getHandle(t *tracer.Tracer, pType string, addRead []string, addWrite []stri
 	}
 
 	onDgsFileDetect := func(ctx *tracer.Context, name string) tracer.TraceAction {
-		if fs.isSoftBanFile(&name) {
+		if fs.isSoftBanFile(name) {
 			return softBanSyscall(ctx)
 		}
+		print("Dangerous fileopen: (killed)", name)
 		return tracer.TraceKill
 	}
 
@@ -58,11 +59,11 @@ func getHandle(t *tracer.Tracer, pType string, addRead []string, addWrite []stri
 
 		print("open: ", fn, getFileMode(flags))
 		if isReadOnly {
-			if realPath(fn) != "" && !fs.isReadableFile(&fn) {
+			if realPath(fn) != "" && !fs.isReadableFile(fn) {
 				return onDgsFileDetect(ctx, fn)
 			}
 		} else {
-			if realPath(fn) != "" && !fs.isWritableFile(&fn) {
+			if realPath(fn) != "" && !fs.isWritableFile(fn) {
 				return onDgsFileDetect(ctx, fn)
 			}
 		}
@@ -72,7 +73,7 @@ func getHandle(t *tracer.Tracer, pType string, addRead []string, addWrite []stri
 	checkRead := func(ctx *tracer.Context, addr uint) tracer.TraceAction {
 		fn := ctx.GetString(uintptr(addr))
 		print("check read: ", fn)
-		if !fs.isReadableFile(&fn) {
+		if !fs.isReadableFile(fn) {
 			return onDgsFileDetect(ctx, fn)
 		}
 		return tracer.TraceAllow
@@ -81,7 +82,7 @@ func getHandle(t *tracer.Tracer, pType string, addRead []string, addWrite []stri
 	checkWrite := func(ctx *tracer.Context, addr uint) tracer.TraceAction {
 		fn := ctx.GetString(uintptr(addr))
 		print("check write: ", fn)
-		if !fs.isWritableFile(&fn) {
+		if !fs.isWritableFile(fn) {
 			return onDgsFileDetect(ctx, fn)
 		}
 		return tracer.TraceAllow
@@ -90,7 +91,7 @@ func getHandle(t *tracer.Tracer, pType string, addRead []string, addWrite []stri
 	checkStat := func(ctx *tracer.Context, addr uint) tracer.TraceAction {
 		fn := ctx.GetString(uintptr(addr))
 		print("check stat: ", fn)
-		if !fs.isStatableFile(&fn) {
+		if !fs.isStatableFile(fn) {
 			return onDgsFileDetect(ctx, fn)
 		}
 		return tracer.TraceAllow

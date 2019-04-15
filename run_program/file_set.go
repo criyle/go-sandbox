@@ -9,17 +9,17 @@ import (
 )
 
 // basename return path with last "/"
-func basename(path *string) string {
-	if p := strings.LastIndex(*path, "/"); p >= 0 {
-		return (*path)[:p+1]
+func basename(path string) string {
+	if p := strings.LastIndex(path, "/"); p >= 0 {
+		return path[:p+1]
 	}
-	return *path
+	return path
 }
 
 // dirname return path without last "/"
-func dirname(path *string) string {
-	if p := strings.LastIndex(*path, "/"); p >= 0 {
-		return (*path)[:p]
+func dirname(path string) string {
+	if p := strings.LastIndex(path, "/"); p >= 0 {
+		return path[:p]
 	}
 	return ""
 }
@@ -50,9 +50,9 @@ func absPath(pid int, p string) string {
 func realPath(p string) string {
 	f, err := filepath.EvalSymlinks(p)
 	if err != nil {
-		return f
+		return ""
 	}
-	return ""
+	return f
 }
 
 // fileSet stores the file permissions
@@ -90,7 +90,7 @@ func (s *fileSet) IsInSetSmart(name string) bool {
 		if s.Set[name+"/"] {
 			return true
 		}
-		name = dirname(&name)
+		name = dirname(name)
 	}
 	if level == 1 && s.Set["/*"] {
 		return true
@@ -113,20 +113,20 @@ func newFileSets() fileSets {
 	return fileSets{newFileSet(), newFileSet(), newFileSet(), newFileSet()}
 }
 
-func (s *fileSets) isWritableFile(name *string) bool {
-	return s.Writable.IsInSetSmart(*name) || s.Writable.IsInSetSmart(realPath(*name))
+func (s *fileSets) isWritableFile(name string) bool {
+	return s.Writable.IsInSetSmart(name) || s.Writable.IsInSetSmart(realPath(name))
 }
 
-func (s *fileSets) isReadableFile(name *string) bool {
-	return s.isWritableFile(name) || s.Readable.IsInSetSmart(*name) || s.Readable.IsInSetSmart(realPath(*name))
+func (s *fileSets) isReadableFile(name string) bool {
+	return s.isWritableFile(name) || s.Readable.IsInSetSmart(name) || s.Readable.IsInSetSmart(realPath(name))
 }
 
-func (s *fileSets) isStatableFile(name *string) bool {
-	return s.isReadableFile(name) || s.Statable.IsInSetSmart(*name) || s.Statable.IsInSetSmart(realPath(*name))
+func (s *fileSets) isStatableFile(name string) bool {
+	return s.isReadableFile(name) || s.Statable.IsInSetSmart(name) || s.Statable.IsInSetSmart(realPath(name))
 }
 
-func (s *fileSets) isSoftBanFile(name *string) bool {
-	return s.SoftBan.IsInSetSmart(*name) || s.SoftBan.IsInSetSmart(realPath(*name))
+func (s *fileSets) isSoftBanFile(name string) bool {
+	return s.SoftBan.IsInSetSmart(name) || s.SoftBan.IsInSetSmart(realPath(name))
 }
 
 func (s *fileSets) addFilePermission(name string, mode filePerm) {
@@ -137,7 +137,7 @@ func (s *fileSets) addFilePermission(name string, mode filePerm) {
 	} else if mode == filePermStat {
 		s.Statable.Add(name)
 	}
-	for name = dirname(&name); name != ""; name = dirname(&name) {
+	for name = dirname(name); name != ""; name = dirname(name) {
 		s.Statable.Add(name)
 	}
 }

@@ -111,10 +111,10 @@ func (r *Tracer) StartTrace() (result *TraceResult, err error) {
 
 		// check tle / mle
 		if rt.UserTime > r.TimeLimit*1e3 {
-			return nil, TraceCodeTLE
+			return &rt, TraceCodeTLE
 		}
 		if rt.UserMem > r.MemoryLimit<<10 {
-			return nil, TraceCodeMLE
+			return &rt, TraceCodeMLE
 		}
 
 		// check process status
@@ -127,7 +127,7 @@ func (r *Tracer) StartTrace() (result *TraceResult, err error) {
 					rt.ExitCode = wstatus.ExitStatus()
 					return &rt, nil
 				}
-				return nil, TraceCodeFatal
+				return &rt, TraceCodeFatal
 			}
 			continue
 
@@ -137,13 +137,13 @@ func (r *Tracer) StartTrace() (result *TraceResult, err error) {
 			if pid == rootPid {
 				switch sig {
 				case unix.SIGXCPU:
-					return nil, TraceCodeTLE
+					return &rt, TraceCodeTLE
 				case unix.SIGXFSZ:
-					return nil, TraceCodeOLE
+					return &rt, TraceCodeOLE
 				case unix.SIGSYS:
-					return nil, TraceCodeBan
+					return &rt, TraceCodeBan
 				default:
-					return nil, TraceCodeRE
+					return &rt, TraceCodeRE
 				}
 			} else {
 				delete(pids, pid)
@@ -158,7 +158,7 @@ func (r *Tracer) StartTrace() (result *TraceResult, err error) {
 						// give the customized handle for syscall
 						err := r.handleTrap(pid)
 						if err != nil {
-							return nil, err
+							return &rt, err
 						}
 					}
 

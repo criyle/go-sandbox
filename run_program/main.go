@@ -85,8 +85,10 @@ func main() {
 		if !ok {
 			c = tracer.TraceCodeFatal
 		}
-
-		fmt.Fprintf(f, "%d %d %d %d\n", int(c), rt.UserTime, rt.UserMem, rt.ExitCode)
+		// Handle fatal error from trace
+		if rt != nil {
+			fmt.Fprintf(f, "%d %d %d %d\n", int(c), rt.UserTime, rt.UserMem, rt.ExitCode)
+		}
 		if c == tracer.TraceCodeFatal {
 			os.Exit(1)
 		}
