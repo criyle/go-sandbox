@@ -1,7 +1,6 @@
 package tracee
 
 import (
-	"os"
 	"syscall"
 	"unsafe" // required for go:linkname.
 
@@ -25,17 +24,17 @@ func afterForkInChild()
 //go:norace
 func (r *Runner) Start() (int, error) {
 	var (
-		err1 syscall.Errno
-		bpf  *syscall.SockFprog
+		err1    syscall.Errno
+		workdir *byte
+		nextfd  int
 	)
-	// verify
-	r.verify()
 
-	// make exec args
+	// make exec args0
 	argv0, err := syscall.BytePtrFromString(r.Args[0])
 	if err != nil {
 		return 0, err
 	}
+	// make exec args
 	argv, err := syscall.SlicePtrFromStrings(r.Args)
 	if err != nil {
 		return 0, err
@@ -46,39 +45,24 @@ func (r *Runner) Start() (int, error) {
 		return 0, err
 	}
 
-	// make bpf using libseccomp
-	if r.Filter != nil {
-		bpf, err = FilterToBPF(r.Filter)
+	// make work dir
+	if r.WorkDir != "" {
+		workdir, err = syscall.BytePtrFromString(r.WorkDir)
 		if err != nil {
 			return 0, err
 		}
 	}
 
-	// rlimit
-	rlimits := r.prepareRLimit()
-
-	// work dir
-	var dir *byte
-	if r.WorkPath != "" {
-		dir, err = syscall.BytePtrFromString(r.WorkPath)
-		if err != nil {
-			return 0, err
+	// similar to exec_linux, avoid side effect by shuffling around
+	fd := make([]int, len(r.Files))
+	nextfd = len(r.Files)
+	for i, ufd := range r.Files {
+		if nextfd < int(ufd) {
+			nextfd = int(ufd)
 		}
+		fd[i] = int(ufd)
 	}
-
-	// stdin, stdout, stderr
-	files, err := r.prepareFile()
-	if err != nil {
-		return 0, nil
-	}
-	defer closeFiles(files)
-
-	fds := make([]uintptr, 3)
-	for i, f := range files {
-		if f != nil {
-			fds[i] = f.Fd()
-		}
-	}
+	nextfd++
 
 	// Acquire the fork lock so that no other threads
 	// create new fds that are not yet close-on-exec
@@ -106,29 +90,52 @@ func (r *Runner) Start() (int, error) {
 	// Notice: cannot call any GO functions beyond this point
 
 	// Set limit
-	for _, rlim := range rlimits {
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_SETRLIMIT, uintptr(rlim.resource), uintptr(unsafe.Pointer(&rlim.rlim)), 0)
+	for _, rlim := range r.RLimits {
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_SETRLIMIT, uintptr(rlim.Res), uintptr(unsafe.Pointer(&rlim.Rlim)), 0)
 		if err1 != 0 {
 			goto childerror
 		}
 	}
 
 	// Chdir if needed
-	if dir != nil {
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_CHDIR, uintptr(unsafe.Pointer(dir)), 0, 0)
+	if workdir != nil {
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_CHDIR, uintptr(unsafe.Pointer(workdir)), 0, 0)
 		if err1 != 0 {
 			goto childerror
 		}
 	}
 
-	// setup stdin, stdout, stderr
-	// the other file already marked as close on exec
-	for i, fd := range fds {
-		if fd != 0 {
-			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP2, fd, uintptr(i), 0)
+	// Pass 1: fd[i] < i => nextfd
+	for i := 0; i < len(fd); i++ {
+		if fd[i] >= 0 && fd[i] < int(i) {
+			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP2, uintptr(fd[i]), uintptr(nextfd), 0)
 			if err1 != 0 {
 				goto childerror
 			}
+			// Set up close on exec
+			syscall.RawSyscall(syscall.SYS_FCNTL, uintptr(nextfd), syscall.F_SETFD, syscall.FD_CLOEXEC)
+			fd[i] = nextfd
+			nextfd++
+		}
+	}
+
+	// Pass 2: fd[i] => i
+	for i := 0; i < len(fd); i++ {
+		if fd[i] == -1 {
+			syscall.RawSyscall(syscall.SYS_CLOSE, uintptr(i), 0, 0)
+			continue
+		}
+		if fd[i] == int(i) {
+			// dup2(i, i) will not clear close on exec flag, need to reset the flag
+			_, _, err1 = syscall.RawSyscall(syscall.SYS_FCNTL, uintptr(fd[i]), syscall.F_SETFD, 0)
+			if err1 != 0 {
+				goto childerror
+			}
+			continue
+		}
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP2, uintptr(fd[i]), uintptr(i), 0)
+		if err1 != 0 {
+			goto childerror
 		}
 	}
 
@@ -139,7 +146,7 @@ func (r *Runner) Start() (int, error) {
 	}
 
 	// Load seccomp, stop and wait for tracer
-	if r.Filter != nil {
+	if r.BPF != nil {
 		// Check if support
 		// SECCOMP_SET_MODE_STRICT = 0, args = 1 for invalid operation
 		_, _, err1 = syscall.Syscall(unix.SYS_SECCOMP, 0, 1, 0)
@@ -148,7 +155,7 @@ func (r *Runner) Start() (int, error) {
 		}
 
 		// Load the filter manually
-		// No new priv
+		// No new privs
 		_, _, err1 = syscall.Syscall6(syscall.SYS_PRCTL, unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0, 0)
 		if err1 != 0 {
 			goto childerror
@@ -173,7 +180,7 @@ func (r *Runner) Start() (int, error) {
 		// Load seccomp filter
 		// SECCOMP_SET_MODE_FILTER = 1
 		// SECCOMP_FILTER_FLAG_TSYNC = 1
-		_, _, err1 = syscall.Syscall(unix.SYS_SECCOMP, 1, 1, uintptr(unsafe.Pointer(bpf)))
+		_, _, err1 = syscall.Syscall(unix.SYS_SECCOMP, 1, 1, uintptr(unsafe.Pointer(r.BPF)))
 		if err1 != 0 {
 			goto childerror
 		}
@@ -191,76 +198,4 @@ childerror:
 	syscall.RawSyscall(syscall.SYS_EXIT, uintptr(err1), 0, 0)
 	// cannot reach this point
 	panic("cannot reach")
-}
-
-type rlimit struct {
-	resource int
-	rlim     syscall.Rlimit
-}
-
-// prepareRLimit creates rlimit structures for tracee
-func (r *Runner) prepareRLimit() []rlimit {
-	return []rlimit{
-		// CPU limit
-		{
-			resource: syscall.RLIMIT_CPU,
-			rlim: syscall.Rlimit{
-				Cur: r.TimeLimit,
-				Max: r.RealTimeLimit,
-			},
-		},
-		// File limit
-		{
-			resource: syscall.RLIMIT_FSIZE,
-			rlim: syscall.Rlimit{
-				Cur: r.OutputLimit << 20,
-				Max: r.OutputLimit << 20,
-			},
-		},
-		// Stack limit
-		{
-			resource: syscall.RLIMIT_STACK,
-			rlim: syscall.Rlimit{
-				Cur: r.StackLimit << 20,
-				Max: r.StackLimit << 20,
-			},
-		},
-	}
-}
-
-// prepareFile opens file for new process
-func (r *Runner) prepareFile() ([]*os.File, error) {
-	var err error
-	files := make([]*os.File, 3)
-	if r.InputFileName != "" {
-		files[0], err = os.OpenFile(r.InputFileName, os.O_RDONLY, 0755)
-		if err != nil {
-			goto openerror
-		}
-	}
-	if r.OutputFileName != "" {
-		files[1], err = os.OpenFile(r.OutputFileName, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0755)
-		if err != nil {
-			goto openerror
-		}
-	}
-	if r.ErrorFileName != "" {
-		files[2], err = os.OpenFile(r.ErrorFileName, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0755)
-		if err != nil {
-			goto openerror
-		}
-	}
-	return files, nil
-openerror:
-	closeFiles(files)
-	return nil, err
-}
-
-// closeFiles close all file in the list
-func closeFiles(files []*os.File) {
-	for _, f := range files {
-		if f != nil {
-			f.Close()
-		}
-	}
 }

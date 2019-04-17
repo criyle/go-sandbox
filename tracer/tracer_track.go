@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"time"
 
-	tracee "github.com/criyle/go-judger/tracee"
+	secutil "github.com/criyle/go-judger/secutil"
 	libseccomp "github.com/seccomp/libseccomp-golang"
 	unix "golang.org/x/sys/unix"
 )
@@ -33,8 +33,31 @@ func (r *Tracer) StartTrace() (result *TraceResult, err error) {
 	if err != nil {
 		return
 	}
+	defer filter.Release()
 
-	tr := r.getTraceeRunner(filter)
+	bpf, err := secutil.FilterToBPF(filter)
+	if err != nil {
+		return
+	}
+
+	// open input / output / err files
+	files, err := r.prepareFiles()
+	if err != nil {
+		return
+	}
+	defer closeFiles(files)
+
+	// if not defined, then use the original value
+	fds := make([]uintptr, len(files))
+	for i, f := range files {
+		if f != nil {
+			fds[i] = f.Fd()
+		} else {
+			fds[i] = uintptr(i)
+		}
+	}
+	// get tracee
+	tr := r.getTraceeRunner(bpf, fds)
 
 	// run in restricted mode
 	pid, err := tr.Start()
@@ -272,25 +295,4 @@ func (r *Tracer) handleTrap(pid int) error {
 func setPtraceOption(pid int) error {
 	return unix.PtraceSetOptions(pid, unix.PTRACE_O_TRACESECCOMP|unix.PTRACE_O_EXITKILL|
 		unix.PTRACE_O_TRACEFORK|unix.PTRACE_O_TRACECLONE|unix.PTRACE_O_TRACEEXEC|unix.PTRACE_O_TRACEVFORK)
-}
-
-func (r *Tracer) getTraceeRunner(filter *libseccomp.ScmpFilter) tracee.Runner {
-	tr := tracee.NewRunner()
-	tr.TimeLimit = r.TimeLimit
-	tr.RealTimeLimit = r.RealTimeLimit
-	tr.MemoryLimit = r.MemoryLimit
-	tr.OutputLimit = r.OutputLimit
-	tr.StackLimit = r.StackLimit
-
-	tr.Args = r.Args
-	tr.Env = r.Env
-
-	tr.InputFileName = r.InputFileName
-	tr.OutputFileName = r.OutputFileName
-	tr.ErrorFileName = r.ErrorFileName
-
-	tr.WorkPath = r.WorkPath
-
-	tr.Filter = filter
-	return tr
 }
