@@ -149,14 +149,14 @@ func (r *Runner) Start() (int, error) {
 	if r.BPF != nil {
 		// Check if support
 		// SECCOMP_SET_MODE_STRICT = 0, args = 1 for invalid operation
-		_, _, err1 = syscall.Syscall(unix.SYS_SECCOMP, 0, 1, 0)
+		_, _, err1 = syscall.RawSyscall(unix.SYS_SECCOMP, 0, 1, 0)
 		if err1 != syscall.EINVAL {
 			goto childerror
 		}
 
 		// Load the filter manually
 		// No new privs
-		_, _, err1 = syscall.Syscall6(syscall.SYS_PRCTL, unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0, 0)
+		_, _, err1 = syscall.RawSyscall6(syscall.SYS_PRCTL, unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0, 0)
 		if err1 != 0 {
 			goto childerror
 		}
@@ -166,13 +166,13 @@ func (r *Runner) Start() (int, error) {
 		// Do getpid and kill to send SYS_KILL to self
 		// need to do before seccomp as these might be traced
 		// Get pid of child
-		pid, _, err1 = syscall.Syscall(syscall.SYS_GETPID, 0, 0, 0)
+		pid, _, err1 = syscall.RawSyscall(syscall.SYS_GETPID, 0, 0, 0)
 		if err1 != 0 {
 			goto childerror
 		}
 
 		// Stop to wait for tracer
-		_, _, err1 = syscall.Syscall(syscall.SYS_KILL, pid, uintptr(syscall.SIGSTOP), 0)
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_KILL, pid, uintptr(syscall.SIGSTOP), 0)
 		if err1 != 0 {
 			goto childerror
 		}
@@ -180,7 +180,7 @@ func (r *Runner) Start() (int, error) {
 		// Load seccomp filter
 		// SECCOMP_SET_MODE_FILTER = 1
 		// SECCOMP_FILTER_FLAG_TSYNC = 1
-		_, _, err1 = syscall.Syscall(unix.SYS_SECCOMP, 1, 1, uintptr(unsafe.Pointer(r.BPF)))
+		_, _, err1 = syscall.RawSyscall(unix.SYS_SECCOMP, 1, 1, uintptr(unsafe.Pointer(r.BPF)))
 		if err1 != 0 {
 			goto childerror
 		}

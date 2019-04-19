@@ -6,279 +6,242 @@ import (
 	"runtime"
 	"time"
 
-	secutil "github.com/criyle/go-judger/secutil"
-	libseccomp "github.com/seccomp/libseccomp-golang"
 	unix "golang.org/x/sys/unix"
 )
 
-// StartTrace strat the process and trace it
-func (r *Tracer) StartTrace() (result *TraceResult, err error) {
-	// handle potential panic
-	defer func() {
-		if err2 := recover(); err2 != nil {
-			r.println(err2)
-			err = TraceCodeFatal
-		}
-	}()
+// MsgDisallow, Msghandle defines the action needed when traped by
+// seccomp filter
+const (
+	MsgDisallow int16 = iota + 1
+	MsgHandle
+)
+
+var (
+	// ShowDetails is switch to trun on / off whether to show log message
+	ShowDetails bool
+	// Unsafe determines whether to terminate tracing when bad syscall caught
+	Unsafe bool
+)
+
+// Trace traces all child process that created by runner
+// this function should called only once and in the same thread that
+// exec tracee
+func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (results []TraceResult, err error) {
+	var (
+		wstatus unix.WaitStatus      // wait4 wait status
+		rusage  unix.Rusage          // wait4 rusage
+		tle     bool                 // whether the timmer triggered due to timeout
+		traced  = make(map[int]bool) // store all process that have set ptrace options
+		execved = make(map[int]bool) // store whether a runner process have successfully execvd
+		pidmap  = make(map[int]int)  // pid -> index map
+		running = len(runners)       // total number of remained runner process
+	)
+	results = make([]TraceResult, len(runners))
 
 	// Ptrace require running at the same OS thread
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	// make sure parameter valid
-	r.verify()
-
-	// build seccomp filter
-	filter, err := r.buildFilter()
-	if err != nil {
-		return
-	}
-	defer filter.Release()
-
-	bpf, err := secutil.FilterToBPF(filter)
-	if err != nil {
-		return
-	}
-
-	// open input / output / err files
-	files, err := r.prepareFiles()
-	if err != nil {
-		return
-	}
-	defer closeFiles(files)
-
-	// if not defined, then use the original value
-	fds := make([]uintptr, len(files))
-	for i, f := range files {
-		if f != nil {
-			fds[i] = f.Fd()
-		} else {
-			fds[i] = uintptr(i)
+	// Starts all runners
+	for i, r := range runners {
+		pid, err := r.Start()
+		println("tracer started: ", pid, err)
+		if err != nil {
+			results[i].TraceStatus = TraceCodeRE
+			return results, err
 		}
+		pidmap[pid] = i
 	}
-	// get tracee
-	tr := r.getTraceeRunner(bpf, fds)
-
-	// run in restricted mode
-	pid, err := tr.Start()
-	if err != nil {
-		return
-	}
-
-	r.println("Strart trace pid: ", pid)
-
-	// store all tracee process pid existence
-	pids := make(map[int]bool)
-	rootPid := pid
-
-	// kill all tracee according to pids
-	killAll := func() {
-		for p := range pids {
-			unix.Kill(p, unix.SIGKILL)
-		}
-	}
-
-	// kill all tracee upon return
-	defer func() {
-		killAll()
-		// collect zombies
-		for {
-			var wstatus unix.WaitStatus
-			if _, err := unix.Wait4(-1, &wstatus, unix.WALL|unix.WNOWAIT, nil); err != nil {
-				break
-			}
-		}
-	}()
 
 	// Set real time limit, kill process after it
-	tle := false
-	timer := time.AfterFunc(time.Duration(int64(r.RealTimeLimit)*1e9), func() {
+	timer := time.AfterFunc(time.Duration(timeout), func() {
 		tle = true
-		killAll()
+		killAll(traced)
 	})
-	defer timer.Stop()
 
-	// Trace result
-	var rt TraceResult
-
-	// If forked tracee execved, this syscall should not be handled
-	execved := false
+	// handler potential panic and tle
+	// also ensure processes was well terminated
+	defer func() {
+		timer.Stop()
+		if tle {
+			err = TraceCodeTLE
+		}
+		if err2 := recover(); err2 != nil {
+			println(err2)
+			err = TraceCodeFatal
+		}
+		// kill all tracee upon return
+		killAll(traced)
+		collectZombie()
+	}()
 
 	// trace unixs
 	for {
-		// Wait4 return values
-		var wstatus unix.WaitStatus
-		var rusage unix.Rusage
-
 		// Wait for all child
 		pid, err := unix.Wait4(-1, &wstatus, unix.WALL, &rusage)
 		if err != nil {
-			r.println("Wait4 failed: ", err)
-			break
+			println("wait4 failed: ", err)
+			return results, TraceCodeFatal
 		}
-		r.println("------ ", pid, " ------")
+		println("------ ", pid, " ------")
 		// Set option if the process is newly forked
-		if !pids[pid] {
-			r.println("Set ptrace option: ", pid)
-			pids[pid] = true
+		if !traced[pid] {
+			println("set ptrace option")
+			traced[pid] = true
 			// Ptrace set option valid if the tracee is stopped
 			err = setPtraceOption(pid)
 			if err != nil {
-				return nil, err
+				return results, err
 			}
 		}
 
-		// Update resource usage
-		rt.UserTime = uint64(rusage.Utime.Sec*1e3 + rusage.Utime.Usec/1e3) // ms
-		rt.UserMem = uint64(rusage.Maxrss)
+		// update resource usage and check against limits
+		userTime := uint(rusage.Utime.Sec*1e3 + rusage.Utime.Usec/1e3) // ms
+		userMem := uint(rusage.Maxrss)                                 // kb
+		idx, inside := pidmap[pid]                                     // index
+		status := TraceCodeNormal                                      // check limit
 
 		// check tle / mle
-		if rt.UserTime > r.TimeLimit*1e3 {
-			return &rt, TraceCodeTLE
+		if userTime > limits.TimeLimit {
+			status = TraceCodeTLE
 		}
-		if rt.UserMem > r.MemoryLimit<<10 {
-			return &rt, TraceCodeMLE
+		if userMem > limits.MemoryLimit {
+			status = TraceCodeMLE
+		}
+		if inside {
+			results[idx] = TraceResult{
+				UserTime:    userTime,
+				UserMem:     userMem,
+				TraceStatus: status,
+			}
+		}
+		if status != TraceCodeNormal {
+			return results, status
 		}
 
 		// check process status
 		switch {
 		case wstatus.Exited():
-			delete(pids, pid)
-			r.println("Exited", pid, wstatus.ExitStatus())
-			if pid == rootPid {
-				if execved {
-					rt.ExitCode = wstatus.ExitStatus()
-					return &rt, nil
+			delete(traced, pid)
+			println("process exited: ", pid, wstatus.ExitStatus())
+			if idx, inside := pidmap[pid]; inside {
+				if execved[pid] {
+					results[idx].ExitCode = wstatus.ExitStatus()
+					if running--; running == 0 {
+						return results, nil
+					}
+				} else {
+					results[idx].TraceStatus = TraceCodeFatal
+					return results, TraceCodeFatal
 				}
-				return &rt, TraceCodeFatal
 			}
-			continue
 
 		case wstatus.Signaled():
 			sig := wstatus.Signal()
-			r.println("Signal", sig)
-			if pid == rootPid {
+			println("ptrace signaled: ", sig)
+			if idx, inside := pidmap[pid]; inside {
 				switch sig {
 				case unix.SIGXCPU:
-					return &rt, TraceCodeTLE
+					status = TraceCodeTLE
 				case unix.SIGXFSZ:
-					return &rt, TraceCodeOLE
+					status = TraceCodeOLE
 				case unix.SIGSYS:
-					return &rt, TraceCodeBan
+					status = TraceCodeBan
 				default:
-					return &rt, TraceCodeRE
+					status = TraceCodeRE
 				}
-			} else {
-				delete(pids, pid)
-				continue
+				results[idx].TraceStatus = status
+				return results, status
 			}
+			delete(traced, pid)
 
 		case wstatus.Stopped():
 			if stopSig := wstatus.StopSignal(); stopSig == unix.SIGTRAP {
-				switch cause := wstatus.TrapCause(); cause {
+				switch trapCause := wstatus.TrapCause(); trapCause {
 				case unix.PTRACE_EVENT_SECCOMP:
-					if execved {
+					if execved[pid] {
 						// give the customized handle for syscall
-						err := r.handleTrap(pid)
+						err := handleTrap(handler, pid)
 						if err != nil {
-							return &rt, err
+							if idx, inside := pidmap[pid]; inside {
+								results[idx].TraceStatus = TraceCodeBan
+							}
+							return results, err
 						}
+					} else {
+						println("ptrace seccomp before execve (should be the execve syscall)")
 					}
 
 				case unix.PTRACE_EVENT_CLONE:
-					r.println("Ptrace stop clone")
+					println("ptrace stop clone")
 				case unix.PTRACE_EVENT_VFORK:
-					r.println("Ptrace stop vfork")
+					println("ptrace stop vfork")
 				case unix.PTRACE_EVENT_FORK:
-					r.println("Ptrace stop fork")
+					println("ptrace stop fork")
 				case unix.PTRACE_EVENT_EXEC:
 					// forked tracee have successfully called execve
-					execved = true
-					r.println("Ptrace stop exec")
+					execved[pid] = true
+					println("ptrace stop exec")
 
 				default:
-					r.println("Unexpected ptrace trap cause: ", cause)
+					println("ptrace unexpected trap cause: ", trapCause)
 				}
 			} else {
+				// Likely encountered SIGSEGV (segment violation)
 				if stopSig != unix.SIGSTOP {
-					r.println("Unexpected ptrace stop signal: ", stopSig)
-				} else {
-					r.println("Ptrace stopped")
+					println("ptrace unexpected stop signal: ", stopSig)
+					if idx, inside := pidmap[pid]; inside {
+						results[idx].TraceStatus = TraceCodeRE
+					}
+					return results, TraceCodeRE
 				}
+				println("ptrace stopped")
 			}
-		}
+			unix.PtraceCont(pid, 0)
 
-		// continue execution
-		unix.PtraceCont(pid, 0)
-	}
-	return &rt, nil
-}
-
-// println only print when debug flag is on
-func (r *Tracer) println(v ...interface{}) {
-	if r.ShowDetails {
-		fmt.Fprintln(os.Stderr, v...)
-	}
-}
-
-func (r *Tracer) verify() {
-	if r.RealTimeLimit < r.TimeLimit {
-		r.RealTimeLimit = r.TimeLimit + 2
-	}
-	if r.StackLimit > r.MemoryLimit {
-		r.StackLimit = r.MemoryLimit
-	}
-	// make sure allow, trace no duplicate
-	tracedMap := make(map[string]bool)
-	for _, s := range r.Trace {
-		tracedMap[s] = true
-	}
-	allow := make([]string, 0, len(r.Allow))
-	for _, s := range r.Allow {
-		if !tracedMap[s] {
-			allow = append(allow, s)
+		default:
+			// should never happen
+			println("unexpected wait status: ", wstatus)
+			unix.PtraceCont(pid, 0)
 		}
 	}
-	r.Allow = allow
 }
 
 // handleTrap handles the seccomp trap including the custom handle
-func (r *Tracer) handleTrap(pid int) error {
-	r.println("Seccomp Traced")
+func handleTrap(handler Handler, pid int) error {
+	println("seccomp traced")
 	msg, err := unix.PtraceGetEventMsg(pid)
 	if err != nil {
-		r.println(err)
+		println(err)
+		return err
 	}
 	switch int16(msg) {
-	case msgDisallow:
+	case MsgDisallow:
 		ctx, err := getTrapContext(pid)
 		if err != nil {
-			r.println(err)
-		} else {
-			syscallNo := ctx.SyscallNo()
-			syscallName, err := libseccomp.ScmpSyscall(syscallNo).GetName()
-			r.println("Disallowed syscall: ", syscallNo, syscallName, err)
+			println(err)
+			return err
 		}
-		if !r.Unsafe {
+		if ShowDetails {
+			syscallName, err := handler.GetSyscallName(ctx)
+			println("disallowed syscall: ", ctx.SyscallNo(), syscallName, err)
+		}
+		if !Unsafe {
 			return TraceCodeBan
 		}
 
-	case msgHandle:
-		if r.TraceHandle != nil {
+	case MsgHandle:
+		if handler != nil {
 			ctx, err := getTrapContext(pid)
 			if err != nil {
 				return err
 			}
-			act := r.TraceHandle(ctx)
+			act := handler.Handle(ctx)
 
 			switch act {
 			case TraceBan:
-				// https://www.kernel.org/doc/Documentation/prctl/seccomp_filter.txt
-				// Set the syscallno to -1 and return value into register
-				err := ctx.skipSyscall()
-				if err != nil {
-					return err
-				}
+				// Set the syscallno to -1 and return value into register. https://www.kernel.org/doc/Documentation/prctl/seccomp_filter.txt
+				return ctx.skipSyscall()
 
 			case TraceKill:
 				return TraceCodeBan
@@ -286,13 +249,43 @@ func (r *Tracer) handleTrap(pid int) error {
 		}
 
 	default:
-		r.println("unknown message: ", msg)
+		// undefined seccomp message, possible set up filter wrong
+		println("unknown seccomp trap message: ", msg)
 	}
 
 	return nil
 }
 
+// set Ptrace option that set up seccomp, exit kill and all mult-process actions
 func setPtraceOption(pid int) error {
 	return unix.PtraceSetOptions(pid, unix.PTRACE_O_TRACESECCOMP|unix.PTRACE_O_EXITKILL|
 		unix.PTRACE_O_TRACEFORK|unix.PTRACE_O_TRACECLONE|unix.PTRACE_O_TRACEEXEC|unix.PTRACE_O_TRACEVFORK)
+}
+
+// println only print when debug flag is on
+func println(v ...interface{}) {
+	if ShowDetails {
+		fmt.Fprintln(os.Stderr, v...)
+	}
+}
+
+// kill all tracee according to pids
+func killAll(pids map[int]bool) {
+	for p := range pids {
+		println("kill: ", p)
+		unix.Kill(p, unix.SIGKILL)
+	}
+}
+
+// collect died child processes
+func collectZombie() {
+	// collect zombies
+	for {
+		var wstatus unix.WaitStatus
+		if p, err := unix.Wait4(-1, &wstatus, unix.WALL|unix.WNOWAIT, nil); err != nil {
+			break
+		} else {
+			println("collect: ", p)
+		}
+	}
 }

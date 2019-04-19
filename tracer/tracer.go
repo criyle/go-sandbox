@@ -1,40 +1,5 @@
 package tracer
 
-// Tracer is the configuration for executing new process and trace its syscalls
-// using libseccomp and ptrace
-type Tracer struct {
-	// Resource limit set by set rlimit
-	TimeLimit     uint64 // second
-	RealTimeLimit uint64 // second
-	MemoryLimit   uint64 // mb
-	OutputLimit   uint64 // mb
-	StackLimit    uint64 // mb
-
-	// stdin, stdout, stderr file name. nil for default
-	InputFileName  string
-	OutputFileName string
-	ErrorFileName  string
-
-	// work path
-	WorkPath string
-
-	// argv and env for the child process
-	Args []string
-	Env  []string
-
-	// whether to output debug information
-	ShowDetails bool
-	Unsafe      bool
-
-	// seccomp config
-	// if one syscall exists in both allow and trace, trace will overwrite it
-	Allow []string
-	Trace []string
-
-	// if no handle, then default one is allow
-	TraceHandle func(*Context) TraceAction
-}
-
 // TraceAction defines the action returned by TraceHandle
 type TraceAction int
 
@@ -52,17 +17,23 @@ type TraceCode int
 
 // Different end condtion
 const (
-	TraceCodeInvalid TraceCode = iota + 2 // 2
-	TraceCodeMLE                          // 3
-	TraceCodeTLE                          // 4
-	TraceCodeOLE                          // 5
-	TraceCodeBan                          // 6
-	TraceCodeFatal                        // 7
-	TraceCodeRE
+	TraceCodeNormal  TraceCode = iota // 0
+	TraceCodeInvalid                  // 1
+	TraceCodeRE                       // 2
+	TraceCodeMLE                      // 3
+	TraceCodeTLE                      // 4
+	TraceCodeOLE                      // 5
+	TraceCodeBan                      // 6
+	TraceCodeFatal                    // 7
+
 )
 
 func (t TraceCode) Error() string {
 	switch t {
+	case TraceCodeNormal:
+		return ""
+	case TraceCodeRE:
+		return "runtime error"
 	case TraceCodeTLE:
 		return "time limit exceeded"
 	case TraceCodeMLE:
@@ -71,8 +42,6 @@ func (t TraceCode) Error() string {
 		return "output limit exceeded"
 	case TraceCodeBan:
 		return "syscall banned"
-	case TraceCodeRE:
-		return "runtime error"
 	case TraceCodeFatal:
 		return "handle failed"
 	default:
@@ -82,21 +51,26 @@ func (t TraceCode) Error() string {
 
 // TraceResult is the result returned by strat trace
 type TraceResult struct {
-	UserTime, UserMem uint64
-	ExitCode          int
+	UserTime    uint      // used user CPU time (in ms)
+	UserMem     uint      // used user memory (in kb)
+	ExitCode    int       // exit code
+	TraceStatus TraceCode // the final status for the process
 }
 
-// NewTracer return new Tracer with default setting
-func NewTracer() Tracer {
-	// default settings
-	return Tracer{
-		TimeLimit:     1,
-		RealTimeLimit: 0,
-		MemoryLimit:   256,
-		OutputLimit:   64,
-		StackLimit:    1024,
+// Runner represents the process runner
+type Runner interface {
+	// Starts starts the child process and return pid and error if failed
+	Start() (int, error)
+}
 
-		Allow: append([]string{}, defaultAllows...),
-		Trace: append([]string{}, defaultTraces...),
-	}
+// ResLimit represents the resource limit for traced process
+type ResLimit struct {
+	TimeLimit   uint // user CPU time limit (in ms)
+	MemoryLimit uint // user memory limit (in kB)
+}
+
+// Handler defines customized handler for traced syscall
+type Handler interface {
+	Handle(*Context) TraceAction
+	GetSyscallName(*Context) (string, error)
 }
