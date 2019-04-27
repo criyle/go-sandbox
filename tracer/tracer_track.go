@@ -38,9 +38,8 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 	)
 	results = make([]TraceResult, len(runners))
 
-	// Ptrace require running at the same OS thread
+	// make this thread exit after trace, ensure no process escaped
 	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
 
 	// Starts all runners
 	for i, r := range runners {
@@ -124,7 +123,7 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 		case wstatus.Exited():
 			delete(traced, pid)
 			println("process exited: ", pid, wstatus.ExitStatus())
-			if idx, inside := pidmap[pid]; inside {
+			if inside {
 				if execved[pid] {
 					results[idx].ExitCode = wstatus.ExitStatus()
 					if running--; running == 0 {
@@ -139,7 +138,7 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 		case wstatus.Signaled():
 			sig := wstatus.Signal()
 			println("ptrace signaled: ", sig)
-			if idx, inside := pidmap[pid]; inside {
+			if inside {
 				switch sig {
 				case unix.SIGXCPU:
 					status = TraceCodeTLE
@@ -159,11 +158,11 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 			if stopSig := wstatus.StopSignal(); stopSig == unix.SIGTRAP {
 				switch trapCause := wstatus.TrapCause(); trapCause {
 				case unix.PTRACE_EVENT_SECCOMP:
-					if execved[pid] {
+					if !inside || execved[pid] {
 						// give the customized handle for syscall
 						err := handleTrap(handler, pid)
 						if err != nil {
-							if idx, inside := pidmap[pid]; inside {
+							if inside {
 								results[idx].TraceStatus = TraceCodeBan
 							}
 							return results, err
@@ -190,7 +189,7 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 				// Likely encountered SIGSEGV (segment violation)
 				if stopSig != unix.SIGSTOP {
 					println("ptrace unexpected stop signal: ", stopSig)
-					if idx, inside := pidmap[pid]; inside {
+					if inside {
 						results[idx].TraceStatus = TraceCodeRE
 					}
 					return results, TraceCodeRE
