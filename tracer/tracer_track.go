@@ -83,16 +83,6 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 			return results, TraceCodeFatal
 		}
 		println("------ ", pid, " ------")
-		// Set option if the process is newly forked
-		if !traced[pid] {
-			println("set ptrace option")
-			traced[pid] = true
-			// Ptrace set option valid if the tracee is stopped
-			err = setPtraceOption(pid)
-			if err != nil {
-				return results, err
-			}
-		}
 
 		// update resource usage and check against limits
 		userTime := uint(rusage.Utime.Sec*1e3 + rusage.Utime.Usec/1e3) // ms
@@ -155,6 +145,18 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 			delete(traced, pid)
 
 		case wstatus.Stopped():
+			// Set option if the process is newly forked
+			if !traced[pid] {
+				println("set ptrace option")
+				traced[pid] = true
+				// Ptrace set option valid if the tracee is stopped
+				err = setPtraceOption(pid)
+				if err != nil {
+					return results, err
+				}
+			}
+
+			// Check stop signal, if trap then check seccomp
 			if stopSig := wstatus.StopSignal(); stopSig == unix.SIGTRAP {
 				switch trapCause := wstatus.TrapCause(); trapCause {
 				case unix.PTRACE_EVENT_SECCOMP:

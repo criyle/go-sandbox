@@ -118,9 +118,9 @@ func (h *handler) Handle(ctx *tracer.Context) tracer.TraceAction {
 	case "access":
 		return h.checkStat(ctx, ctx.Arg0())
 
-	case "stat":
+	case "stat", "stat64":
 		return h.checkStat(ctx, ctx.Arg0())
-	case "lstat":
+	case "lstat", "lstat64":
 		return h.checkStat(ctx, ctx.Arg0())
 
 	case "execve":

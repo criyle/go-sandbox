@@ -91,7 +91,8 @@ func (r *Runner) Start() (int, error) {
 
 	// Set limit
 	for _, rlim := range r.RLimits {
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_SETRLIMIT, uintptr(rlim.Res), uintptr(unsafe.Pointer(&rlim.Rlim)), 0)
+		// Prlimit instead of setrlimit to avoid 32-bit limitation (linux > 3.2)
+		_, _, err1 = syscall.RawSyscall6(syscall.SYS_PRLIMIT64, 0, uintptr(rlim.Res), uintptr(unsafe.Pointer(&rlim.Rlim)), 0, 0, 0)
 		if err1 != 0 {
 			goto childerror
 		}

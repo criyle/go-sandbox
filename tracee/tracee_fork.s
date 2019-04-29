@@ -1,0 +1,1 @@
+// to use go:linkname

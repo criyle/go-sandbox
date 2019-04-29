@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"runtime/debug"
 
 	secutil "github.com/criyle/go-judger/secutil"
 	tracee "github.com/criyle/go-judger/tracee"
@@ -21,7 +20,6 @@ func main() {
 		timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint
 		inputFileName, outputFileName, errorFileName, workPath         string
 	)
-	debug.SetGCPercent(-1)
 
 	flag.UintVar(&timeLimit, "tl", 1, "Set time limit (in second)")
 	flag.UintVar(&realTimeLimit, "rtl", 0, "Set real time limit (in second)")
@@ -101,11 +99,15 @@ func main() {
 			fds[i] = uintptr(i)
 		}
 	}
+
+	// Rlimit
+	rlimit := prepareRLimit(timeLimit, realTimeLimit, outputLimit<<20, stackLimit<<20)
+
 	// get tracee
 	ch := &tracee.Runner{
 		Args:    args,
 		Env:     []string{"PATH=/"},
-		RLimits: prepareRLimit(timeLimit, realTimeLimit, outputLimit<<20, stackLimit<<20),
+		RLimits: rlimit,
 		Files:   fds,
 		WorkDir: workPath,
 		BPF:     bpf,
