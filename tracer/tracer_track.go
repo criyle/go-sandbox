@@ -26,36 +26,31 @@ var (
 // Trace traces all child process that created by runner
 // this function should called only once and in the same thread that
 // exec tracee
-func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (results []TraceResult, err error) {
+func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult, err error) {
 	var (
 		wstatus unix.WaitStatus      // wait4 wait status
 		rusage  unix.Rusage          // wait4 rusage
 		tle     bool                 // whether the timmer triggered due to timeout
 		traced  = make(map[int]bool) // store all process that have set ptrace options
-		execved = make(map[int]bool) // store whether a runner process have successfully execvd
-		pidmap  = make(map[int]int)  // pid -> index map
-		running = len(runners)       // total number of remained runner process
+		execved = false              // store whether the runner process have successfully execvd
 	)
-	results = make([]TraceResult, len(runners))
 
-	// make this thread exit after trace, ensure no process escaped
+	// ptrace is thread based (kernel proc)
 	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
-	// Starts all runners
-	for i, r := range runners {
-		pid, err := r.Start()
-		println("tracer started: ", pid, err)
-		if err != nil {
-			results[i].TraceStatus = TraceCodeRE
-			return results, err
-		}
-		pidmap[pid] = i
+	// Start the runner
+	pgid, err := runner.Start()
+	println("tracer started: ", pgid, err)
+	if err != nil {
+		result.TraceStatus = TraceCodeRE
+		return result, err
 	}
 
 	// Set real time limit, kill process after it
-	timer := time.AfterFunc(time.Duration(timeout), func() {
+	timer := time.AfterFunc(time.Duration(limits.RealTimeLimit*1e6), func() {
 		tle = true
-		killAll(traced)
+		killAll(pgid)
 	})
 
 	// handler potential panic and tle
@@ -70,24 +65,23 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 			err = TraceCodeFatal
 		}
 		// kill all tracee upon return
-		killAll(traced)
-		collectZombie()
+		killAll(pgid)
+		collectZombie(pgid)
 	}()
 
 	// trace unixs
 	for {
 		// Wait for all child
-		pid, err := unix.Wait4(-1, &wstatus, unix.WALL, &rusage)
+		pid, err := unix.Wait4(-pgid, &wstatus, unix.WALL, &rusage)
 		if err != nil {
 			println("wait4 failed: ", err)
-			return results, TraceCodeFatal
+			return result, TraceCodeFatal
 		}
 		println("------ ", pid, " ------")
 
 		// update resource usage and check against limits
 		userTime := uint(rusage.Utime.Sec*1e3 + rusage.Utime.Usec/1e3) // ms
 		userMem := uint(rusage.Maxrss)                                 // kb
-		idx, inside := pidmap[pid]                                     // index
 		status := TraceCodeNormal                                      // check limit
 
 		// check tle / mle
@@ -97,15 +91,13 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 		if userMem > limits.MemoryLimit {
 			status = TraceCodeMLE
 		}
-		if inside {
-			results[idx] = TraceResult{
-				UserTime:    userTime,
-				UserMem:     userMem,
-				TraceStatus: status,
-			}
+		result = TraceResult{
+			UserTime:    userTime,
+			UserMem:     userMem,
+			TraceStatus: status,
 		}
 		if status != TraceCodeNormal {
-			return results, status
+			return result, status
 		}
 
 		// check process status
@@ -113,22 +105,17 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 		case wstatus.Exited():
 			delete(traced, pid)
 			println("process exited: ", pid, wstatus.ExitStatus())
-			if inside {
-				if execved[pid] {
-					results[idx].ExitCode = wstatus.ExitStatus()
-					if running--; running == 0 {
-						return results, nil
-					}
-				} else {
-					results[idx].TraceStatus = TraceCodeFatal
-					return results, TraceCodeFatal
-				}
+			if execved {
+				result.ExitCode = wstatus.ExitStatus()
+				return result, nil
 			}
+			result.TraceStatus = TraceCodeFatal
+			return result, TraceCodeFatal
 
 		case wstatus.Signaled():
 			sig := wstatus.Signal()
 			println("ptrace signaled: ", sig)
-			if inside {
+			if pid == pgid {
 				switch sig {
 				case unix.SIGXCPU:
 					status = TraceCodeTLE
@@ -139,8 +126,8 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 				default:
 					status = TraceCodeRE
 				}
-				results[idx].TraceStatus = status
-				return results, status
+				result.TraceStatus = status
+				return result, status
 			}
 			delete(traced, pid)
 
@@ -152,7 +139,8 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 				// Ptrace set option valid if the tracee is stopped
 				err = setPtraceOption(pid)
 				if err != nil {
-					return results, err
+					result.TraceStatus = TraceCodeFatal
+					return result, err
 				}
 			}
 
@@ -160,14 +148,12 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 			if stopSig := wstatus.StopSignal(); stopSig == unix.SIGTRAP {
 				switch trapCause := wstatus.TrapCause(); trapCause {
 				case unix.PTRACE_EVENT_SECCOMP:
-					if !inside || execved[pid] {
+					if execved {
 						// give the customized handle for syscall
 						err := handleTrap(handler, pid)
 						if err != nil {
-							if inside {
-								results[idx].TraceStatus = TraceCodeBan
-							}
-							return results, err
+							result.TraceStatus = TraceCodeBan
+							return result, err
 						}
 					} else {
 						println("ptrace seccomp before execve (should be the execve syscall)")
@@ -181,7 +167,7 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 					println("ptrace stop fork")
 				case unix.PTRACE_EVENT_EXEC:
 					// forked tracee have successfully called execve
-					execved[pid] = true
+					execved = true
 					println("ptrace stop exec")
 
 				default:
@@ -191,18 +177,11 @@ func Trace(handler Handler, runners []Runner, limits ResLimit, timeout int64) (r
 				// Likely encountered SIGSEGV (segment violation)
 				if stopSig != unix.SIGSTOP {
 					println("ptrace unexpected stop signal: ", stopSig)
-					if inside {
-						results[idx].TraceStatus = TraceCodeRE
-					}
-					return results, TraceCodeRE
+					result.TraceStatus = TraceCodeRE
+					return result, TraceCodeRE
 				}
 				println("ptrace stopped")
 			}
-			unix.PtraceCont(pid, 0)
-
-		default:
-			// should never happen
-			println("unexpected wait status: ", wstatus)
 			unix.PtraceCont(pid, 0)
 		}
 	}
@@ -271,19 +250,16 @@ func println(v ...interface{}) {
 }
 
 // kill all tracee according to pids
-func killAll(pids map[int]bool) {
-	for p := range pids {
-		println("kill: ", p)
-		unix.Kill(p, unix.SIGKILL)
-	}
+func killAll(pgid int) {
+	unix.Kill(-pgid, unix.SIGKILL)
 }
 
 // collect died child processes
-func collectZombie() {
+func collectZombie(pgid int) {
 	// collect zombies
 	for {
 		var wstatus unix.WaitStatus
-		if p, err := unix.Wait4(-1, &wstatus, unix.WALL|unix.WNOWAIT, nil); err != nil {
+		if p, err := unix.Wait4(-pgid, &wstatus, unix.WALL|unix.WNOWAIT, nil); err != nil {
 			break
 		} else {
 			println("collect: ", p)

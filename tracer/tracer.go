@@ -65,8 +65,9 @@ type Runner interface {
 
 // ResLimit represents the resource limit for traced process
 type ResLimit struct {
-	TimeLimit   uint // user CPU time limit (in ms)
-	MemoryLimit uint // user memory limit (in kB)
+	TimeLimit     uint // user CPU time limit (in ms)
+	RealTimeLimit uint // sig_kill will force the process to exit after this limit (in ms)
+	MemoryLimit   uint // user memory limit (in kB)
 }
 
 // Handler defines customized handler for traced syscall

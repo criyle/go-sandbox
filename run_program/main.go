@@ -132,14 +132,13 @@ func main() {
 	tracer.ShowDetails = showDetails
 	tracer.Unsafe = unsafe
 	limits := tracer.ResLimit{
-		TimeLimit:   timeLimit * 1e3,
-		MemoryLimit: memoryLimit << 10,
+		TimeLimit:     timeLimit * 1e3,
+		RealTimeLimit: realTimeLimit * 1e3,
+		MemoryLimit:   memoryLimit << 10,
 	}
-	runners := []tracer.Runner{ch}
 
 	// Run tracer
-	results, err := tracer.Trace(h, runners, limits, int64(realTimeLimit)*1e9)
-	rt := results[0]
+	rt, err := tracer.Trace(h, ch, limits)
 
 	println("used process_vm_readv: ", tracer.UseVMReadv)
 

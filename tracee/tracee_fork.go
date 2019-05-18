@@ -89,6 +89,13 @@ func (r *Runner) Start() (int, error) {
 	afterForkInChild()
 	// Notice: cannot call any GO functions beyond this point
 
+	// Set the pgid, so that the wait operation can apply to only certain
+	// subgroup of processes
+	_, _, err1 = syscall.RawSyscall(syscall.SYS_SETPGID, 0, 0, 0)
+	if err1 != 0 {
+		goto childerror
+	}
+
 	// Set limit
 	for _, rlim := range r.RLimits {
 		// Prlimit instead of setrlimit to avoid 32-bit limitation (linux > 3.2)
