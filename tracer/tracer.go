@@ -25,7 +25,6 @@ const (
 	TraceCodeOLE                      // 5
 	TraceCodeBan                      // 6
 	TraceCodeFatal                    // 7
-
 )
 
 func (t TraceCode) Error() string {
@@ -74,4 +73,7 @@ type ResLimit struct {
 type Handler interface {
 	Handle(*Context) TraceAction
 	GetSyscallName(*Context) (string, error)
+
+	Debug(v ...interface{})
+	HandlerDisallow(string) error
 }

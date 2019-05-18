@@ -4,11 +4,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
 
-	secutil "github.com/criyle/go-judger/secutil"
-	tracee "github.com/criyle/go-judger/tracee"
-	tracer "github.com/criyle/go-judger/tracer"
+	"github.com/criyle/go-judger/runprogram"
+	"github.com/criyle/go-judger/tracer"
 )
 
 // TODO: syscall handle, file access checker
@@ -64,24 +62,6 @@ func main() {
 		}
 	}
 
-	// Ptrace require running at the same OS thread
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	// build seccomp filter
-	filter, err := buildFilter(showDetails, allow, trace)
-	if err != nil {
-		println(err)
-		os.Exit(1)
-	}
-	defer filter.Release()
-
-	bpf, err := secutil.FilterToBPF(filter)
-	if err != nil {
-		println(err)
-		os.Exit(1)
-	}
-
 	// open input / output / err files
 	files, err := prepareFiles(inputFileName, outputFileName, errorFileName)
 	if err != nil {
@@ -100,20 +80,28 @@ func main() {
 		}
 	}
 
-	// Rlimit
-	rlimit := prepareRLimit(timeLimit, realTimeLimit, outputLimit<<20, stackLimit<<20)
-
-	// get tracee
-	ch := &tracee.Runner{
+	runner := &runprogram.RunProgram{
 		Args:    args,
 		Env:     []string{"PATH=/"},
-		RLimits: rlimit,
-		Files:   fds,
 		WorkDir: workPath,
-		BPF:     bpf,
+		RLimits: runprogram.RLimits{
+			CPU:      timeLimit,
+			CPUHard:  realTimeLimit,
+			FileSize: outputLimit,
+			Stack:    stackLimit,
+		},
+		TraceLimit: runprogram.TraceLimit{
+			TimeLimit:     timeLimit * 1e3,
+			RealTimeLimit: realTimeLimit * 1e3,
+			MemoryLimit:   memoryLimit << 10,
+		},
+		Files:          fds,
+		SyscallAllowed: allow,
+		SyscallTraced:  trace,
+		ShowDetails:    showDetails,
+		Unsafe:         unsafe,
+		Handler:        &handler{fs, sc, showDetails},
 	}
-	// get syscall handler
-	h := &handler{fs, sc, showDetails}
 
 	var f *os.File
 	if result == "stdout" {
@@ -129,17 +117,8 @@ func main() {
 		defer f.Close()
 	}
 
-	tracer.ShowDetails = showDetails
-	tracer.Unsafe = unsafe
-	limits := tracer.ResLimit{
-		TimeLimit:     timeLimit * 1e3,
-		RealTimeLimit: realTimeLimit * 1e3,
-		MemoryLimit:   memoryLimit << 10,
-	}
-
 	// Run tracer
-	rt, err := tracer.Trace(h, ch, limits)
-
+	rt, err := runner.Start()
 	println("used process_vm_readv: ", tracer.UseVMReadv)
 
 	if err != nil {

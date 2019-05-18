@@ -1,8 +1,6 @@
 package tracer
 
 import (
-	"fmt"
-	"os"
 	"runtime"
 	"time"
 
@@ -14,13 +12,6 @@ import (
 const (
 	MsgDisallow int16 = iota + 1
 	MsgHandle
-)
-
-var (
-	// ShowDetails is switch to trun on / off whether to show log message
-	ShowDetails bool
-	// Unsafe determines whether to terminate tracing when bad syscall caught
-	Unsafe bool
 )
 
 // Trace traces all child process that created by runner
@@ -41,7 +32,7 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 
 	// Start the runner
 	pgid, err := runner.Start()
-	println("tracer started: ", pgid, err)
+	handler.Debug("tracer started: ", pgid, err)
 	if err != nil {
 		result.TraceStatus = TraceCodeRE
 		return result, err
@@ -61,7 +52,7 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 			err = TraceCodeTLE
 		}
 		if err2 := recover(); err2 != nil {
-			println(err2)
+			handler.Debug(err2)
 			err = TraceCodeFatal
 		}
 		// kill all tracee upon return
@@ -71,13 +62,19 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 
 	// trace unixs
 	for {
-		// Wait for all child
-		pid, err := unix.Wait4(-pgid, &wstatus, unix.WALL, &rusage)
+		var pid int
+		if execved {
+			// Wait for all child in the process group
+			pid, err = unix.Wait4(-pgid, &wstatus, unix.WALL, &rusage)
+		} else {
+			// Ensure the process have called setpgid
+			pid, err = unix.Wait4(pgid, &wstatus, unix.WALL, &rusage)
+		}
 		if err != nil {
-			println("wait4 failed: ", err)
+			handler.Debug("wait4 failed: ", err)
 			return result, TraceCodeFatal
 		}
-		println("------ ", pid, " ------")
+		handler.Debug("------ ", pid, " ------")
 
 		// update resource usage and check against limits
 		userTime := uint(rusage.Utime.Sec*1e3 + rusage.Utime.Usec/1e3) // ms
@@ -104,7 +101,7 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 		switch {
 		case wstatus.Exited():
 			delete(traced, pid)
-			println("process exited: ", pid, wstatus.ExitStatus())
+			handler.Debug("process exited: ", pid, wstatus.ExitStatus())
 			if execved {
 				result.ExitCode = wstatus.ExitStatus()
 				return result, nil
@@ -114,7 +111,7 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 
 		case wstatus.Signaled():
 			sig := wstatus.Signal()
-			println("ptrace signaled: ", sig)
+			handler.Debug("ptrace signaled: ", sig)
 			if pid == pgid {
 				switch sig {
 				case unix.SIGXCPU:
@@ -134,7 +131,7 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 		case wstatus.Stopped():
 			// Set option if the process is newly forked
 			if !traced[pid] {
-				println("set ptrace option")
+				handler.Debug("set ptrace option")
 				traced[pid] = true
 				// Ptrace set option valid if the tracee is stopped
 				err = setPtraceOption(pid)
@@ -156,31 +153,31 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 							return result, err
 						}
 					} else {
-						println("ptrace seccomp before execve (should be the execve syscall)")
+						handler.Debug("ptrace seccomp before execve (should be the execve syscall)")
 					}
 
 				case unix.PTRACE_EVENT_CLONE:
-					println("ptrace stop clone")
+					handler.Debug("ptrace stop clone")
 				case unix.PTRACE_EVENT_VFORK:
-					println("ptrace stop vfork")
+					handler.Debug("ptrace stop vfork")
 				case unix.PTRACE_EVENT_FORK:
-					println("ptrace stop fork")
+					handler.Debug("ptrace stop fork")
 				case unix.PTRACE_EVENT_EXEC:
 					// forked tracee have successfully called execve
 					execved = true
-					println("ptrace stop exec")
+					handler.Debug("ptrace stop exec")
 
 				default:
-					println("ptrace unexpected trap cause: ", trapCause)
+					handler.Debug("ptrace unexpected trap cause: ", trapCause)
 				}
 			} else {
 				// Likely encountered SIGSEGV (segment violation)
 				if stopSig != unix.SIGSTOP {
-					println("ptrace unexpected stop signal: ", stopSig)
+					handler.Debug("ptrace unexpected stop signal: ", stopSig)
 					result.TraceStatus = TraceCodeRE
 					return result, TraceCodeRE
 				}
-				println("ptrace stopped")
+				handler.Debug("ptrace stopped")
 			}
 			unix.PtraceCont(pid, 0)
 		}
@@ -189,26 +186,22 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 
 // handleTrap handles the seccomp trap including the custom handle
 func handleTrap(handler Handler, pid int) error {
-	println("seccomp traced")
+	handler.Debug("seccomp traced")
 	msg, err := unix.PtraceGetEventMsg(pid)
 	if err != nil {
-		println(err)
+		handler.Debug(err)
 		return err
 	}
 	switch int16(msg) {
 	case MsgDisallow:
 		ctx, err := getTrapContext(pid)
 		if err != nil {
-			println(err)
+			handler.Debug(err)
 			return err
 		}
-		if ShowDetails {
-			syscallName, err := handler.GetSyscallName(ctx)
-			println("disallowed syscall: ", ctx.SyscallNo(), syscallName, err)
-		}
-		if !Unsafe {
-			return TraceCodeBan
-		}
+		syscallName, err := handler.GetSyscallName(ctx)
+		handler.Debug("disallowed syscall: ", ctx.SyscallNo(), syscallName, err)
+		return handler.HandlerDisallow(syscallName)
 
 	case MsgHandle:
 		if handler != nil {
@@ -230,7 +223,7 @@ func handleTrap(handler Handler, pid int) error {
 
 	default:
 		// undefined seccomp message, possible set up filter wrong
-		println("unknown seccomp trap message: ", msg)
+		handler.Debug("unknown seccomp trap message: ", msg)
 	}
 
 	return nil
@@ -240,13 +233,6 @@ func handleTrap(handler Handler, pid int) error {
 func setPtraceOption(pid int) error {
 	return unix.PtraceSetOptions(pid, unix.PTRACE_O_TRACESECCOMP|unix.PTRACE_O_EXITKILL|
 		unix.PTRACE_O_TRACEFORK|unix.PTRACE_O_TRACECLONE|unix.PTRACE_O_TRACEEXEC|unix.PTRACE_O_TRACEVFORK)
-}
-
-// println only print when debug flag is on
-func println(v ...interface{}) {
-	if ShowDetails {
-		fmt.Fprintln(os.Stderr, v...)
-	}
 }
 
 // kill all tracee according to pids
@@ -259,10 +245,8 @@ func collectZombie(pgid int) {
 	// collect zombies
 	for {
 		var wstatus unix.WaitStatus
-		if p, err := unix.Wait4(-pgid, &wstatus, unix.WALL|unix.WNOWAIT, nil); err != nil {
+		if _, err := unix.Wait4(-pgid, &wstatus, unix.WALL|unix.WNOWAIT, nil); err != nil {
 			break
-		} else {
-			println("collect: ", p)
 		}
 	}
 }
