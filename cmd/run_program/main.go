@@ -5,11 +5,17 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/criyle/go-judger/runconfig"
 	"github.com/criyle/go-judger/runprogram"
 	"github.com/criyle/go-judger/tracer"
 )
 
-// TODO: syscall handle, file access checker
+func printUsage() {
+	fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [options] <args>\n", os.Args[0])
+	flag.PrintDefaults()
+	os.Exit(2)
+}
+
 func main() {
 	var (
 		addReadable, addWritable, addRawReadable, addRawWritable       arrayFlags
@@ -19,6 +25,7 @@ func main() {
 		inputFileName, outputFileName, errorFileName, workPath         string
 	)
 
+	flag.Usage = printUsage
 	flag.UintVar(&timeLimit, "tl", 1, "Set time limit (in second)")
 	flag.UintVar(&realTimeLimit, "rtl", 0, "Set real time limit (in second)")
 	flag.UintVar(&memoryLimit, "ml", 256, "Set memory limit (in mb)")
@@ -37,12 +44,18 @@ func main() {
 	flag.BoolVar(&allowProc, "allow-proc", false, "Allow fork, exec... etc.")
 	flag.Var(&addRawReadable, "add-readable-raw", "Add a readable file (don't transform to its real path)")
 	flag.Var(&addRawWritable, "add-writable-raw", "Add a writable file (don't transform to its real path)")
-
 	flag.Parse()
 
 	args := flag.Args()
-	addRead := getExtraSet(addReadable, addRawReadable)
-	addWrite := getExtraSet(addWritable, addRawWritable)
+	if len(args) == 0 {
+		printUsage()
+	}
+
+	println := func(v ...interface{}) {
+		if showDetails {
+			fmt.Fprintln(os.Stderr, v...)
+		}
+	}
 
 	if realTimeLimit < timeLimit {
 		realTimeLimit = timeLimit + 2
@@ -54,13 +67,9 @@ func main() {
 		workPath, _ = os.Getwd()
 	}
 
-	fs, sc, allow, trace, args := getConf(pType, workPath, args, addRead, addWrite, allowProc)
-
-	println := func(v ...interface{}) {
-		if showDetails {
-			fmt.Fprintln(os.Stderr, v...)
-		}
-	}
+	addRead := runconfig.GetExtraSet(addReadable, addRawReadable)
+	addWrite := runconfig.GetExtraSet(addWritable, addRawWritable)
+	h := runconfig.GetConf(pType, workPath, args, addRead, addWrite, allowProc, showDetails)
 
 	// open input / output / err files
 	files, err := prepareFiles(inputFileName, outputFileName, errorFileName)
@@ -81,7 +90,7 @@ func main() {
 	}
 
 	runner := &runprogram.RunProgram{
-		Args:    args,
+		Args:    h.Args,
 		Env:     []string{"PATH=/"},
 		WorkDir: workPath,
 		RLimits: runprogram.RLimits{
@@ -96,11 +105,11 @@ func main() {
 			MemoryLimit:   memoryLimit << 10,
 		},
 		Files:          fds,
-		SyscallAllowed: allow,
-		SyscallTraced:  trace,
+		SyscallAllowed: h.SyscallAllow,
+		SyscallTraced:  h.SyscallTrace,
 		ShowDetails:    showDetails,
 		Unsafe:         unsafe,
-		Handler:        &handler{fs, sc, showDetails},
+		Handler:        h,
 	}
 
 	var f *os.File

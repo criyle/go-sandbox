@@ -1,4 +1,4 @@
-package main
+package runconfig
 
 // ProgramConfig defines the extra config apply to program type
 type ProgramConfig struct {

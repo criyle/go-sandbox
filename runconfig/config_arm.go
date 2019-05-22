@@ -1,4 +1,4 @@
-package main
+package runconfig
 
 // This file includes configs for the run program settings
 
