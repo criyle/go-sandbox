@@ -39,7 +39,7 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 	}
 
 	// Set real time limit, kill process after it
-	timer := time.AfterFunc(time.Duration(limits.RealTimeLimit*1e6), func() {
+	timer := time.AfterFunc(time.Duration(int64(limits.RealTimeLimit)*1e6), func() {
 		tle = true
 		killAll(pgid)
 	})
