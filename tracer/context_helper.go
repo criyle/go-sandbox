@@ -25,6 +25,9 @@ func vmRead(pid int, addr uintptr, buff []byte) (int, error) {
 	localIov := getIovecs(&buff[0], l)
 	remoteIov := getIovecs((*byte)(unsafe.Pointer(addr)), l)
 	n, _, err := processVMReadv(pid, localIov, remoteIov, uintptr(0))
+	if err == 0 {
+		return int(n), nil
+	}
 	return int(n), err
 }
 
