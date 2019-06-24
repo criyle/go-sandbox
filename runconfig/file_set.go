@@ -69,7 +69,7 @@ func (s *FileSet) AddRange(names []string, workPath string) {
 		if filepath.IsAbs(n) {
 			s.Set[n] = true
 		} else {
-			s.Set[filepath.Join(workPath, n)] = true
+			s.Set[filepath.Join(workPath, n)+"/"] = true
 		}
 	}
 }

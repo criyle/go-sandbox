@@ -102,17 +102,20 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 		case wstatus.Exited():
 			delete(traced, pid)
 			handler.Debug("process exited: ", pid, wstatus.ExitStatus())
-			if execved {
-				result.ExitCode = wstatus.ExitStatus()
-				return result, nil
+			if pid == pgid {
+				if execved {
+					result.ExitCode = wstatus.ExitStatus()
+					return result, nil
+				}
+				result.TraceStatus = TraceCodeFatal
+				return result, TraceCodeFatal
 			}
-			result.TraceStatus = TraceCodeFatal
-			return result, TraceCodeFatal
 
 		case wstatus.Signaled():
 			sig := wstatus.Signal()
 			handler.Debug("ptrace signaled: ", sig)
 			if pid == pgid {
+				delete(traced, pid)
 				switch sig {
 				case unix.SIGXCPU:
 					status = TraceCodeTLE
@@ -126,7 +129,7 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 				result.TraceStatus = status
 				return result, status
 			}
-			delete(traced, pid)
+			unix.PtraceCont(pid, int(sig))
 
 		case wstatus.Stopped():
 			// Set option if the process is newly forked
@@ -172,10 +175,9 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 				}
 			} else {
 				// Likely encountered SIGSEGV (segment violation)
+				// Or compiler child exited
 				if stopSig != unix.SIGSTOP {
 					handler.Debug("ptrace unexpected stop signal: ", stopSig)
-					result.TraceStatus = TraceCodeRE
-					return result, TraceCodeRE
 				}
 				handler.Debug("ptrace stopped")
 			}
