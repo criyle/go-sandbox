@@ -173,15 +173,27 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 				default:
 					handler.Debug("ptrace unexpected trap cause: ", trapCause)
 				}
+				unix.PtraceCont(pid, 0)
 			} else {
+				// check if cpu rlimit hit
+				switch stopSig {
+				case unix.SIGXCPU:
+					status = TraceCodeTLE
+				case unix.SIGXFSZ:
+					status = TraceCodeOLE
+				}
+				if status != TraceCodeNormal {
+					result.TraceStatus = status
+					return result, status
+				}
 				// Likely encountered SIGSEGV (segment violation)
 				// Or compiler child exited
 				if stopSig != unix.SIGSTOP {
 					handler.Debug("ptrace unexpected stop signal: ", stopSig)
 				}
 				handler.Debug("ptrace stopped")
+				unix.PtraceCont(pid, int(stopSig))
 			}
-			unix.PtraceCont(pid, 0)
 		}
 	}
 }
