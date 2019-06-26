@@ -59,7 +59,11 @@ func (s *FileSet) IsInSetSmart(name string) bool {
 
 // Add adds a single file path into the FileSet
 func (s *FileSet) Add(name string) {
-	s.Set[name] = true
+	if name == "/" {
+		s.SystemRoot = true
+	} else {
+		s.Set[name] = true
+	}
 }
 
 // AddRange adds multiple files into the FileSet
@@ -67,7 +71,11 @@ func (s *FileSet) Add(name string) {
 func (s *FileSet) AddRange(names []string, workPath string) {
 	for _, n := range names {
 		if filepath.IsAbs(n) {
-			s.Set[n] = true
+			if n == "/" {
+				s.SystemRoot = true
+			} else {
+				s.Set[n] = true
+			}
 		} else {
 			s.Set[filepath.Join(workPath, n)+"/"] = true
 		}
