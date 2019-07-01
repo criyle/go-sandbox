@@ -179,6 +179,7 @@ var (
 					"sched_getaffinity", "sched_yield",
 					"uname", "sysinfo",
 					"prlimit64", "getrandom",
+					"fchmodat",
 				},
 				ExtraBan: []string{"socket", "connect", "geteuid", "getuid"},
 			},
