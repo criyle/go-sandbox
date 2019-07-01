@@ -79,7 +79,7 @@ func (h *tracerHandler) Handle(ctx *tracer.Context) tracer.TraceAction {
 
 	case "access":
 		action = h.checkStat(ctx, ctx.Arg0())
-	case "faccessat":
+	case "faccessat", "newfstatat":
 		action = h.checkStat(ctx, ctx.Arg1())
 
 	case "stat", "stat64":

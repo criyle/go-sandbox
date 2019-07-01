@@ -91,7 +91,7 @@ func main() {
 
 	runner := &runprogram.RunProgram{
 		Args:    h.Args,
-		Env:     []string{"PATH=/"},
+		Env:     []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
 		WorkDir: workPath,
 		RLimits: runprogram.RLimits{
 			CPU:      timeLimit,
