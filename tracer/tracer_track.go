@@ -203,14 +203,14 @@ func handleTrap(handler Handler, pid int) error {
 	handler.Debug("seccomp traced")
 	msg, err := unix.PtraceGetEventMsg(pid)
 	if err != nil {
-		handler.Debug(err)
+		handler.Debug("PtraceGetEventMsg failed:", err)
 		return err
 	}
 	switch int16(msg) {
 	case MsgDisallow:
 		ctx, err := getTrapContext(pid)
 		if err != nil {
-			handler.Debug(err)
+			handler.Debug("getTrapContext failed:", err)
 			return err
 		}
 		syscallName, err := handler.GetSyscallName(ctx)

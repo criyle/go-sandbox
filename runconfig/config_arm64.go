@@ -4,8 +4,8 @@ package runconfig
 
 var (
 	archReadableFiles = []string{
-		"/lib/x86_64-linux-gnu/",
-		"/usr/lib/x86_64-linux-gnu/",
+		"/lib/aarch64-linux-gnu/",
+		"/usr/lib/aarch64-linux-gnu/",
 	}
 
 	archSyscallAllows = []string{}

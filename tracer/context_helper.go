@@ -31,6 +31,10 @@ func vmRead(pid int, addr uintptr, buff []byte) (int, error) {
 	return int(n), err
 }
 
+func getIovecs(base *byte, l int) []unix.Iovec {
+	return []unix.Iovec{getIovec(base, l)}
+}
+
 func vmReadStr(pid int, addr uintptr, buff []byte) error {
 	// Deal with unaligned addr
 	n := 0

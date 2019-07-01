@@ -5,11 +5,12 @@ func GetConf(pType, workPath string, args, addRead, addWrite []string, allowProc
 	var (
 		fs    = NewFileSets()
 		sc    = NewSyscallCounter()
-		allow = append([]string{}, defaultSyscallAllows...)
-		trace = append([]string{}, defaultSyscallTraces...)
+		allow = append(append([]string{}, defaultSyscallAllows...), archSyscallAllows...)
+		trace = append(append([]string{}, defaultSyscallTraces...), archSyscallTraces...)
 	)
 
 	fs.Readable.AddRange(defaultReadableFiles, workPath)
+	fs.Readable.AddRange(archReadableFiles, workPath)
 	fs.Writable.AddRange(defaultWritableFiles, workPath)
 	fs.AddFilePermission(args[0], FilePermRead)
 	fs.AddFilePermission(workPath, FilePermRead)

@@ -27,7 +27,8 @@ func init() {
 
 func getTrapContext(pid int) (*Context, error) {
 	var regs syscall.PtraceRegs
-	err := syscall.PtraceGetRegs(pid, &regs)
+	//err := syscall.PtraceGetRegs(pid, &regs)
+	err := ptraceGetRegSet(pid, &regs)
 	if err != nil {
 		return nil, err
 	}

@@ -116,7 +116,7 @@ func (r *Runner) Start() (int, error) {
 	// Pass 1: fd[i] < i => nextfd
 	for i := 0; i < len(fd); i++ {
 		if fd[i] >= 0 && fd[i] < int(i) {
-			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP2, uintptr(fd[i]), uintptr(nextfd), 0)
+			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(fd[i]), uintptr(nextfd), 0)
 			if err1 != 0 {
 				goto childerror
 			}
@@ -141,7 +141,7 @@ func (r *Runner) Start() (int, error) {
 			}
 			continue
 		}
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP2, uintptr(fd[i]), uintptr(i), 0)
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(fd[i]), uintptr(i), 0)
 		if err1 != 0 {
 			goto childerror
 		}

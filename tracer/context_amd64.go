@@ -51,11 +51,9 @@ func (c *Context) skipSyscall() error {
 	return syscall.PtraceSetRegs(c.Pid, &c.regs)
 }
 
-func getIovecs(base *byte, l int) []unix.Iovec {
-	return []unix.Iovec{
-		unix.Iovec{
-			Base: base,
-			Len:  uint64(l),
-		},
+func getIovec(base *byte, l int) unix.Iovec {
+	return unix.Iovec{
+		Base: base,
+		Len:  uint64(l),
 	}
 }

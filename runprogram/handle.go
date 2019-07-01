@@ -79,6 +79,8 @@ func (h *tracerHandler) Handle(ctx *tracer.Context) tracer.TraceAction {
 
 	case "access":
 		action = h.checkStat(ctx, ctx.Arg0())
+	case "faccessat":
+		action = h.checkStat(ctx, ctx.Arg1())
 
 	case "stat", "stat64":
 		action = h.checkStat(ctx, ctx.Arg0())
@@ -100,6 +102,7 @@ func (h *tracerHandler) Handle(ctx *tracer.Context) tracer.TraceAction {
 	case TraceAllow:
 		return tracer.TraceAllow
 	case TraceBan:
+		h.Debug("<soft ban syscall>")
 		return softBanSyscall(ctx)
 	default:
 		return tracer.TraceKill

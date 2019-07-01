@@ -18,7 +18,7 @@ Default file access action:
 + check file read / write: `open`, `openat`
 + check file read: `readlink`, `readlinkat`
 + check file write: `unlink`, `unlinkat`, `chmod`, `rename`
-+ check file access: `stat`, `lstat`, `access`
++ check file access: `stat`, `lstat`, `access`, `faccessat`
 + check file exec: `execve`
 
 Packages:
@@ -32,10 +32,12 @@ Executable:
 Configuations:
 + run_program/config.go: all configs toward running specs
 
+Features:
++ Percise resource limits (s -> ms, mb -> kb)
++ More architectures (arm32, arm64, x86)
+
 TODO:
 
 + allow multiple traced programs
 + allow pipes
-+ Percise resource limits (s -> ms, mb -> kb)
-+ More architectures (arm32, x86)
 + ...
