@@ -24,6 +24,7 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 		tle     bool                 // whether the timmer triggered due to timeout
 		traced  = make(map[int]bool) // store all process that have set ptrace options
 		execved = false              // store whether the runner process have successfully execvd
+		pid     int                  // store pid of wait4 result
 	)
 
 	// ptrace is thread based (kernel proc)
@@ -62,7 +63,9 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 
 	// trace unixs
 	for {
-		var pid int
+		if err = clearRefs(pgid); err != nil {
+			return result, err
+		}
 		if execved {
 			// Wait for all child in the process group
 			pid, err = unix.Wait4(-pgid, &wstatus, unix.WALL, &rusage)

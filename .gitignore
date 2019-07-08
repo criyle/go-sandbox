@@ -3,4 +3,4 @@
 
 # Test Env
 test*/
-env.sh
+env*.sh
