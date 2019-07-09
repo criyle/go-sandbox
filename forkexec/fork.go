@@ -1,4 +1,4 @@
-package tracee
+package forkexec
 
 import (
 	"syscall"

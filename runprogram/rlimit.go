@@ -3,7 +3,7 @@ package runprogram
 import (
 	"syscall"
 
-	"github.com/criyle/go-judger/tracee"
+	"github.com/criyle/go-judger/forkexec"
 )
 
 // RLimits defines the rlimit applied by setrlimit syscall to traced process
@@ -22,39 +22,39 @@ func getRlimit(cur, max uint64) syscall.Rlimit {
 
 // prepareRLimit creates rlimit structures for tracee
 // TimeLimit in s, SizeLimit in byte
-func (r *RLimits) prepareRLimit() []tracee.RLimit {
-	var ret []tracee.RLimit
+func (r *RLimits) prepareRLimit() []forkexec.RLimit {
+	var ret []forkexec.RLimit
 	if r.CPU > 0 {
 		cpuHard := r.CPUHard
 		if cpuHard < r.CPU {
 			cpuHard = r.CPU
 		}
 
-		ret = append(ret, tracee.RLimit{
+		ret = append(ret, forkexec.RLimit{
 			Res:  syscall.RLIMIT_CPU,
 			Rlim: getRlimit(uint64(r.CPU), uint64(cpuHard)),
 		})
 	}
 	if r.Data > 0 {
-		ret = append(ret, tracee.RLimit{
+		ret = append(ret, forkexec.RLimit{
 			Res:  syscall.RLIMIT_DATA,
 			Rlim: getRlimit(uint64(r.Data)<<10, uint64(r.Data)<<10),
 		})
 	}
 	if r.FileSize > 0 {
-		ret = append(ret, tracee.RLimit{
+		ret = append(ret, forkexec.RLimit{
 			Res:  syscall.RLIMIT_FSIZE,
 			Rlim: getRlimit(uint64(r.FileSize)<<10, uint64(r.FileSize)<<10),
 		})
 	}
 	if r.Stack > 0 {
-		ret = append(ret, tracee.RLimit{
+		ret = append(ret, forkexec.RLimit{
 			Res:  syscall.RLIMIT_STACK,
 			Rlim: getRlimit(uint64(r.Stack)<<10, uint64(r.Stack)<<10),
 		})
 	}
 	if r.AddressSpace > 0 {
-		ret = append(ret, tracee.RLimit{
+		ret = append(ret, forkexec.RLimit{
 			Res:  syscall.RLIMIT_AS,
 			Rlim: getRlimit(uint64(r.AddressSpace)<<10, uint64(r.AddressSpace)<<10),
 		})

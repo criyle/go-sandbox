@@ -1,6 +1,6 @@
-// Package tracee provides interface to run a seccomp filtered, rlimited
+// Package forkexec provides interface to run a seccomp filtered, rlimited
 // executable and ptraced
-package tracee
+package forkexec
 
 import "syscall"
 
@@ -30,9 +30,4 @@ type RLimit struct {
 	Res int
 	// Rlim is the limit applied to that resource
 	Rlim syscall.Rlimit
-}
-
-// NewRunner creates new runner struct
-func NewRunner() Runner {
-	return Runner{}
 }

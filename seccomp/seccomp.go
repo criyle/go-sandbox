@@ -1,6 +1,6 @@
-// Package secutil provides utility functions to manipulate seccomp filters
+// Package seccomp provides utility functions to manipulate seccomp filters
 // provided by libseccomp
-package secutil
+package seccomp
 
 import (
 	"io/ioutil"

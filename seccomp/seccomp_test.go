@@ -1,4 +1,4 @@
-package secutil
+package seccomp
 
 import (
 	"testing"

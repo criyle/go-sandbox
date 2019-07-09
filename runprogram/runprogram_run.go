@@ -3,8 +3,8 @@ package runprogram
 import (
 	libseccomp "github.com/seccomp/libseccomp-golang"
 
-	"github.com/criyle/go-judger/secutil"
-	"github.com/criyle/go-judger/tracee"
+	"github.com/criyle/go-judger/forkexec"
+	"github.com/criyle/go-judger/seccomp"
 	"github.com/criyle/go-judger/tracer"
 )
 
@@ -18,13 +18,13 @@ func (r *RunProgram) Start() (rt tracer.TraceResult, err error) {
 	}
 	defer filter.Release()
 
-	bpf, err := secutil.FilterToBPF(filter)
+	bpf, err := seccomp.FilterToBPF(filter)
 	if err != nil {
 		println(err)
 		return
 	}
 
-	ch := &tracee.Runner{
+	ch := &forkexec.Runner{
 		Args:    r.Args,
 		Env:     r.Env,
 		RLimits: r.RLimits.prepareRLimit(),
@@ -51,5 +51,5 @@ func buildFilter(showDetails bool, allow, trace []string) (*libseccomp.ScmpFilte
 	} else {
 		defaultAction = libseccomp.ActKill
 	}
-	return secutil.BuildFilter(defaultAction, libseccomp.ActTrace.SetReturnCode(tracer.MsgHandle), allow, trace)
+	return seccomp.BuildFilter(defaultAction, libseccomp.ActTrace.SetReturnCode(tracer.MsgHandle), allow, trace)
 }
