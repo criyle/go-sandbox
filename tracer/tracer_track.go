@@ -35,6 +35,7 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 	pgid, err := runner.Start()
 	handler.Debug("tracer started: ", pgid, err)
 	if err != nil {
+		handler.Debug("start tracee failed: ", err)
 		result.TraceStatus = TraceCodeRE
 		return result, err
 	}

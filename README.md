@@ -34,7 +34,8 @@ Default file access action:
 Packages:
 
 -   seccomp: provides utility function that wrappers libseccomp
--   forkexec: fork-exec provides ptrace and seccomp before exec
+-   mount: provides utility function that wrappers mount syscall
+-   forkexec: fork-exec provides unshare, ptrace, seccomp before exec
 -   tracer: ptrace tracer and provides syscall trap filter context
 -   runprogram: wrapper to call forkexec and trecer
 -   runconfig: defines arch & language specified trace condition

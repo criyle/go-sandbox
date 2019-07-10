@@ -24,45 +24,34 @@ func afterForkInChild()
 //go:norace
 func (r *Runner) Start() (int, error) {
 	var (
-		err1    syscall.Errno
-		workdir *byte
-		nextfd  int
+		err1 syscall.Errno
 	)
 
-	// make exec args0
-	argv0, err := syscall.BytePtrFromString(r.Args[0])
-	if err != nil {
-		return 0, err
-	}
-	// make exec args
-	argv, err := syscall.SlicePtrFromStrings(r.Args)
-	if err != nil {
-		return 0, err
-	}
-	// make env
-	envv, err := syscall.SlicePtrFromStrings(r.Env)
+	argv0, argv, envv, err := prepareExec(r.Args, r.Env)
 	if err != nil {
 		return 0, err
 	}
 
-	// make work dir
-	if r.WorkDir != "" {
-		workdir, err = syscall.BytePtrFromString(r.WorkDir)
-		if err != nil {
-			return 0, err
-		}
+	// prepare work dir
+	workdir, err := syscallStringFromString(r.WorkDir)
+	if err != nil {
+		return 0, err
+	}
+
+	// prepare pivot_root param
+	pivotRoot, oldRoot, err := preparePivotRoot(r.PivotRoot)
+	if err != nil {
+		return 0, err
+	}
+
+	// prepare mount param
+	mountParams, dirsToMake, err := prepareMounts(r.Mounts)
+	if err != nil {
+		return 0, nil
 	}
 
 	// similar to exec_linux, avoid side effect by shuffling around
-	fd := make([]int, len(r.Files))
-	nextfd = len(r.Files)
-	for i, ufd := range r.Files {
-		if nextfd < int(ufd) {
-			nextfd = int(ufd)
-		}
-		fd[i] = int(ufd)
-	}
-	nextfd++
+	fd, nextfd := prepareFds(r.Files)
 
 	// Acquire the fork lock so that no other threads
 	// create new fds that are not yet close-on-exec
@@ -73,7 +62,8 @@ func (r *Runner) Start() (int, error) {
 	// No more allocation or calls of non-assembly functions.
 	beforeFork()
 
-	pid, _, err1 := syscall.RawSyscall6(syscall.SYS_CLONE, uintptr(syscall.SIGCHLD), 0, 0, 0, 0, 0)
+	// UnshareFlags (new namespaces) is activated by clone syscall
+	pid, _, err1 := syscall.RawSyscall6(syscall.SYS_CLONE, uintptr(syscall.SIGCHLD)|(r.UnshareFlags&UnshareFlags), 0, 0, 0, 0, 0)
 	if err1 != 0 || pid != 0 {
 		// restore all signals
 		afterFork()
@@ -89,30 +79,13 @@ func (r *Runner) Start() (int, error) {
 	afterForkInChild()
 	// Notice: cannot call any GO functions beyond this point
 
-	// Set the pgid, so that the wait operation can apply to only certain
-	// subgroup of processes
-	_, _, err1 = syscall.RawSyscall(syscall.SYS_SETPGID, 0, 0, 0)
+	// Get pid of child
+	pid, _, err1 = syscall.RawSyscall(syscall.SYS_GETPID, 0, 0, 0)
 	if err1 != 0 {
 		goto childerror
 	}
 
-	// Set limit
-	for _, rlim := range r.RLimits {
-		// Prlimit instead of setrlimit to avoid 32-bit limitation (linux > 3.2)
-		_, _, err1 = syscall.RawSyscall6(syscall.SYS_PRLIMIT64, 0, uintptr(rlim.Res), uintptr(unsafe.Pointer(&rlim.Rlim)), 0, 0, 0)
-		if err1 != 0 {
-			goto childerror
-		}
-	}
-
-	// Chdir if needed
-	if workdir != nil {
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_CHDIR, uintptr(unsafe.Pointer(workdir)), 0, 0)
-		if err1 != 0 {
-			goto childerror
-		}
-	}
-
+	// Pass 1 & pass 2 assigns fds for child process
 	// Pass 1: fd[i] < i => nextfd
 	for i := 0; i < len(fd); i++ {
 		if fd[i] >= 0 && fd[i] < int(i) {
@@ -147,54 +120,142 @@ func (r *Runner) Start() (int, error) {
 		}
 	}
 
-	// Enable Ptrace
-	_, _, err1 = syscall.RawSyscall(syscall.SYS_PTRACE, uintptr(syscall.PTRACE_TRACEME), 0, 0)
+	// Set the pgid, so that the wait operation can apply to only certain
+	// subgroup of processes
+	_, _, err1 = syscall.RawSyscall(syscall.SYS_SETPGID, 0, 0, 0)
 	if err1 != 0 {
 		goto childerror
 	}
 
-	// Load seccomp, stop and wait for tracer
-	if r.BPF != nil {
-		// Check if support
-		// SECCOMP_SET_MODE_STRICT = 0, args = 1 for invalid operation
-		_, _, err1 = syscall.RawSyscall(unix.SYS_SECCOMP, 0, 1, 0)
-		if err1 != syscall.EINVAL {
-			goto childerror
-		}
-
-		// Load the filter manually
-		// No new privs
-		_, _, err1 = syscall.RawSyscall6(syscall.SYS_PRCTL, unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0, 0)
-		if err1 != 0 {
-			goto childerror
-		}
-
-		// If execve is seccomp trapped, then tracee stop is necessary
-		// otherwise execve will fail due to ENOSYS
-		// Do getpid and kill to send SYS_KILL to self
-		// need to do before seccomp as these might be traced
-		// Get pid of child
-		pid, _, err1 = syscall.RawSyscall(syscall.SYS_GETPID, 0, 0, 0)
-		if err1 != 0 {
-			goto childerror
-		}
-
-		// Stop to wait for tracer
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_KILL, pid, uintptr(syscall.SIGSTOP), 0)
-		if err1 != 0 {
-			goto childerror
-		}
-
-		// Load seccomp filter
-		// SECCOMP_SET_MODE_FILTER = 1
-		// SECCOMP_FILTER_FLAG_TSYNC = 1
-		_, _, err1 = syscall.RawSyscall(unix.SYS_SECCOMP, 1, 1, uintptr(unsafe.Pointer(r.BPF)))
+	// If mount point is unshared, mark root as private to avoid propagate
+	// outside to the original mount namespace
+	if r.UnshareFlags&syscall.CLONE_NEWNS == syscall.CLONE_NEWNS {
+		_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&none[0])),
+			uintptr(unsafe.Pointer(&slash[0])), 0, syscall.MS_REC|syscall.MS_PRIVATE, 0, 0)
 		if err1 != 0 {
 			goto childerror
 		}
 	}
 
-	// at this point, tracer is successfully attached for seccomp trap filter
+	// chdir to new root before performing mounts
+	if pivotRoot != nil {
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_CHDIR, uintptr(unsafe.Pointer(pivotRoot)), 0, 0)
+		if err1 != 0 {
+			goto childerror
+		}
+	}
+
+	// performing mounts
+	for i, m := range mountParams {
+		// mkdirs(target)
+		for _, p := range dirsToMake[i] {
+			_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIR, uintptr(unsafe.Pointer(p)), 0755, 0)
+			if err1 != 0 {
+				goto childerror
+			}
+		}
+		// mount(source, target, fsType, flags, data)
+		_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(m.Source)),
+			uintptr(unsafe.Pointer(m.Target)), uintptr(unsafe.Pointer(m.FsType)), uintptr(m.Flags),
+			uintptr(unsafe.Pointer(m.Data)), 0)
+		if err1 != 0 {
+			goto childerror
+		}
+	}
+
+	// pivit_root
+	if pivotRoot != nil {
+		// mkdir(root/old_root)
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIR, uintptr(unsafe.Pointer(oldRoot)), 0755, 0)
+		if err1 != 0 {
+			goto childerror
+		}
+
+		// pivot_root(root, root/old_root)
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIR, uintptr(unsafe.Pointer(pivotRoot)), uintptr(unsafe.Pointer(oldRoot)), 0)
+		if err1 != 0 {
+			goto childerror
+		}
+
+		// umount(root/old, MNT_DETACH)
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_UMOUNT2, uintptr(unsafe.Pointer(oldRoot)), syscall.MNT_DETACH, 0)
+		if err1 != 0 {
+			goto childerror
+		}
+
+		// rmdir(root/old_root)
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_RMDIR, uintptr(unsafe.Pointer(oldRoot)), 0755, 0)
+		if err1 != 0 {
+			goto childerror
+		}
+	}
+
+	// chdir for child
+	if workdir != nil {
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_CHDIR, uintptr(unsafe.Pointer(workdir)), 0, 0)
+		if err1 != 0 {
+			goto childerror
+		}
+	}
+
+	// Set limit
+	for _, rlim := range r.RLimits {
+		// Prlimit instead of setrlimit to avoid 32-bit limitation (linux > 3.2)
+		_, _, err1 = syscall.RawSyscall6(syscall.SYS_PRLIMIT64, 0, uintptr(rlim.Res), uintptr(unsafe.Pointer(&rlim.Rlim)), 0, 0, 0)
+		if err1 != 0 {
+			goto childerror
+		}
+	}
+
+	// No new privs
+	if r.NoNewPrivs || r.Seccomp != nil {
+		_, _, err1 = syscall.RawSyscall6(syscall.SYS_PRCTL, unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0, 0)
+		if err1 != 0 {
+			goto childerror
+		}
+	}
+
+	// Enable Ptrace
+	if r.Ptrace {
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_PTRACE, uintptr(syscall.PTRACE_TRACEME), 0, 0)
+		if err1 != 0 {
+			goto childerror
+		}
+	}
+
+	// if both seccomp and ptrace is defined, then seccomp filter should have
+	// traced execve, thus child need parent attached to it first
+	if r.StopBeforeSeccomp || (r.Seccomp != nil && r.Ptrace) {
+		// Stop to wait for ptrace tracer
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_KILL, pid, uintptr(syscall.SIGSTOP), 0)
+		if err1 != 0 {
+			goto childerror
+		}
+	}
+
+	// Load seccomp, stop and wait for tracer
+	if r.Seccomp != nil {
+		// If execve is seccomp trapped, then tracee stop is necessary
+		// otherwise execve will fail due to ENOSYS
+		// Do getpid and kill to send SYS_KILL to self
+		// need to do before seccomp as these might be traced
+
+		// Load seccomp filter
+		_, _, err1 = syscall.RawSyscall(unix.SYS_SECCOMP, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, uintptr(unsafe.Pointer(r.Seccomp)))
+		if err1 != 0 {
+			goto childerror
+		}
+	}
+
+	// stop before execve syscall
+	if r.StopBeforeExec {
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_KILL, pid, uintptr(syscall.SIGSTOP), 0)
+		if err1 != 0 {
+			goto childerror
+		}
+	}
+
+	// at this point, runner is successfully attached for seccomp trap filter
 	// or execve traped without seccomp filter
 	// time to exec
 	_, _, err1 = syscall.RawSyscall(syscall.SYS_EXECVE,

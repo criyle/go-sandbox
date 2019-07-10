@@ -30,7 +30,8 @@ func (r *RunProgram) Start() (rt tracer.TraceResult, err error) {
 		RLimits: r.RLimits.prepareRLimit(),
 		Files:   r.Files,
 		WorkDir: r.WorkDir,
-		BPF:     bpf,
+		Seccomp: bpf,
+		Ptrace:  true,
 	}
 
 	th := &tracerHandler{
