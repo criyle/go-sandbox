@@ -50,8 +50,8 @@ func (t TraceCode) Error() string {
 
 // TraceResult is the result returned by strat trace
 type TraceResult struct {
-	UserTime    uint      // used user CPU time (in ms)
-	UserMem     uint      // used user memory (in kb)
+	UserTime    uint64    // used user CPU time (in ms)
+	UserMem     uint64    // used user memory (in kb)
 	ExitCode    int       // exit code
 	TraceStatus TraceCode // the final status for the process
 }
@@ -64,9 +64,9 @@ type Runner interface {
 
 // ResLimit represents the resource limit for traced process
 type ResLimit struct {
-	TimeLimit     uint // user CPU time limit (in ms)
-	RealTimeLimit uint // sig_kill will force the process to exit after this limit (in ms)
-	MemoryLimit   uint // user memory limit (in kB)
+	TimeLimit     uint64 // user CPU time limit (in ms)
+	RealTimeLimit uint64 // sig_kill will force the process to exit after this limit (in ms)
+	MemoryLimit   uint64 // user memory limit (in kB)
 }
 
 // Handler defines customized handler for traced syscall

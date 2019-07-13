@@ -150,7 +150,7 @@ func (r *Runner) Start() (int, error) {
 		// mkdirs(target)
 		for _, p := range dirsToMake[i] {
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIR, uintptr(unsafe.Pointer(p)), 0755, 0)
-			if err1 != 0 {
+			if err1 != 0 && err1 != syscall.EEXIST {
 				goto childerror
 			}
 		}

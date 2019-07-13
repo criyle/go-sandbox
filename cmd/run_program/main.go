@@ -100,9 +100,9 @@ func main() {
 			Stack:    stackLimit,
 		},
 		TraceLimit: runprogram.TraceLimit{
-			TimeLimit:     timeLimit * 1e3,
-			RealTimeLimit: realTimeLimit * 1e3,
-			MemoryLimit:   memoryLimit << 10,
+			TimeLimit:     uint64(timeLimit * 1e3),
+			RealTimeLimit: uint64(realTimeLimit * 1e3),
+			MemoryLimit:   uint64(memoryLimit << 10),
 		},
 		Files:          fds,
 		SyscallAllowed: h.SyscallAllow,

@@ -25,6 +25,7 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 		traced  = make(map[int]bool) // store all process that have set ptrace options
 		execved = false              // store whether the runner process have successfully execvd
 		pid     int                  // store pid of wait4 result
+		initMem uint64               // initial memory usage (likely due to original process)
 	)
 
 	// ptrace is thread based (kernel proc)
@@ -64,9 +65,6 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 
 	// trace unixs
 	for {
-		if err = clearRefs(pgid); err != nil {
-			return result, err
-		}
 		if execved {
 			// Wait for all child in the process group
 			pid, err = unix.Wait4(-pgid, &wstatus, unix.WALL, &rusage)
@@ -80,25 +78,31 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 		}
 		handler.Debug("------ ", pid, " ------")
 
-		// update resource usage and check against limits
-		userTime := uint(rusage.Utime.Sec*1e3 + rusage.Utime.Usec/1e3) // ms
-		userMem := uint(rusage.Maxrss)                                 // kb
-		status := TraceCodeNormal                                      // check limit
+		status := TraceCodeNormal
+		if pid == pgid {
+			if initMem == 0 {
+				initMem = uint64(rusage.Maxrss)
+				handler.Debug("initial memory:", initMem)
+			}
+			// update resource usage and check against limits
+			userTime := uint64(rusage.Utime.Sec*1e3 + rusage.Utime.Usec/1e3) // ms
+			userMem := uint64(rusage.Maxrss) - initMem                       // kb
 
-		// check tle / mle
-		if userTime > limits.TimeLimit {
-			status = TraceCodeTLE
-		}
-		if userMem > limits.MemoryLimit {
-			status = TraceCodeMLE
-		}
-		result = TraceResult{
-			UserTime:    userTime,
-			UserMem:     userMem,
-			TraceStatus: status,
-		}
-		if status != TraceCodeNormal {
-			return result, status
+			// check tle / mle
+			if userTime > limits.TimeLimit {
+				status = TraceCodeTLE
+			}
+			if userMem > limits.MemoryLimit {
+				status = TraceCodeMLE
+			}
+			result = TraceResult{
+				UserTime:    userTime,
+				UserMem:     userMem,
+				TraceStatus: status,
+			}
+			if status != TraceCodeNormal {
+				return result, status
+			}
 		}
 
 		// check process status
