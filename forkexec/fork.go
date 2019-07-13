@@ -149,7 +149,7 @@ func (r *Runner) Start() (int, error) {
 	for i, m := range mountParams {
 		// mkdirs(target)
 		for _, p := range dirsToMake[i] {
-			_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIR, uintptr(unsafe.Pointer(p)), 0755, 0)
+			_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIRAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(p)), 0755)
 			if err1 != 0 && err1 != syscall.EEXIST {
 				goto childerror
 			}
@@ -166,13 +166,13 @@ func (r *Runner) Start() (int, error) {
 	// pivit_root
 	if pivotRoot != nil {
 		// mkdir(root/old_root)
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIR, uintptr(unsafe.Pointer(oldRoot)), 0755, 0)
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIRAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(oldRoot)), 0755)
 		if err1 != 0 {
 			goto childerror
 		}
 
 		// pivot_root(root, root/old_root)
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIR, uintptr(unsafe.Pointer(pivotRoot)), uintptr(unsafe.Pointer(oldRoot)), 0)
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_PIVOT_ROOT, uintptr(unsafe.Pointer(pivotRoot)), uintptr(unsafe.Pointer(oldRoot)), 0)
 		if err1 != 0 {
 			goto childerror
 		}
@@ -184,7 +184,7 @@ func (r *Runner) Start() (int, error) {
 		}
 
 		// rmdir(root/old_root)
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_RMDIR, uintptr(unsafe.Pointer(oldRoot)), 0755, 0)
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_UNLINKAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(oldRoot)), uintptr(unix.AT_REMOVEDIR))
 		if err1 != 0 {
 			goto childerror
 		}
