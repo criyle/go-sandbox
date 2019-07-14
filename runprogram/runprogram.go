@@ -3,6 +3,7 @@ package runprogram
 import (
 	"syscall"
 
+	"github.com/criyle/go-judger/rlimit"
 	"github.com/criyle/go-judger/tracer"
 )
 
@@ -18,7 +19,7 @@ type RunProgram struct {
 	Files []uintptr
 
 	// Resource limit set by set rlimit
-	RLimits RLimits
+	RLimits rlimit.RLimits
 
 	// Res limit enforced by tracer
 	TraceLimit TraceLimit

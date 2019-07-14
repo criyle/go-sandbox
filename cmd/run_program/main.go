@@ -3,12 +3,24 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 
+	"github.com/criyle/go-judger/rlimit"
 	"github.com/criyle/go-judger/runconfig"
 	"github.com/criyle/go-judger/runprogram"
+	"github.com/criyle/go-judger/rununshared"
 	"github.com/criyle/go-judger/tracer"
 )
+
+const (
+	pathEnv = "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+)
+
+// Runner can be ptraced runner or namespaced runner
+type Runner interface {
+	Start() (tracer.TraceResult, error)
+}
 
 func printUsage() {
 	fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [options] <args>\n", os.Args[0])
@@ -19,18 +31,19 @@ func printUsage() {
 func main() {
 	var (
 		addReadable, addWritable, addRawReadable, addRawWritable       arrayFlags
-		allowProc, unsafe, showDetails                                 bool
+		allowProc, unsafe, showDetails, namespace                      bool
 		pType, result                                                  string
-		timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint
+		timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint64
 		inputFileName, outputFileName, errorFileName, workPath         string
+		runner                                                         Runner
 	)
 
 	flag.Usage = printUsage
-	flag.UintVar(&timeLimit, "tl", 1, "Set time limit (in second)")
-	flag.UintVar(&realTimeLimit, "rtl", 0, "Set real time limit (in second)")
-	flag.UintVar(&memoryLimit, "ml", 256, "Set memory limit (in mb)")
-	flag.UintVar(&outputLimit, "ol", 64, "Set output limit (in mb)")
-	flag.UintVar(&stackLimit, "sl", 1024, "Set stack limit (in mb)")
+	flag.Uint64Var(&timeLimit, "tl", 1, "Set time limit (in second)")
+	flag.Uint64Var(&realTimeLimit, "rtl", 0, "Set real time limit (in second)")
+	flag.Uint64Var(&memoryLimit, "ml", 256, "Set memory limit (in mb)")
+	flag.Uint64Var(&outputLimit, "ol", 64, "Set output limit (in mb)")
+	flag.Uint64Var(&stackLimit, "sl", 1024, "Set stack limit (in mb)")
 	flag.StringVar(&inputFileName, "in", "", "Set input file name")
 	flag.StringVar(&outputFileName, "out", "", "Set output file name")
 	flag.StringVar(&errorFileName, "err", "", "Set error file name")
@@ -44,6 +57,7 @@ func main() {
 	flag.BoolVar(&allowProc, "allow-proc", false, "Allow fork, exec... etc.")
 	flag.Var(&addRawReadable, "add-readable-raw", "Add a readable file (don't transform to its real path)")
 	flag.Var(&addRawWritable, "add-writable-raw", "Add a writable file (don't transform to its real path)")
+	flag.BoolVar(&namespace, "ns", false, "Use namespace to restrict file accesses")
 	flag.Parse()
 
 	args := flag.Args()
@@ -89,27 +103,58 @@ func main() {
 		}
 	}
 
-	runner := &runprogram.RunProgram{
-		Args:    h.Args,
-		Env:     []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"},
-		WorkDir: workPath,
-		RLimits: runprogram.RLimits{
-			CPU:      timeLimit,
-			CPUHard:  realTimeLimit,
-			FileSize: outputLimit,
-			Stack:    stackLimit,
-		},
-		TraceLimit: runprogram.TraceLimit{
-			TimeLimit:     uint64(timeLimit * 1e3),
-			RealTimeLimit: uint64(realTimeLimit * 1e3),
-			MemoryLimit:   uint64(memoryLimit << 10),
-		},
-		Files:          fds,
-		SyscallAllowed: h.SyscallAllow,
-		SyscallTraced:  h.SyscallTrace,
-		ShowDetails:    showDetails,
-		Unsafe:         unsafe,
-		Handler:        h,
+	rlims := rlimit.RLimits{
+		CPU:      timeLimit,
+		CPUHard:  realTimeLimit,
+		FileSize: outputLimit,
+		Stack:    stackLimit,
+	}
+
+	if namespace {
+		h.SyscallAllow = append(h.SyscallAllow, h.SyscallTrace...)
+		root, err := ioutil.TempDir("", "ns")
+		if err != nil {
+			panic("cannot make temp root for new namespace")
+		}
+		runner = &rununshared.RunUnshared{
+			Args:    h.Args,
+			Env:     []string{pathEnv},
+			WorkDir: "/w",
+			Files:   fds,
+			RLimits: rlims,
+			ResLimits: tracer.ResLimit{
+				TimeLimit:     timeLimit * 1e3,
+				RealTimeLimit: realTimeLimit * 1e3,
+				MemoryLimit:   memoryLimit << 10,
+			},
+			SyscallAllowed: h.SyscallAllow,
+			Root:           root,
+			Mounts: rununshared.GetDefaultMounts(root, []rununshared.AddBind{
+				{
+					Source: workPath,
+					Target: "w",
+				},
+			}),
+			ShowDetails: true,
+		}
+	} else {
+		runner = &runprogram.RunProgram{
+			Args:    h.Args,
+			Env:     []string{pathEnv},
+			WorkDir: workPath,
+			RLimits: rlims,
+			TraceLimit: runprogram.TraceLimit{
+				TimeLimit:     timeLimit * 1e3,
+				RealTimeLimit: realTimeLimit * 1e3,
+				MemoryLimit:   memoryLimit << 10,
+			},
+			Files:          fds,
+			SyscallAllowed: h.SyscallAllow,
+			SyscallTraced:  h.SyscallTrace,
+			ShowDetails:    showDetails,
+			Unsafe:         unsafe,
+			Handler:        h,
+		}
 	}
 
 	var f *os.File
@@ -129,6 +174,7 @@ func main() {
 	// Run tracer
 	rt, err := runner.Start()
 	println("used process_vm_readv: ", tracer.UseVMReadv)
+	println("results:", rt, err)
 
 	if err != nil {
 		c, ok := err.(tracer.TraceCode)

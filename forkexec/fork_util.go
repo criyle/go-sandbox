@@ -1,7 +1,6 @@
 package forkexec
 
 import (
-	"path"
 	"syscall"
 
 	"github.com/criyle/go-judger/mount"
@@ -54,12 +53,11 @@ func preparePivotRoot(r string) (*byte, *byte, error) {
 	if r == "" {
 		return nil, nil, nil
 	}
-	or := path.Join(r, OldRoot)
 	root, err := syscall.BytePtrFromString(r)
 	if err != nil {
 		return nil, nil, err
 	}
-	oldRoot, err := syscall.BytePtrFromString(or)
+	oldRoot, err := syscall.BytePtrFromString(OldRoot)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -76,7 +74,7 @@ func prepareMounts(ms []*mount.Mount) ([]*mount.SyscallParams, [][]*byte, error)
 	pathsToCreate := make([][]*byte, 0, len(ms))
 	for _, m := range ms {
 		prefix := pathPrefix(m.Target)
-		paths, err := syscall.SlicePtrFromStrings(prefix)
+		paths, err := arrayPtrFromStrings(prefix)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -95,4 +93,17 @@ func pathPrefix(path string) []string {
 	}
 	ret = append(ret, path)
 	return ret
+}
+
+// arrayPtrFromStrings convers srings to c style strings
+func arrayPtrFromStrings(strs []string) ([]*byte, error) {
+	bytes := make([]*byte, 0, len(strs))
+	for _, s := range strs {
+		b, err := syscall.BytePtrFromString(s)
+		if err != nil {
+			return nil, err
+		}
+		bytes = append(bytes, b)
+	}
+	return bytes, nil
 }

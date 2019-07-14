@@ -27,7 +27,7 @@ func (r *RunProgram) Start() (rt tracer.TraceResult, err error) {
 	ch := &forkexec.Runner{
 		Args:    r.Args,
 		Env:     r.Env,
-		RLimits: r.RLimits.prepareRLimit(),
+		RLimits: r.RLimits.PrepareRLimit(),
 		Files:   r.Files,
 		WorkDir: r.WorkDir,
 		Seccomp: bpf,

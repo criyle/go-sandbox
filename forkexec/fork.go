@@ -25,6 +25,7 @@ func afterForkInChild()
 func (r *Runner) Start() (int, error) {
 	var (
 		err1 syscall.Errno
+		r1   uintptr
 	)
 
 	argv0, argv, envv, err := prepareExec(r.Args, r.Env)
@@ -49,6 +50,9 @@ func (r *Runner) Start() (int, error) {
 	if err != nil {
 		return 0, nil
 	}
+
+	// prepare set uid / gid map files
+	files := prepareIDMap(r.UnshareFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER)
 
 	// similar to exec_linux, avoid side effect by shuffling around
 	fd, nextfd := prepareFds(r.Files)
@@ -137,8 +141,41 @@ func (r *Runner) Start() (int, error) {
 		}
 	}
 
-	// chdir to new root before performing mounts
+	// If usernamespace is unshared, uid map and gid map is required to create folders
+	// and files
+	// Notice: This is not working right now since unshare user namespace drops all
+	// capabilities, thus this operation will fail to do this
+	// Thus, we need parent to setup uid_map / gid_map for us
+	// At the same time, socket pair / pipe sychronization is required as well
+	for _, f := range files {
+		r1, _, err1 = syscall.RawSyscall6(syscall.SYS_OPENAT, uintptr(_AT_FDCWD),
+			uintptr(unsafe.Pointer(f.fileName)), uintptr(fileOption), uintptr(filePerm), 0, 0)
+		if err1 == syscall.ENOENT { // Kernel > 3.19 for setgroups
+			continue
+		} else if err1 != 0 {
+			goto childerror
+		}
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, r1, uintptr(unsafe.Pointer(&f.fileContent[0])),
+			uintptr(len(f.fileContent)))
+		if err1 != 0 {
+			goto childerror
+		}
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_CLOSE, r1, 0, 0)
+		if err1 != 0 {
+			goto childerror
+		}
+	}
+
+	// mount tmpfs & chdir to new root before performing mounts
 	if pivotRoot != nil {
+		// mount("tmpfs", root, "tmpfs", 0, "")
+		_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&tmpfs[0])),
+			uintptr(unsafe.Pointer(pivotRoot)), uintptr(unsafe.Pointer(&tmpfs[0])), 0,
+			uintptr(unsafe.Pointer(&empty[0])), 0)
+		if err1 != 0 {
+			goto childerror
+		}
+
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_CHDIR, uintptr(unsafe.Pointer(pivotRoot)), 0, 0)
 		if err1 != 0 {
 			goto childerror
@@ -160,6 +197,15 @@ func (r *Runner) Start() (int, error) {
 			uintptr(unsafe.Pointer(m.Data)), 0)
 		if err1 != 0 {
 			goto childerror
+		}
+		// bind mount is not respect ro flag so that read-only bind mount needs remount
+		if m.Flags&bindRo == bindRo {
+			_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&empty[0])),
+				uintptr(unsafe.Pointer(m.Target)), uintptr(unsafe.Pointer(m.FsType)),
+				uintptr(m.Flags|syscall.MS_REMOUNT), uintptr(unsafe.Pointer(m.Data)), 0)
+			if err1 != 0 {
+				goto childerror
+			}
 		}
 	}
 
@@ -210,6 +256,14 @@ func (r *Runner) Start() (int, error) {
 	// No new privs
 	if r.NoNewPrivs || r.Seccomp != nil {
 		_, _, err1 = syscall.RawSyscall6(syscall.SYS_PRCTL, unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0, 0)
+		if err1 != 0 {
+			goto childerror
+		}
+	}
+
+	// Drop all capabilities
+	if r.DropCaps {
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_CAPSET, uintptr(unsafe.Pointer(&dropCapHeader)), uintptr(unsafe.Pointer(&dropCapData)), 0)
 		if err1 != 0 {
 			goto childerror
 		}

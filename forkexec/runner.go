@@ -55,6 +55,7 @@ type Runner struct {
 	// mounts defines the mount syscalls after unshare mount namespace
 	// need CAP_ADMIN inside the namespace (e.g. unshare user namespace)
 	// if pivot root is provided, relative target will based on PivotRoot directory
+	// and pivot root will mount as tmpfs before any mount
 	Mounts []*mount.Mount
 
 	// pivot_root defines the new root after unshare mount namespace

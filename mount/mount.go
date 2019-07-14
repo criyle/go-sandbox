@@ -49,11 +49,20 @@ func (m *Mount) ToSyscall() (*SyscallParams, error) {
 
 // Mount calls mount syscall
 func (m *Mount) Mount() error {
-	err := os.MkdirAll(m.Target, 0755)
-	if err != nil {
+	if err := os.MkdirAll(m.Target, 0755); err != nil {
 		return err
 	}
-	return syscall.Mount(m.Source, m.Target, m.FsType, m.Flags, m.Data)
+	if err := syscall.Mount(m.Source, m.Target, m.FsType, m.Flags, m.Data); err != nil {
+		return err
+	}
+	// Read-only bind mount need to be remounted
+	const bindRo = syscall.MS_BIND | syscall.MS_RDONLY
+	if m.Flags&bindRo == bindRo {
+		if err := syscall.Mount("", m.Target, m.FsType, m.Flags|syscall.MS_REMOUNT, m.Data); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ToSyscalls converts arrays of Mounts into SyscallParams
