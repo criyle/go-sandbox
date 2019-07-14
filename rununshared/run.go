@@ -35,18 +35,18 @@ func (r *RunUnshared) Start() (rt tracer.TraceResult, err error) {
 	}
 
 	ch := &forkexec.Runner{
-		Args:           r.Args,
-		Env:            r.Env,
-		RLimits:        r.RLimits.PrepareRLimit(),
-		Files:          r.Files,
-		WorkDir:        r.WorkDir,
-		Seccomp:        bpf,
-		NoNewPrivs:     true,
-		StopBeforeExec: true,
-		UnshareFlags:   UnshareFlags,
-		Mounts:         r.Mounts,
-		PivotRoot:      r.Root,
-		DropCaps:       true,
+		Args:              r.Args,
+		Env:               r.Env,
+		RLimits:           r.RLimits.PrepareRLimit(),
+		Files:             r.Files,
+		WorkDir:           r.WorkDir,
+		Seccomp:           bpf,
+		NoNewPrivs:        true,
+		StopBeforeSeccomp: true,
+		UnshareFlags:      UnshareFlags,
+		Mounts:            r.Mounts,
+		PivotRoot:         r.Root,
+		DropCaps:          true,
 	}
 	return r.Trace(ch)
 }

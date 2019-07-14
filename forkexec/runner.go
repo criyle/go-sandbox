@@ -41,12 +41,8 @@ type Runner struct {
 	// right before the calls to seccomp. It is automatically enabled when seccomp
 	// filter and ptrace are provided since kill might not be avaliable after
 	// seccomp and execve might be traced by ptrace
+	// cannot stop after seccomp since kill might not be allowed by seccomp filter
 	StopBeforeSeccomp bool
-
-	// stop before exec calls kill(getpid(), SIGSTOP) to wait for tracer to continue
-	// right before the final calls to execve. It acts as a synchronize
-	// for parent process
-	StopBeforeExec bool
 
 	// unshare flag to create linux namespace, effective when clone child
 	// since unshare syscall does not join the new pid group

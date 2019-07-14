@@ -6,37 +6,36 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const (
-	fileOption = unix.O_RDWR
-	filePerm   = 0755
-)
-
-var (
-	uidMap    = [...]byte{'/', 'p', 'r', 'o', 'c', '/', 's', 'e', 'l', 'f', '/', 'u', 'i', 'd', '_', 'm', 'a', 'p', 0}
-	gidMap    = [...]byte{'/', 'p', 'r', 'o', 'c', '/', 's', 'e', 'l', 'f', '/', 'g', 'i', 'd', '_', 'm', 'a', 'p', 0}
-	setGroups = [...]byte{'/', 'p', 'r', 'o', 'c', '/', 's', 'e', 'l', 'f', '/', 's', 'e', 't', 'g', 'r', 'o', 'u', 'p', 's', 0}
-)
-
-type fileWriteSyscall struct {
-	fileName    *byte
-	fileContent []byte
+// writeUidGidMappings writes User ID and Group ID mappings for user namespaces
+// for a process and it is called from the parent process.
+func writeIDMaps(pid int) error {
+	pidStr := strconv.Itoa(pid)
+	uidStr := strconv.Itoa(unix.Geteuid())
+	gidStr := strconv.Itoa(unix.Getegid())
+	if err := writeFile("/proc/"+pidStr+"/uid_map", []byte("0 "+uidStr+" 1")); err != nil {
+		return err
+	}
+	if err := writeFile("/proc/"+pidStr+"/setgroups", []byte("deny")); err != nil {
+		return err
+	}
+	if err := writeFile("/proc/"+pidStr+"/gid_map", []byte("0 "+gidStr+" 1")); err != nil {
+		return err
+	}
+	return nil
 }
 
-func prepareIDMap(userNs bool) []fileWriteSyscall {
-	ret := make([]fileWriteSyscall, 0, 3)
-	if userNs {
-		ret = append(ret, fileWriteSyscall{
-			fileName:    &uidMap[0],
-			fileContent: []byte("0 " + strconv.Itoa(unix.Geteuid()) + " 1"),
-		})
-		ret = append(ret, fileWriteSyscall{
-			fileName:    &gidMap[0],
-			fileContent: []byte("0 " + strconv.Itoa(unix.Getegid()) + " 1"),
-		})
-		ret = append(ret, fileWriteSyscall{
-			fileName:    &setGroups[0],
-			fileContent: []byte("deny"),
-		})
+// writeFile writes file
+func writeFile(path string, content []byte) error {
+	fd, err := unix.Open(path, unix.O_RDWR, 0)
+	if err != nil {
+		return err
 	}
-	return ret
+	if _, err := unix.Write(fd, content); err != nil {
+		unix.Close(fd)
+		return err
+	}
+	if err := unix.Close(fd); err != nil {
+		return err
+	}
+	return nil
 }

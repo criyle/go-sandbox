@@ -24,8 +24,10 @@ func afterForkInChild()
 //go:norace
 func (r *Runner) Start() (int, error) {
 	var (
-		err1 syscall.Errno
-		r1   uintptr
+		err1, err2  syscall.Errno
+		r1          uintptr
+		p           [2]int
+		unshareUser = r.UnshareFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
 	)
 
 	argv0, argv, envv, err := prepareExec(r.Args, r.Env)
@@ -51,8 +53,12 @@ func (r *Runner) Start() (int, error) {
 		return 0, nil
 	}
 
-	// prepare set uid / gid map files
-	files := prepareIDMap(r.UnshareFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER)
+	if unshareUser {
+		err = unix.Pipe2(p[:], unix.O_CLOEXEC)
+		if err != nil {
+			return 0, err
+		}
+	}
 
 	// similar to exec_linux, avoid side effect by shuffling around
 	fd, nextfd := prepareFds(r.Files)
@@ -71,8 +77,19 @@ func (r *Runner) Start() (int, error) {
 	if err1 != 0 || pid != 0 {
 		// restore all signals
 		afterFork()
-		syscall.ForkLock.Unlock()
 
+		// synchronize with child for uid / gid map
+		if unshareUser {
+			unix.Close(p[0])
+			err = writeIDMaps(int(pid))
+			if err != nil {
+				err2 = err.(syscall.Errno)
+			}
+			syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[1]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+			unix.Close(p[1])
+		}
+
+		syscall.ForkLock.Unlock()
 		if err1 != 0 {
 			return int(pid), syscall.Errno(err1)
 		}
@@ -82,6 +99,32 @@ func (r *Runner) Start() (int, error) {
 	// In child process
 	afterForkInChild()
 	// Notice: cannot call any GO functions beyond this point
+
+	// If usernamespace is unshared, uid map and gid map is required to create folders
+	// and files
+	// We need parent to setup uid_map / gid_map for us since we do not have capabilities
+	// in the original namespace
+	// At the same time, socket pair / pipe sychronization is required as well
+	if unshareUser {
+		if _, _, err1 = syscall.RawSyscall(syscall.SYS_CLOSE, uintptr(p[1]), 0, 0); err1 != 0 {
+			goto childerror
+		}
+		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), unsafe.Sizeof(err2))
+		if err1 != 0 {
+			goto childerror
+		}
+		if r1 != unsafe.Sizeof(err2) {
+			err1 = syscall.EINVAL
+			goto childerror
+		}
+		if err2 != 0 {
+			err1 = err2
+			goto childerror
+		}
+		if _, _, err1 = syscall.RawSyscall(syscall.SYS_CLOSE, uintptr(p[0]), 0, 0); err1 != 0 {
+			goto childerror
+		}
+	}
 
 	// Get pid of child
 	pid, _, err1 = syscall.RawSyscall(syscall.SYS_GETPID, 0, 0, 0)
@@ -136,31 +179,6 @@ func (r *Runner) Start() (int, error) {
 	if r.UnshareFlags&syscall.CLONE_NEWNS == syscall.CLONE_NEWNS {
 		_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&none[0])),
 			uintptr(unsafe.Pointer(&slash[0])), 0, syscall.MS_REC|syscall.MS_PRIVATE, 0, 0)
-		if err1 != 0 {
-			goto childerror
-		}
-	}
-
-	// If usernamespace is unshared, uid map and gid map is required to create folders
-	// and files
-	// Notice: This is not working right now since unshare user namespace drops all
-	// capabilities, thus this operation will fail to do this
-	// Thus, we need parent to setup uid_map / gid_map for us
-	// At the same time, socket pair / pipe sychronization is required as well
-	for _, f := range files {
-		r1, _, err1 = syscall.RawSyscall6(syscall.SYS_OPENAT, uintptr(_AT_FDCWD),
-			uintptr(unsafe.Pointer(f.fileName)), uintptr(fileOption), uintptr(filePerm), 0, 0)
-		if err1 == syscall.ENOENT { // Kernel > 3.19 for setgroups
-			continue
-		} else if err1 != 0 {
-			goto childerror
-		}
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, r1, uintptr(unsafe.Pointer(&f.fileContent[0])),
-			uintptr(len(f.fileContent)))
-		if err1 != 0 {
-			goto childerror
-		}
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_CLOSE, r1, 0, 0)
 		if err1 != 0 {
 			goto childerror
 		}
@@ -296,14 +314,6 @@ func (r *Runner) Start() (int, error) {
 
 		// Load seccomp filter
 		_, _, err1 = syscall.RawSyscall(unix.SYS_SECCOMP, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, uintptr(unsafe.Pointer(r.Seccomp)))
-		if err1 != 0 {
-			goto childerror
-		}
-	}
-
-	// stop before execve syscall
-	if r.StopBeforeExec {
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_KILL, pid, uintptr(syscall.SIGSTOP), 0)
 		if err1 != 0 {
 			goto childerror
 		}

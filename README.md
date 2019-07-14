@@ -35,9 +35,11 @@ Packages:
 
 -   seccomp: provides utility function that wrappers libseccomp
 -   mount: provides utility function that wrappers mount syscall
--   forkexec: fork-exec provides unshare, ptrace, seccomp before exec
+-   rlimit: provides utility function that defines rlimit syscall
+-   forkexec: fork-exec provides mount, unshare, ptrace, seccomp, capset before exec
 -   tracer: ptrace tracer and provides syscall trap filter context
 -   runprogram: wrapper to call forkexec and trecer
+-   rununshared: wrapper to call forkexec and unshared namespaces
 -   runconfig: defines arch & language specified trace condition
 
 Executable:
