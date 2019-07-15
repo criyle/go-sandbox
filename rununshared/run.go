@@ -42,7 +42,7 @@ func (r *RunUnshared) Start() (rt tracer.TraceResult, err error) {
 		WorkDir:           r.WorkDir,
 		Seccomp:           bpf,
 		NoNewPrivs:        true,
-		StopBeforeSeccomp: true,
+		StopBeforeSeccomp: false,
 		UnshareFlags:      UnshareFlags,
 		Mounts:            r.Mounts,
 		PivotRoot:         r.Root,
@@ -87,11 +87,11 @@ func (r *RunUnshared) Trace(runner *forkexec.Runner) (result tracer.TraceResult,
 		result.RunningTime = time.Now().UnixNano() - fTime
 	}()
 
+	// currently, we do not have any way to track mount syscall time usage
+	fTime = time.Now().UnixNano()
+
 	for {
 		pid, err := unix.Wait4(pgid, &wstatus, unix.WALL, &rusage)
-		if fTime == 0 {
-			fTime = time.Now().UnixNano()
-		}
 		r.println("wait4: ", wstatus)
 		if err != nil {
 			return result, tracer.TraceCodeFatal

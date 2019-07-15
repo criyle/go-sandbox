@@ -297,6 +297,7 @@ func (r *Runner) Start() (int, error) {
 
 	// if both seccomp and ptrace is defined, then seccomp filter should have
 	// traced execve, thus child need parent attached to it first
+	// actually, this is not effective if pid namespace is unshared
 	if r.StopBeforeSeccomp || (r.Seccomp != nil && r.Ptrace) {
 		// Stop to wait for ptrace tracer
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_KILL, pid, uintptr(syscall.SIGSTOP), 0)

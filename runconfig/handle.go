@@ -26,7 +26,6 @@ func (h *Handler) CheckRead(fn string) runprogram.TraceAction {
 
 // CheckWrite checks whether the file have write permission
 func (h *Handler) CheckWrite(fn string) runprogram.TraceAction {
-	fmt.Println("write: ", fn)
 	if !h.FileSet.IsWritableFile(fn) {
 		return h.onDgsFileDetect(fn)
 	}
