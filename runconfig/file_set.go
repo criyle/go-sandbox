@@ -1,9 +1,6 @@
 package runconfig
 
 import (
-	"fmt"
-	"os"
-	"path"
 	"path/filepath"
 	"strings"
 )
@@ -150,29 +147,6 @@ func dirname(path string) string {
 		return path[:p]
 	}
 	return ""
-}
-
-// getProcCwd gets the process CWD
-func getProcCwd(pid int) string {
-	fileName := "/proc/self/cwd"
-	if pid > 0 {
-		fileName = fmt.Sprintf("/proc/%d/cwd", pid)
-	}
-	s, err := os.Readlink(fileName)
-	if err != nil {
-		return ""
-	}
-	return s
-}
-
-// absPath calculates the absolute path for a process
-// built-in function did the dirty works to resolve relative paths
-func absPath(pid int, p string) string {
-	// if relative path
-	if path.IsAbs(p) {
-		return path.Join(getProcCwd(pid), p)
-	}
-	return path.Clean(p)
 }
 
 func realPath(p string) string {

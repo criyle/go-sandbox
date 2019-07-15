@@ -3,6 +3,7 @@ package runprogram
 import (
 	"fmt"
 	"os"
+	"path"
 	"syscall"
 
 	libseccomp "github.com/seccomp/libseccomp-golang"
@@ -21,8 +22,12 @@ func (h *tracerHandler) Debug(v ...interface{}) {
 	}
 }
 
+func (h *tracerHandler) getString(ctx *tracer.Context, addr uint) string {
+	return absPath(ctx.Pid, ctx.GetString(uintptr(addr)))
+}
+
 func (h *tracerHandler) checkOpen(ctx *tracer.Context, addr uint, flags uint) TraceAction {
-	fn := ctx.GetString(uintptr(addr))
+	fn := h.getString(ctx, addr)
 	isReadOnly := (flags&syscall.O_ACCMODE == syscall.O_RDONLY) &&
 		(flags&syscall.O_CREAT == 0) &&
 		(flags&syscall.O_EXCL == 0) &&
@@ -36,19 +41,19 @@ func (h *tracerHandler) checkOpen(ctx *tracer.Context, addr uint, flags uint) Tr
 }
 
 func (h *tracerHandler) checkRead(ctx *tracer.Context, addr uint) TraceAction {
-	fn := ctx.GetString(uintptr(addr))
+	fn := h.getString(ctx, addr)
 	h.Debug("check read: ", fn)
 	return h.Handler.CheckRead(fn)
 }
 
 func (h *tracerHandler) checkWrite(ctx *tracer.Context, addr uint) TraceAction {
-	fn := ctx.GetString(uintptr(addr))
+	fn := h.getString(ctx, addr)
 	h.Debug("check write: ", fn)
 	return h.Handler.CheckWrite(fn)
 }
 
 func (h *tracerHandler) checkStat(ctx *tracer.Context, addr uint) TraceAction {
-	fn := ctx.GetString(uintptr(addr))
+	fn := h.getString(ctx, addr)
 	h.Debug("check stat: ", fn)
 	return h.Handler.CheckStat(fn)
 }
@@ -137,4 +142,27 @@ func getFileMode(flags uint) string {
 	default:
 		return "??"
 	}
+}
+
+// getProcCwd gets the process CWD
+func getProcCwd(pid int) string {
+	fileName := "/proc/self/cwd"
+	if pid > 0 {
+		fileName = fmt.Sprintf("/proc/%d/cwd", pid)
+	}
+	s, err := os.Readlink(fileName)
+	if err != nil {
+		return ""
+	}
+	return s
+}
+
+// absPath calculates the absolute path for a process
+// built-in function did the dirty works to resolve relative paths
+func absPath(pid int, p string) string {
+	// if relative path
+	if !path.IsAbs(p) {
+		return path.Join(getProcCwd(pid), p)
+	}
+	return path.Clean(p)
 }
