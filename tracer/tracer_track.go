@@ -19,13 +19,15 @@ const (
 // exec tracee
 func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult, err error) {
 	var (
-		wstatus unix.WaitStatus      // wait4 wait status
-		rusage  unix.Rusage          // wait4 rusage
-		tle     bool                 // whether the timmer triggered due to timeout
-		traced  = make(map[int]bool) // store all process that have set ptrace options
-		execved = false              // store whether the runner process have successfully execvd
-		pid     int                  // store pid of wait4 result
-		initMem uint64               // initial memory usage (likely due to original process)
+		wstatus unix.WaitStatus         // wait4 wait status
+		rusage  unix.Rusage             // wait4 rusage
+		tle     bool                    // whether the timmer triggered due to timeout
+		traced  = make(map[int]bool)    // store all process that have set ptrace options
+		execved = false                 // store whether the runner process have successfully execvd
+		pid     int                     // store pid of wait4 result
+		initMem uint64                  // initial memory usage (likely due to original process)
+		sTime   = time.Now().UnixNano() // records start time for trace process
+		fTime   int64                   // records finish time for execve
 	)
 
 	// ptrace is thread based (kernel proc)
@@ -61,6 +63,8 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 		// kill all tracee upon return
 		killAll(pgid)
 		collectZombie(pgid)
+		result.TraceStat.SetUpTime = fTime - sTime
+		result.RunningTime = time.Now().UnixNano() - fTime
 	}()
 
 	// trace unixs
@@ -175,7 +179,10 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 					handler.Debug("ptrace stop fork")
 				case unix.PTRACE_EVENT_EXEC:
 					// forked tracee have successfully called execve
-					execved = true
+					if !execved {
+						fTime = time.Now().UnixNano()
+						execved = true
+					}
 					handler.Debug("ptrace stop exec")
 
 				default:

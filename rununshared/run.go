@@ -58,6 +58,8 @@ func (r *RunUnshared) Trace(runner *forkexec.Runner) (result tracer.TraceResult,
 		rusage  unix.Rusage     // wait4 rusage
 		tle     = false
 		status  = tracer.TraceCodeNormal
+		sTime   = time.Now().UnixNano() // start time
+		fTime   int64                   // finish time for setup
 	)
 
 	// Start the runner
@@ -81,10 +83,15 @@ func (r *RunUnshared) Trace(runner *forkexec.Runner) (result tracer.TraceResult,
 		// kill all tracee upon return
 		killAll(pgid)
 		collectZombie(pgid)
+		result.TraceStat.SetUpTime = fTime - sTime
+		result.RunningTime = time.Now().UnixNano() - fTime
 	}()
 
 	for {
 		pid, err := unix.Wait4(pgid, &wstatus, unix.WALL, &rusage)
+		if fTime == 0 {
+			fTime = time.Now().UnixNano()
+		}
 		r.println("wait4: ", wstatus)
 		if err != nil {
 			return result, tracer.TraceCodeFatal

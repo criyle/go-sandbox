@@ -48,12 +48,19 @@ func (t TraceCode) Error() string {
 	}
 }
 
+// TraceStat is the time usages in ns
+type TraceStat struct {
+	SetUpTime   int64
+	RunningTime int64
+}
+
 // TraceResult is the result returned by strat trace
 type TraceResult struct {
 	UserTime    uint64    // used user CPU time (in ms)
 	UserMem     uint64    // used user memory (in kb)
 	ExitCode    int       // exit code
 	TraceStatus TraceCode // the final status for the process
+	TraceStat             // collects time for the process
 }
 
 // Runner represents the process runner
