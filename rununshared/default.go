@@ -1,6 +1,8 @@
 package rununshared
 
 import (
+	"os"
+
 	"github.com/criyle/go-judger/mount"
 	"golang.org/x/sys/unix"
 )
@@ -54,7 +56,12 @@ var (
 // GetDefaultMounts returns default mount parameters for given root
 func GetDefaultMounts(root string, add []AddBind) []*mount.Mount {
 	mounts := make([]*mount.Mount, 0, len(DefaultMounts)+len(add))
-	mounts = append(mounts, DefaultMounts...)
+	// check if bind mount source exists, e.g. /lib64 does not exists on arm
+	for _, m := range DefaultMounts {
+		if _, err := os.Stat(m.Source); !os.IsNotExist(err) {
+			mounts = append(mounts, m)
+		}
+	}
 	for _, m := range add {
 		flags := bind
 		if m.ReadOnly {
