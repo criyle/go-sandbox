@@ -5,7 +5,8 @@ package forkexec
 import (
 	"syscall"
 
-	"github.com/criyle/go-judger/mount"
+	"github.com/criyle/go-judger/types/mount"
+	"github.com/criyle/go-judger/types/rlimit"
 )
 
 // Runner is the RunProgramConfig including the exec path, argv
@@ -16,10 +17,10 @@ type Runner struct {
 	Args []string
 	Env  []string
 
-	// Resource limit set by set rlimit
-	RLimits []RLimit
+	// POSIX Resource limit set by set rlimit
+	RLimits []rlimit.RLimit
 
-	// file disriptors for new process, from 0 to len - 1
+	// file disriptors map for new process, from 0 to len - 1
 	Files []uintptr
 
 	// work path set by chdir(dir) (current working directory for child)

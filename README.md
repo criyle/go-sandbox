@@ -22,6 +22,7 @@ New Features:
 2.  More architectures (arm32, arm64, x86)
 3.  Allow multiple traced programs in different threads
 4.  Allow pipes as input / output files
+5.  Use Linux Namespace to isolate file access (elimilate ptrace)
 
 Default file access action:
 
@@ -34,13 +35,15 @@ Default file access action:
 Packages:
 
 -   seccomp: provides utility function that wrappers libseccomp
--   mount: provides utility function that wrappers mount syscall
--   rlimit: provides utility function that defines rlimit syscall
 -   forkexec: fork-exec provides mount, unshare, ptrace, seccomp, capset before exec
 -   tracer: ptrace tracer and provides syscall trap filter context
 -   runprogram: wrapper to call forkexec and trecer
 -   rununshared: wrapper to call forkexec and unshared namespaces
--   runconfig: defines arch & language specified trace condition
+-   runconfig: defines arch & language specified trace condition for seccomp and ptrace
+-   types: general runtime specs
+    -   mount: provides utility function that wrappers mount syscall
+    -   rlimit: provides utility function that defines rlimit syscall
+    -   specs: provides general res / result data structures
 
 Executable:
 
@@ -52,5 +55,4 @@ Configuations:
 
 TODO:
 
-1.  Use Linux Namespace to isolate file access (elimilate ptrace)
-2.  Use Linux Control Groups to limit & acct CPU & memory (elimilate wait4 rusage)
+1.  Use Linux Control Groups to limit & acct CPU & memory (elimilate wait4 rusage)

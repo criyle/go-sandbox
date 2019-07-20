@@ -6,10 +6,11 @@ import (
 	"github.com/criyle/go-judger/forkexec"
 	"github.com/criyle/go-judger/seccomp"
 	"github.com/criyle/go-judger/tracer"
+	"github.com/criyle/go-judger/types/specs"
 )
 
 // Start starts the tracing process
-func (r *RunProgram) Start() (rt tracer.TraceResult, err error) {
+func (r *RunProgram) Start() (rt specs.TraceResult, err error) {
 	// build seccomp filter
 	filter, err := buildFilter(r.ShowDetails, r.SyscallAllowed, r.SyscallTraced)
 	if err != nil {
@@ -39,7 +40,7 @@ func (r *RunProgram) Start() (rt tracer.TraceResult, err error) {
 		Unsafe:      r.Unsafe,
 		Handler:     r.Handler,
 	}
-	return tracer.Trace(th, ch, tracer.ResLimit(r.TraceLimit))
+	return tracer.Trace(th, ch, specs.ResLimit(r.TraceLimit))
 }
 
 // build filter builds the libseccomp filter according to the allow, trace and show details

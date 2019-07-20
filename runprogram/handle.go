@@ -9,6 +9,7 @@ import (
 	libseccomp "github.com/seccomp/libseccomp-golang"
 
 	"github.com/criyle/go-judger/tracer"
+	"github.com/criyle/go-judger/types/specs"
 )
 
 type tracerHandler struct {
@@ -121,7 +122,7 @@ func (h *tracerHandler) GetSyscallName(ctx *tracer.Context) (string, error) {
 
 func (h *tracerHandler) HandlerDisallow(name string) error {
 	if !h.Unsafe {
-		return tracer.TraceCodeBan
+		return specs.TraceCodeBan
 	}
 	return nil
 }

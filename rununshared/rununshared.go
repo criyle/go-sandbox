@@ -1,9 +1,9 @@
 package rununshared
 
 import (
-	"github.com/criyle/go-judger/mount"
-	"github.com/criyle/go-judger/rlimit"
-	"github.com/criyle/go-judger/tracer"
+	"github.com/criyle/go-judger/types/mount"
+	"github.com/criyle/go-judger/types/rlimit"
+	"github.com/criyle/go-judger/types/specs"
 )
 
 // RunUnshared runs program in unshared namespaces
@@ -22,7 +22,7 @@ type RunUnshared struct {
 	RLimits rlimit.RLimits
 
 	// Resource limit enforced by tracer
-	ResLimits tracer.ResLimit
+	ResLimits specs.ResLimit
 
 	// Allowed syscall names
 	SyscallAllowed []string

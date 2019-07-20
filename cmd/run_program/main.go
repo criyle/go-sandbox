@@ -6,11 +6,11 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/criyle/go-judger/rlimit"
 	"github.com/criyle/go-judger/runconfig"
 	"github.com/criyle/go-judger/runprogram"
 	"github.com/criyle/go-judger/rununshared"
-	"github.com/criyle/go-judger/tracer"
+	"github.com/criyle/go-judger/types/rlimit"
+	"github.com/criyle/go-judger/types/specs"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 
 // Runner can be ptraced runner or namespaced runner
 type Runner interface {
-	Start() (tracer.TraceResult, error)
+	Start() (specs.TraceResult, error)
 }
 
 func printUsage() {
@@ -122,7 +122,7 @@ func main() {
 			WorkDir: "/w",
 			Files:   fds,
 			RLimits: rlims,
-			ResLimits: tracer.ResLimit{
+			ResLimits: specs.ResLimit{
 				TimeLimit:     timeLimit * 1e3,
 				RealTimeLimit: realTimeLimit * 1e3,
 				MemoryLimit:   memoryLimit << 10,
@@ -143,7 +143,7 @@ func main() {
 			Env:     []string{pathEnv},
 			WorkDir: workPath,
 			RLimits: rlims,
-			TraceLimit: runprogram.TraceLimit{
+			TraceLimit: specs.ResLimit{
 				TimeLimit:     timeLimit * 1e3,
 				RealTimeLimit: realTimeLimit * 1e3,
 				MemoryLimit:   memoryLimit << 10,
@@ -173,17 +173,16 @@ func main() {
 
 	// Run tracer
 	rt, err := runner.Start()
-	println("used process_vm_readv: ", tracer.UseVMReadv)
 	println("results:", rt, err)
 
 	if err != nil {
-		c, ok := err.(tracer.TraceCode)
+		c, ok := err.(specs.TraceCode)
 		if !ok {
-			c = tracer.TraceCodeFatal
+			c = specs.TraceCodeFatal
 		}
 		// Handle fatal error from trace
 		fmt.Fprintf(f, "%d %d %d %d\n", int(c), rt.UserTime, rt.UserMem, rt.ExitCode)
-		if c == tracer.TraceCodeFatal {
+		if c == specs.TraceCodeFatal {
 			os.Exit(1)
 		}
 	} else {

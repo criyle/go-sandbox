@@ -8,7 +8,7 @@ import (
 
 	"github.com/criyle/go-judger/forkexec"
 	"github.com/criyle/go-judger/seccomp"
-	"github.com/criyle/go-judger/tracer"
+	"github.com/criyle/go-judger/types/specs"
 	libseccomp "github.com/seccomp/libseccomp-golang"
 	"golang.org/x/sys/unix"
 )
@@ -20,7 +20,7 @@ const (
 )
 
 // Start starts the unshared process
-func (r *RunUnshared) Start() (rt tracer.TraceResult, err error) {
+func (r *RunUnshared) Start() (rt specs.TraceResult, err error) {
 	filter, err := seccomp.BuildFilter(libseccomp.ActKill, libseccomp.ActTrap, r.SyscallAllowed, []string{})
 	if err != nil {
 		println(err)
@@ -52,12 +52,12 @@ func (r *RunUnshared) Start() (rt tracer.TraceResult, err error) {
 }
 
 // Trace tracks child processes
-func (r *RunUnshared) Trace(runner *forkexec.Runner) (result tracer.TraceResult, err error) {
+func (r *RunUnshared) Trace(runner *forkexec.Runner) (result specs.TraceResult, err error) {
 	var (
 		wstatus unix.WaitStatus // wait4 wait status
 		rusage  unix.Rusage     // wait4 rusage
 		tle     = false
-		status  = tracer.TraceCodeNormal
+		status  = specs.TraceCodeNormal
 		sTime   = time.Now().UnixNano() // start time
 		fTime   int64                   // finish time for setup
 	)
@@ -66,7 +66,7 @@ func (r *RunUnshared) Trace(runner *forkexec.Runner) (result tracer.TraceResult,
 	pgid, err := runner.Start()
 	r.println("Starts: ", pgid, err)
 	if err != nil {
-		result.TraceStatus = tracer.TraceCodeRE
+		result.TraceStatus = specs.TraceCodeRE
 		return result, err
 	}
 	// Set real time limit, kill process after it
@@ -78,7 +78,7 @@ func (r *RunUnshared) Trace(runner *forkexec.Runner) (result tracer.TraceResult,
 	defer func() {
 		timer.Stop()
 		if tle {
-			err = tracer.TraceCodeTLE
+			err = specs.TraceCodeTLE
 		}
 		// kill all tracee upon return
 		killAll(pgid)
@@ -94,7 +94,7 @@ func (r *RunUnshared) Trace(runner *forkexec.Runner) (result tracer.TraceResult,
 		pid, err := unix.Wait4(pgid, &wstatus, unix.WALL, &rusage)
 		r.println("wait4: ", wstatus)
 		if err != nil {
-			return result, tracer.TraceCodeFatal
+			return result, specs.TraceCodeFatal
 		}
 
 		// update resource usage and check against limits
@@ -103,17 +103,17 @@ func (r *RunUnshared) Trace(runner *forkexec.Runner) (result tracer.TraceResult,
 
 		// check tle / mle
 		if userTime > r.ResLimits.TimeLimit {
-			status = tracer.TraceCodeTLE
+			status = specs.TraceCodeTLE
 		}
 		if userMem > r.ResLimits.MemoryLimit {
-			status = tracer.TraceCodeMLE
+			status = specs.TraceCodeMLE
 		}
-		result = tracer.TraceResult{
+		result = specs.TraceResult{
 			UserTime:    userTime,
 			UserMem:     userMem,
 			TraceStatus: status,
 		}
-		if status != tracer.TraceCodeNormal {
+		if status != specs.TraceCodeNormal {
 			return result, status
 		}
 
@@ -125,13 +125,13 @@ func (r *RunUnshared) Trace(runner *forkexec.Runner) (result tracer.TraceResult,
 			sig := wstatus.Signal()
 			switch sig {
 			case unix.SIGXCPU:
-				status = tracer.TraceCodeTLE
+				status = specs.TraceCodeTLE
 			case unix.SIGXFSZ:
-				status = tracer.TraceCodeOLE
+				status = specs.TraceCodeOLE
 			case unix.SIGSYS:
-				status = tracer.TraceCodeBan
+				status = specs.TraceCodeBan
 			default:
-				status = tracer.TraceCodeRE
+				status = specs.TraceCodeRE
 			}
 			result.TraceStatus = status
 			return result, status

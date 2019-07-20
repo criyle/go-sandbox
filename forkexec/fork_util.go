@@ -3,7 +3,7 @@ package forkexec
 import (
 	"syscall"
 
-	"github.com/criyle/go-judger/mount"
+	"github.com/criyle/go-judger/types/mount"
 )
 
 // prepareExec prepares execve parameters

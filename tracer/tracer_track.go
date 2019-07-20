@@ -4,6 +4,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/criyle/go-judger/types/specs"
 	unix "golang.org/x/sys/unix"
 )
 
@@ -17,7 +18,7 @@ const (
 // Trace traces all child process that created by runner
 // this function should called only once and in the same thread that
 // exec tracee
-func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult, err error) {
+func Trace(handler Handler, runner Runner, limits specs.ResLimit) (result specs.TraceResult, err error) {
 	var (
 		wstatus unix.WaitStatus         // wait4 wait status
 		rusage  unix.Rusage             // wait4 rusage
@@ -39,7 +40,7 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 	handler.Debug("tracer started: ", pgid, err)
 	if err != nil {
 		handler.Debug("start tracee failed: ", err)
-		result.TraceStatus = TraceCodeRE
+		result.TraceStatus = specs.TraceCodeRE
 		return result, err
 	}
 
@@ -54,11 +55,11 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 	defer func() {
 		timer.Stop()
 		if tle {
-			err = TraceCodeTLE
+			err = specs.TraceCodeTLE
 		}
 		if err2 := recover(); err2 != nil {
 			handler.Debug(err2)
-			err = TraceCodeFatal
+			err = specs.TraceCodeFatal
 		}
 		// kill all tracee upon return
 		killAll(pgid)
@@ -78,11 +79,11 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 		}
 		if err != nil {
 			handler.Debug("wait4 failed: ", err)
-			return result, TraceCodeFatal
+			return result, specs.TraceCodeFatal
 		}
 		handler.Debug("------ ", pid, " ------")
 
-		status := TraceCodeNormal
+		status := specs.TraceCodeNormal
 		if pid == pgid {
 			if initMem == 0 {
 				initMem = uint64(rusage.Maxrss)
@@ -94,17 +95,17 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 
 			// check tle / mle
 			if userTime > limits.TimeLimit {
-				status = TraceCodeTLE
+				status = specs.TraceCodeTLE
 			}
 			if userMem > limits.MemoryLimit {
-				status = TraceCodeMLE
+				status = specs.TraceCodeMLE
 			}
-			result = TraceResult{
+			result = specs.TraceResult{
 				UserTime:    userTime,
 				UserMem:     userMem,
 				TraceStatus: status,
 			}
-			if status != TraceCodeNormal {
+			if status != specs.TraceCodeNormal {
 				return result, status
 			}
 		}
@@ -119,8 +120,8 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 					result.ExitCode = wstatus.ExitStatus()
 					return result, nil
 				}
-				result.TraceStatus = TraceCodeFatal
-				return result, TraceCodeFatal
+				result.TraceStatus = specs.TraceCodeFatal
+				return result, specs.TraceCodeFatal
 			}
 
 		case wstatus.Signaled():
@@ -130,13 +131,13 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 				delete(traced, pid)
 				switch sig {
 				case unix.SIGXCPU:
-					status = TraceCodeTLE
+					status = specs.TraceCodeTLE
 				case unix.SIGXFSZ:
-					status = TraceCodeOLE
+					status = specs.TraceCodeOLE
 				case unix.SIGSYS:
-					status = TraceCodeBan
+					status = specs.TraceCodeBan
 				default:
-					status = TraceCodeRE
+					status = specs.TraceCodeRE
 				}
 				result.TraceStatus = status
 				return result, status
@@ -151,7 +152,7 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 				// Ptrace set option valid if the tracee is stopped
 				err = setPtraceOption(pid)
 				if err != nil {
-					result.TraceStatus = TraceCodeFatal
+					result.TraceStatus = specs.TraceCodeFatal
 					return result, err
 				}
 			}
@@ -164,7 +165,7 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 						// give the customized handle for syscall
 						err := handleTrap(handler, pid)
 						if err != nil {
-							result.TraceStatus = TraceCodeBan
+							result.TraceStatus = specs.TraceCodeBan
 							return result, err
 						}
 					} else {
@@ -193,11 +194,11 @@ func Trace(handler Handler, runner Runner, limits ResLimit) (result TraceResult,
 				// check if cpu rlimit hit
 				switch stopSig {
 				case unix.SIGXCPU:
-					status = TraceCodeTLE
+					status = specs.TraceCodeTLE
 				case unix.SIGXFSZ:
-					status = TraceCodeOLE
+					status = specs.TraceCodeOLE
 				}
-				if status != TraceCodeNormal {
+				if status != specs.TraceCodeNormal {
 					result.TraceStatus = status
 					return result, status
 				}
@@ -246,7 +247,7 @@ func handleTrap(handler Handler, pid int) error {
 				return ctx.skipSyscall()
 
 			case TraceKill:
-				return TraceCodeBan
+				return specs.TraceCodeBan
 			}
 		}
 

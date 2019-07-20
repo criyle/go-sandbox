@@ -3,8 +3,8 @@ package runprogram
 import (
 	"syscall"
 
-	"github.com/criyle/go-judger/rlimit"
-	"github.com/criyle/go-judger/tracer"
+	"github.com/criyle/go-judger/types/rlimit"
+	"github.com/criyle/go-judger/types/specs"
 )
 
 // RunProgram defines the spec to run a program safely
@@ -22,7 +22,7 @@ type RunProgram struct {
 	RLimits rlimit.RLimits
 
 	// Res limit enforced by tracer
-	TraceLimit TraceLimit
+	TraceLimit specs.ResLimit
 
 	// Allowed / Traced syscall names
 	// Notice: file access syscalls should be traced
@@ -38,14 +38,11 @@ type RunProgram struct {
 	ShowDetails, Unsafe bool
 }
 
-// TraceLimit defines the limits enforced by tracer
-type TraceLimit tracer.ResLimit
-
 // TraceAction defines action against a syscall check
 type TraceAction int
 
 // BanRet defines the return value for a syscall ban acction
-var BanRet syscall.Errno = syscall.EACCES
+var BanRet = syscall.EACCES
 
 // TraceAllow allow the access, trace ban ignores the syscall and set the
 // return value to BanRet, TraceKill stops the trace action

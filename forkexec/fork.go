@@ -77,6 +77,7 @@ func (r *Runner) Start() (int, error) {
 	if err1 != 0 || pid != 0 {
 		// restore all signals
 		afterFork()
+		syscall.ForkLock.Unlock()
 
 		// synchronize with child for uid / gid map
 		if unshareUser {
@@ -89,7 +90,6 @@ func (r *Runner) Start() (int, error) {
 			unix.Close(p[1])
 		}
 
-		syscall.ForkLock.Unlock()
 		if err1 != 0 {
 			return int(pid), syscall.Errno(err1)
 		}

@@ -26,7 +26,7 @@ func writeIDMaps(pid int) error {
 
 // writeFile writes file
 func writeFile(path string, content []byte) error {
-	fd, err := unix.Open(path, unix.O_RDWR, 0)
+	fd, err := unix.Open(path, unix.O_RDWR|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return err
 	}
