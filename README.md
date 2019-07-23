@@ -53,6 +53,17 @@ Configuations:
 
 -   run_program/config.go: all configs toward running specs
 
+Benchmarks for unshare:
+
+-   1ms: fork, unshare pid / user / cgroup
+-   50ms: unshare ipc / mount
+-   100ms: unshare pid & user & cgroup & mount & pivot root
+-   400ms: unshare net
+-   800ms: unshare all
+-   880ms: unshare all & pivot root
+
+It seems unshare net or ipc takes time, maybe limits action by seccomp instead.
+
 TODO:
 
 1.  Use Linux Control Groups to limit & acct CPU & memory (elimilate wait4 rusage)
