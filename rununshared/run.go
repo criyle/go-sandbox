@@ -14,9 +14,8 @@ import (
 )
 
 const (
-	// UnshareFlags is flags used to create namespaces
-	UnshareFlags = unix.CLONE_NEWIPC | unix.CLONE_NEWNET | unix.CLONE_NEWNS |
-		unix.CLONE_NEWPID | unix.CLONE_NEWUSER | unix.CLONE_NEWUTS | unix.CLONE_NEWCGROUP
+	// UnshareFlags is flags used to create namespaces except NET and IPC
+	UnshareFlags = unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWUSER | unix.CLONE_NEWUTS | unix.CLONE_NEWCGROUP
 )
 
 // Start starts the unshared process

@@ -53,6 +53,7 @@ func (r *Runner) Start() (int, error) {
 		return 0, nil
 	}
 
+	// pipe p used to notify child the uid / gid mapping have been setup
 	if unshareUser {
 		err = unix.Pipe2(p[:], unix.O_CLOEXEC)
 		if err != nil {
@@ -60,8 +61,19 @@ func (r *Runner) Start() (int, error) {
 		}
 	}
 
+	// socketpair p2 used to sync with parent before final execve
+	p2, err := syscall.Socketpair(syscall.AF_LOCAL, syscall.SOCK_STREAM|syscall.SOCK_CLOEXEC, 0)
+	if err != nil {
+		if p[0] > 0 { // avoid fd leak
+			unix.Close(p[0])
+			unix.Close(p[1])
+		}
+		return 0, err
+	}
+
 	// similar to exec_linux, avoid side effect by shuffling around
 	fd, nextfd := prepareFds(r.Files)
+	pipe := p2[1]
 
 	// Acquire the fork lock so that no other threads
 	// create new fds that are not yet close-on-exec
@@ -89,6 +101,24 @@ func (r *Runner) Start() (int, error) {
 			syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[1]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 			unix.Close(p[1])
 		}
+
+		// sync with child
+		unix.Close(p2[1])
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p2[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+		if err1 != 0 {
+			unix.Close(p2[0])
+			return int(pid), syscall.Errno(err1)
+		}
+
+		if r.SyncFunc != nil {
+			err = r.SyncFunc(int(pid))
+		}
+		if err == nil {
+			err1 = 0
+			syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p2[0]), uintptr(unsafe.Pointer(&err1)), uintptr(unsafe.Sizeof((err1))))
+		}
+
+		unix.Close(p2[0])
 
 		if err1 != 0 {
 			return int(pid), syscall.Errno(err1)
@@ -134,14 +164,21 @@ func (r *Runner) Start() (int, error) {
 
 	// Pass 1 & pass 2 assigns fds for child process
 	// Pass 1: fd[i] < i => nextfd
+	if pipe < nextfd {
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(pipe), uintptr(nextfd), syscall.FD_CLOEXEC)
+		if err1 != 0 {
+			goto childerror
+		}
+		pipe = nextfd
+		nextfd++
+	}
 	for i := 0; i < len(fd); i++ {
 		if fd[i] >= 0 && fd[i] < int(i) {
-			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(fd[i]), uintptr(nextfd), 0)
+			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(fd[i]), uintptr(nextfd), syscall.FD_CLOEXEC)
 			if err1 != 0 {
 				goto childerror
 			}
 			// Set up close on exec
-			syscall.RawSyscall(syscall.SYS_FCNTL, uintptr(nextfd), syscall.F_SETFD, syscall.FD_CLOEXEC)
 			fd[i] = nextfd
 			nextfd++
 		}
@@ -229,26 +266,35 @@ func (r *Runner) Start() (int, error) {
 
 	// pivit_root
 	if pivotRoot != nil {
-		// mkdir(root/old_root)
+		// mkdir("old_root")
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIRAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(oldRoot)), 0755)
 		if err1 != 0 {
 			goto childerror
 		}
 
-		// pivot_root(root, root/old_root)
+		// pivot_root(root, "old_root")
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_PIVOT_ROOT, uintptr(unsafe.Pointer(pivotRoot)), uintptr(unsafe.Pointer(oldRoot)), 0)
 		if err1 != 0 {
 			goto childerror
 		}
 
-		// umount(root/old, MNT_DETACH)
+		// umount("old_root", MNT_DETACH)
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_UMOUNT2, uintptr(unsafe.Pointer(oldRoot)), syscall.MNT_DETACH, 0)
 		if err1 != 0 {
 			goto childerror
 		}
 
-		// rmdir(root/old_root)
+		// rmdir("old_root")
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_UNLINKAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(oldRoot)), uintptr(unix.AT_REMOVEDIR))
+		if err1 != 0 {
+			goto childerror
+		}
+
+		// mount("tmpfs", "/", "tmpfs", MS_BIND | MS_REMOUNT | MS_RDONLY | MS_NOATIME | MS_NOSUID, nil)
+		_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&tmpfs[0])),
+			uintptr(unsafe.Pointer(&slash[0])), uintptr(unsafe.Pointer(&tmpfs[0])),
+			uintptr(syscall.MS_BIND|syscall.MS_REMOUNT|syscall.MS_RDONLY|syscall.MS_NOATIME|syscall.MS_NOSUID),
+			uintptr(unsafe.Pointer(&empty[0])), 0)
 		if err1 != 0 {
 			goto childerror
 		}
@@ -288,7 +334,7 @@ func (r *Runner) Start() (int, error) {
 	}
 
 	// Enable Ptrace
-	if r.Ptrace {
+	if r.Ptrace && r.Seccomp != nil {
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_PTRACE, uintptr(syscall.PTRACE_TRACEME), 0, 0)
 		if err1 != 0 {
 			goto childerror
@@ -315,6 +361,26 @@ func (r *Runner) Start() (int, error) {
 
 		// Load seccomp filter
 		_, _, err1 = syscall.RawSyscall(unix.SYS_SECCOMP, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, uintptr(unsafe.Pointer(r.Seccomp)))
+		if err1 != 0 {
+			goto childerror
+		}
+	}
+
+	// Before exec, sync with parent through pipe (configured as close_on_exec)
+	err2 = 0
+	r1, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+	if r1 == 0 || err1 != 0 {
+		goto childerror
+	}
+
+	r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+	if r1 == 0 || err1 != 0 {
+		goto childerror
+	}
+
+	// Enable ptrace if no seccomp is needed
+	if r.Ptrace && r.Seccomp == nil {
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_PTRACE, uintptr(syscall.PTRACE_TRACEME), 0, 0)
 		if err1 != 0 {
 			goto childerror
 		}
