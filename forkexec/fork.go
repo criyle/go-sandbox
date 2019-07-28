@@ -333,8 +333,19 @@ func (r *Runner) Start() (int, error) {
 		}
 	}
 
-	// Enable Ptrace
+	// Enable Ptrace & sync with parent (since ptrace_me is a blocking operation)
 	if r.Ptrace && r.Seccomp != nil {
+		err2 = 0
+		r1, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+		if r1 == 0 || err1 != 0 {
+			goto childerror
+		}
+
+		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+		if r1 == 0 || err1 != 0 {
+			goto childerror
+		}
+
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_PTRACE, uintptr(syscall.PTRACE_TRACEME), 0, 0)
 		if err1 != 0 {
 			goto childerror
@@ -367,15 +378,17 @@ func (r *Runner) Start() (int, error) {
 	}
 
 	// Before exec, sync with parent through pipe (configured as close_on_exec)
-	err2 = 0
-	r1, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
-	if r1 == 0 || err1 != 0 {
-		goto childerror
-	}
+	if !r.Ptrace || r.Seccomp == nil {
+		err2 = 0
+		r1, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+		if r1 == 0 || err1 != 0 {
+			goto childerror
+		}
 
-	r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
-	if r1 == 0 || err1 != 0 {
-		goto childerror
+		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+		if r1 == 0 || err1 != 0 {
+			goto childerror
+		}
 	}
 
 	// Enable ptrace if no seccomp is needed
