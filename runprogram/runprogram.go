@@ -36,6 +36,9 @@ type RunProgram struct {
 
 	// ShowDetails / Unsafe debug flag
 	ShowDetails, Unsafe bool
+
+	// Use by cgroup to add proc
+	SyncFunc func(pid int) error
 }
 
 // TraceAction defines action against a syscall check

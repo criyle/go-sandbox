@@ -23,6 +23,7 @@ New Features:
 3.  Allow multiple traced programs in different threads
 4.  Allow pipes as input / output files
 5.  Use Linux Namespace to isolate file access (elimilate ptrace)
+6.  Use Linux Control Groups to limit & acct CPU & memory (elimilate wait4.rusage)
 
 Default file access action:
 
@@ -66,4 +67,4 @@ It seems unshare net or ipc takes time, maybe limits action by seccomp instead.
 
 TODO:
 
-1.  Use Linux Control Groups to limit & acct CPU & memory (elimilate wait4 rusage)
+1.  Add ability to pre-fork container deamons

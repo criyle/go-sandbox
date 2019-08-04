@@ -26,7 +26,6 @@ func Trace(handler Handler, runner Runner, limits specs.ResLimit) (result specs.
 		traced  = make(map[int]bool)    // store all process that have set ptrace options
 		execved = false                 // store whether the runner process have successfully execvd
 		pid     int                     // store pid of wait4 result
-		initMem uint64                  // initial memory usage (likely due to original process)
 		sTime   = time.Now().UnixNano() // records start time for trace process
 		fTime   int64                   // records finish time for execve
 	)
@@ -85,13 +84,9 @@ func Trace(handler Handler, runner Runner, limits specs.ResLimit) (result specs.
 
 		status := specs.TraceCodeNormal
 		if pid == pgid {
-			if initMem == 0 {
-				initMem = uint64(rusage.Maxrss)
-				handler.Debug("initial memory:", initMem)
-			}
 			// update resource usage and check against limits
 			userTime := uint64(rusage.Utime.Sec*1e3 + rusage.Utime.Usec/1e3) // ms
-			userMem := uint64(rusage.Maxrss) - initMem                       // kb
+			userMem := uint64(rusage.Maxrss)                                 // kb
 
 			// check tle / mle
 			if userTime > limits.TimeLimit {

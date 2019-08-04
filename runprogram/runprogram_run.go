@@ -26,13 +26,14 @@ func (r *RunProgram) Start() (rt specs.TraceResult, err error) {
 	}
 
 	ch := &forkexec.Runner{
-		Args:    r.Args,
-		Env:     r.Env,
-		RLimits: r.RLimits.PrepareRLimit(),
-		Files:   r.Files,
-		WorkDir: r.WorkDir,
-		Seccomp: bpf,
-		Ptrace:  true,
+		Args:     r.Args,
+		Env:      r.Env,
+		RLimits:  r.RLimits.PrepareRLimit(),
+		Files:    r.Files,
+		WorkDir:  r.WorkDir,
+		Seccomp:  bpf,
+		Ptrace:   true,
+		SyncFunc: r.SyncFunc,
 	}
 
 	th := &tracerHandler{

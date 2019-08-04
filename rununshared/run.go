@@ -46,6 +46,7 @@ func (r *RunUnshared) Start() (rt specs.TraceResult, err error) {
 		Mounts:            r.Mounts,
 		PivotRoot:         r.Root,
 		DropCaps:          true,
+		SyncFunc:          r.SyncFunc,
 	}
 	return r.Trace(ch)
 }

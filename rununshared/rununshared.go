@@ -35,4 +35,7 @@ type RunUnshared struct {
 
 	// Show Details
 	ShowDetails bool
+
+	// Use by cgroup to add proc
+	SyncFunc func(pid int) error
 }

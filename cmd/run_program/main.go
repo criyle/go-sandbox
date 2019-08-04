@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"time"
 
+	"github.com/criyle/go-judger/cgroup"
 	"github.com/criyle/go-judger/runconfig"
 	"github.com/criyle/go-judger/runprogram"
 	"github.com/criyle/go-judger/rununshared"
@@ -31,11 +33,13 @@ func printUsage() {
 func main() {
 	var (
 		addReadable, addWritable, addRawReadable, addRawWritable       arrayFlags
-		allowProc, unsafe, showDetails, namespace                      bool
+		allowProc, unsafe, showDetails, namespace, useCGroup           bool
 		pType, result                                                  string
 		timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint64
 		inputFileName, outputFileName, errorFileName, workPath         string
 		runner                                                         Runner
+		cg                                                             *cgroup.CGroup
+		err                                                            error
 	)
 
 	flag.Usage = printUsage
@@ -58,6 +62,7 @@ func main() {
 	flag.Var(&addRawReadable, "add-readable-raw", "Add a readable file (don't transform to its real path)")
 	flag.Var(&addRawWritable, "add-writable-raw", "Add a writable file (don't transform to its real path)")
 	flag.BoolVar(&namespace, "ns", false, "Use namespace to restrict file accesses")
+	flag.BoolVar(&useCGroup, "cgroup", false, "Use cgroup to colloct resource usage")
 	flag.Parse()
 
 	args := flag.Args()
@@ -84,6 +89,26 @@ func main() {
 	addRead := runconfig.GetExtraSet(addReadable, addRawReadable)
 	addWrite := runconfig.GetExtraSet(addWritable, addRawWritable)
 	h := runconfig.GetConf(pType, workPath, args, addRead, addWrite, allowProc, showDetails)
+
+	if useCGroup {
+		cg, err = cgroup.NewCGroup("run_program")
+		if err != nil {
+			panic(err)
+		}
+		defer cg.Destroy()
+		if err = cg.SetMemoryLimitInBytes(memoryLimit << 20); err != nil {
+			panic(err)
+		}
+	}
+
+	syncFunc := func(pid int) error {
+		if cg != nil {
+			if err := cg.AddProc(pid); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 
 	// open input / output / err files
 	files, err := prepareFiles(inputFileName, outputFileName, errorFileName)
@@ -135,7 +160,8 @@ func main() {
 					Target: "w",
 				},
 			}),
-			ShowDetails: true,
+			ShowDetails: showDetails,
+			SyncFunc:    syncFunc,
 		}
 	} else {
 		runner = &runprogram.RunProgram{
@@ -154,6 +180,7 @@ func main() {
 			ShowDetails:    showDetails,
 			Unsafe:         unsafe,
 			Handler:        h,
+			SyncFunc:       syncFunc,
 		}
 	}
 
@@ -174,6 +201,20 @@ func main() {
 	// Run tracer
 	rt, err := runner.Start()
 	println("results:", rt, err)
+
+	if useCGroup {
+		cpu, err := cg.CpuacctUsage()
+		if err != nil {
+			panic(err)
+		}
+		memory, err := cg.MemoryMaxUsageInBytes()
+		if err != nil {
+			panic(err)
+		}
+		println("cgroup: cpu: ", cpu, " memory: ", memory)
+		rt.UserTime = cpu / uint64(time.Millisecond)
+		rt.UserMem = memory >> 10
+	}
 
 	if err != nil {
 		c, ok := err.(specs.TraceCode)
