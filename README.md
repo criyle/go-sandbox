@@ -37,6 +37,9 @@ Packages:
 
 -   seccomp: provides utility function that wrappers libseccomp
 -   forkexec: fork-exec provides mount, unshare, ptrace, seccomp, capset before exec
+-   memfd: read regular file and creates a seaed memfd for its contents
+-   unixsocket: send / recv oob msg from a unix socket
+-   cgroup: creates cgroup directories and collects resource usage / limits 
 -   tracer: ptrace tracer and provides syscall trap filter context
 -   runprogram: wrapper to call forkexec and trecer
 -   rununshared: wrapper to call forkexec and unshared namespaces
