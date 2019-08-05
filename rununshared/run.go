@@ -36,6 +36,7 @@ func (r *RunUnshared) Start() (rt specs.TraceResult, err error) {
 	ch := &forkexec.Runner{
 		Args:              r.Args,
 		Env:               r.Env,
+		ExecFile:          r.ExecFile,
 		RLimits:           r.RLimits.PrepareRLimit(),
 		Files:             r.Files,
 		WorkDir:           r.WorkDir,
@@ -44,6 +45,8 @@ func (r *RunUnshared) Start() (rt specs.TraceResult, err error) {
 		StopBeforeSeccomp: false,
 		UnshareFlags:      UnshareFlags,
 		Mounts:            r.Mounts,
+		HostName:          r.HostName,
+		DomainName:        r.DomainName,
 		PivotRoot:         r.Root,
 		DropCaps:          true,
 		SyncFunc:          r.SyncFunc,

@@ -24,6 +24,7 @@ New Features:
 4.  Allow pipes as input / output files
 5.  Use Linux Namespace to isolate file access (elimilate ptrace)
 6.  Use Linux Control Groups to limit & acct CPU & memory (elimilate wait4.rusage)
+7.  Container tech with execveat memfd, sethostname, setdomainname
 
 Default file access action:
 
@@ -71,4 +72,3 @@ It seems unshare net or ipc takes time, maybe limits action by seccomp instead.
 TODO:
 
 1.  Add ability to pre-fork container deamons
-2.  Add fork-exec with execve memfd (execveat), sethostname, setdomainname, prepare devices (mknod)

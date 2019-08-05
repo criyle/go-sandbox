@@ -12,6 +12,9 @@ type RunUnshared struct {
 	Args []string
 	Env  []string
 
+	// fexecve param
+	ExecFile uintptr
+
 	// workdir is the current dir after unshare mount namespaces
 	WorkDir string
 
@@ -32,6 +35,9 @@ type RunUnshared struct {
 
 	// Mount syscalls
 	Mounts []*mount.Mount
+
+	// hostname & domainname
+	HostName, DomainName string
 
 	// Show Details
 	ShowDetails bool

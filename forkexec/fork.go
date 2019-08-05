@@ -41,6 +41,18 @@ func (r *Runner) Start() (int, error) {
 		return 0, err
 	}
 
+	// prepare hostname
+	hostname, err := syscallStringFromString(r.HostName)
+	if err != nil {
+		return 0, err
+	}
+
+	// prepare domainname
+	domainname, err := syscallStringFromString(r.DomainName)
+	if err != nil {
+		return 0, err
+	}
+
 	// prepare pivot_root param
 	pivotRoot, oldRoot, err := preparePivotRoot(r.PivotRoot)
 	if err != nil {
@@ -172,6 +184,14 @@ func (r *Runner) Start() (int, error) {
 		pipe = nextfd
 		nextfd++
 	}
+	if r.ExecFile > 0 && int(r.ExecFile) < nextfd {
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, r.ExecFile, uintptr(nextfd), syscall.FD_CLOEXEC)
+		if err1 != 0 {
+			goto childerror
+		}
+		r.ExecFile = uintptr(nextfd)
+		nextfd++
+	}
 	for i := 0; i < len(fd); i++ {
 		if fd[i] >= 0 && fd[i] < int(i) {
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(fd[i]), uintptr(nextfd), syscall.FD_CLOEXEC)
@@ -300,6 +320,18 @@ func (r *Runner) Start() (int, error) {
 		}
 	}
 
+	// SetHostName
+	if hostname != nil {
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_SETHOSTNAME,
+			uintptr(unsafe.Pointer(hostname)), uintptr(len(r.HostName)), 0)
+	}
+
+	// SetDomainName
+	if domainname != nil {
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_SETDOMAINNAME,
+			uintptr(unsafe.Pointer(domainname)), uintptr(len(r.DomainName)), 0)
+	}
+
 	// chdir for child
 	if workdir != nil {
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_CHDIR, uintptr(unsafe.Pointer(workdir)), 0, 0)
@@ -402,10 +434,18 @@ func (r *Runner) Start() (int, error) {
 	// at this point, runner is successfully attached for seccomp trap filter
 	// or execve traped without seccomp filter
 	// time to exec
-	_, _, err1 = syscall.RawSyscall(syscall.SYS_EXECVE,
-		uintptr(unsafe.Pointer(argv0)),
-		uintptr(unsafe.Pointer(&argv[0])),
-		uintptr(unsafe.Pointer(&envv[0])))
+	// if execfile fd is specified, call fexecve
+	if r.ExecFile > 0 {
+		_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, r.ExecFile,
+			uintptr(unsafe.Pointer(&empty[0])),
+			uintptr(unsafe.Pointer(&argv[0])),
+			uintptr(unsafe.Pointer(&envv[0])), unix.AT_EMPTY_PATH, 0)
+	} else {
+		_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, uintptr(_AT_FDCWD),
+			uintptr(unsafe.Pointer(argv0)),
+			uintptr(unsafe.Pointer(&argv[0])),
+			uintptr(unsafe.Pointer(&envv[0])), 0, 0)
+	}
 
 childerror:
 	syscall.RawSyscall(syscall.SYS_EXIT, uintptr(err1), 0, 0)

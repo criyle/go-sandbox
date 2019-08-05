@@ -17,6 +17,9 @@ type Runner struct {
 	Args []string
 	Env  []string
 
+	// if exec_fd is defined, then at the end, fd_execve is called
+	ExecFile uintptr
+
 	// POSIX Resource limit set by set rlimit
 	RLimits []rlimit.RLimit
 
@@ -50,10 +53,13 @@ type Runner struct {
 	UnshareFlags uintptr
 
 	// mounts defines the mount syscalls after unshare mount namespace
-	// need CAP_ADMIN inside the namespace (e.g. unshare user namespace)
+	// need CAP_SYS_ADMIN inside the namespace (e.g. unshare user namespace)
 	// if pivot root is provided, relative target is better for chdir-mount meta
 	// and pivot root will mount as tmpfs before any mount
 	Mounts []*mount.Mount
+
+	// HostName and DomainName to be set after unshare UTS & user (CAP_SYS_ADMIN)
+	HostName, DomainName string
 
 	// pivot_root defines a readonly new root after unshare mount namespace
 	// it should be a directory in absolute path

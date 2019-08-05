@@ -28,6 +28,7 @@ func (r *RunProgram) Start() (rt specs.TraceResult, err error) {
 	ch := &forkexec.Runner{
 		Args:     r.Args,
 		Env:      r.Env,
+		ExecFile: r.ExecFile,
 		RLimits:  r.RLimits.PrepareRLimit(),
 		Files:    r.Files,
 		WorkDir:  r.WorkDir,

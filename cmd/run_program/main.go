@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/criyle/go-judger/cgroup"
+	"github.com/criyle/go-judger/memfd"
 	"github.com/criyle/go-judger/runconfig"
 	"github.com/criyle/go-judger/runprogram"
 	"github.com/criyle/go-judger/rununshared"
@@ -33,13 +34,15 @@ func printUsage() {
 func main() {
 	var (
 		addReadable, addWritable, addRawReadable, addRawWritable       arrayFlags
-		allowProc, unsafe, showDetails, namespace, useCGroup           bool
+		allowProc, unsafe, showDetails, namespace, useCGroup, memfile  bool
 		pType, result                                                  string
 		timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint64
 		inputFileName, outputFileName, errorFileName, workPath         string
-		runner                                                         Runner
-		cg                                                             *cgroup.CGroup
-		err                                                            error
+
+		runner   Runner
+		cg       *cgroup.CGroup
+		err      error
+		execFile uintptr
 	)
 
 	flag.Usage = printUsage
@@ -63,6 +66,7 @@ func main() {
 	flag.Var(&addRawWritable, "add-writable-raw", "Add a writable file (don't transform to its real path)")
 	flag.BoolVar(&namespace, "ns", false, "Use namespace to restrict file accesses")
 	flag.BoolVar(&useCGroup, "cgroup", false, "Use cgroup to colloct resource usage")
+	flag.BoolVar(&memfile, "memfd", false, "Use memfd as exec file")
 	flag.Parse()
 
 	args := flag.Args()
@@ -110,6 +114,21 @@ func main() {
 		return nil
 	}
 
+	if memfile {
+		fin, err := os.Open(args[0])
+		if err != nil {
+			panic(fmt.Sprintln("filed to open args[0]", err))
+		}
+		execf, err := memfd.DupToMemfd("run_program", fin)
+		if err != nil {
+			panic(fmt.Sprintln("dup to memfd failed", err))
+		}
+		fin.Close()
+		defer execf.Close()
+		execFile = execf.Fd()
+		println("memfd: ", execFile)
+	}
+
 	// open input / output / err files
 	files, err := prepareFiles(inputFileName, outputFileName, errorFileName)
 	if err != nil {
@@ -142,11 +161,12 @@ func main() {
 			panic("cannot make temp root for new namespace")
 		}
 		runner = &rununshared.RunUnshared{
-			Args:    h.Args,
-			Env:     []string{pathEnv},
-			WorkDir: "/w",
-			Files:   fds,
-			RLimits: rlims,
+			Args:     h.Args,
+			Env:      []string{pathEnv},
+			ExecFile: execFile,
+			WorkDir:  "/w",
+			Files:    fds,
+			RLimits:  rlims,
 			ResLimits: specs.ResLimit{
 				TimeLimit:     timeLimit * 1e3,
 				RealTimeLimit: realTimeLimit * 1e3,
@@ -162,13 +182,16 @@ func main() {
 			}),
 			ShowDetails: showDetails,
 			SyncFunc:    syncFunc,
+			HostName:    "run_program",
+			DomainName:  "run_program",
 		}
 	} else {
 		runner = &runprogram.RunProgram{
-			Args:    h.Args,
-			Env:     []string{pathEnv},
-			WorkDir: workPath,
-			RLimits: rlims,
+			Args:     h.Args,
+			Env:      []string{pathEnv},
+			ExecFile: execFile,
+			WorkDir:  workPath,
+			RLimits:  rlims,
 			TraceLimit: specs.ResLimit{
 				TimeLimit:     timeLimit * 1e3,
 				RealTimeLimit: realTimeLimit * 1e3,

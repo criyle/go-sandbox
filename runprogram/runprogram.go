@@ -15,6 +15,9 @@ type RunProgram struct {
 	Env     []string
 	WorkDir string
 
+	// fexecve
+	ExecFile uintptr
+
 	// file disriptors for new process, from 0 to len - 1
 	Files []uintptr
 
