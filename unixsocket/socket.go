@@ -30,7 +30,7 @@ type Msg struct {
 }
 
 // NewSocket creates Socket conn struct using existing unix socket fd
-// creates by socketpair or net.DialUnix
+// creates by socketpair or net.DialUnix and mark it as close_on_exec (avoid fd leak)
 // it need SOCK_SEQPACKET socket for reliable transfer
 // it will need SO_PASSCRED to pass unix credential, Notice: in the documentation,
 // if cred is not specified, self information will be sent
@@ -40,6 +40,7 @@ func NewSocket(fd int) (*Socket, error) {
 		return nil, fmt.Errorf("NewSocket: fd(%d) is not a valid fd", fd)
 	}
 	defer file.Close()
+	syscall.CloseOnExec(int(file.Fd()))
 	conn, err := net.FileConn(file)
 	if err != nil {
 		return nil, err

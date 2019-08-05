@@ -39,7 +39,7 @@ Packages:
 -   forkexec: fork-exec provides mount, unshare, ptrace, seccomp, capset before exec
 -   memfd: read regular file and creates a seaed memfd for its contents
 -   unixsocket: send / recv oob msg from a unix socket
--   cgroup: creates cgroup directories and collects resource usage / limits 
+-   cgroup: creates cgroup directories and collects resource usage / limits
 -   tracer: ptrace tracer and provides syscall trap filter context
 -   runprogram: wrapper to call forkexec and trecer
 -   rununshared: wrapper to call forkexec and unshared namespaces
@@ -71,3 +71,4 @@ It seems unshare net or ipc takes time, maybe limits action by seccomp instead.
 TODO:
 
 1.  Add ability to pre-fork container deamons
+2.  Add fork-exec with execve memfd (execveat), sethostname, setdomainname, prepare devices (mknod)
