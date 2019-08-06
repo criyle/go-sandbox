@@ -53,6 +53,27 @@ func NewSocket(fd int) (*Socket, error) {
 	return &Socket{unixConn}, nil
 }
 
+// NewSocketPair creates conneted unix socketpair using SOCK_SEQPACKET
+func NewSocketPair() (*Socket, *Socket, error) {
+	fd, err := syscall.Socketpair(syscall.AF_LOCAL, syscall.SOCK_SEQPACKET|syscall.SOCK_CLOEXEC, 0)
+	if err != nil {
+		return nil, nil, fmt.Errorf("NewSocketPair: failed to call socketpair(%v)", err)
+	}
+	ins, err := NewSocket(fd[0])
+	if err != nil {
+		syscall.Close(fd[0])
+		syscall.Close(fd[1])
+		return nil, nil, fmt.Errorf("NewSocketPair: failed to call NewSocket ins(%v)", err)
+	}
+	outs, err := NewSocket(fd[1])
+	if err != nil {
+		ins.Conn.Close()
+		syscall.Close(fd[1])
+		return nil, nil, fmt.Errorf("NewSocketPair: failed to call NewSocket outs(%v)", err)
+	}
+	return ins, outs, nil
+}
+
 // SetPassCred set sockopt for pass cred for unix socket
 func (s *Socket) SetPassCred(option int) error {
 	sysconn, err := s.Conn.SyscallConn()

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/criyle/go-judger/cgroup"
+	"github.com/criyle/go-judger/deamon"
 	"github.com/criyle/go-judger/memfd"
 	"github.com/criyle/go-judger/runconfig"
 	"github.com/criyle/go-judger/runprogram"
@@ -35,6 +36,7 @@ func main() {
 	var (
 		addReadable, addWritable, addRawReadable, addRawWritable       arrayFlags
 		allowProc, unsafe, showDetails, namespace, useCGroup, memfile  bool
+		useDeamon                                                      bool
 		pType, result                                                  string
 		timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint64
 		inputFileName, outputFileName, errorFileName, workPath         string
@@ -44,6 +46,8 @@ func main() {
 		err      error
 		execFile uintptr
 	)
+
+	deamon.ContainerInit()
 
 	flag.Usage = printUsage
 	flag.Uint64Var(&timeLimit, "tl", 1, "Set time limit (in second)")
@@ -67,6 +71,7 @@ func main() {
 	flag.BoolVar(&namespace, "ns", false, "Use namespace to restrict file accesses")
 	flag.BoolVar(&useCGroup, "cgroup", false, "Use cgroup to colloct resource usage")
 	flag.BoolVar(&memfile, "memfd", false, "Use memfd as exec file")
+	flag.BoolVar(&useDeamon, "deamon", false, "Use deamon container to execute file")
 	flag.Parse()
 
 	args := flag.Args()
@@ -112,6 +117,22 @@ func main() {
 			}
 		}
 		return nil
+	}
+
+	if useDeamon {
+		root, err := ioutil.TempDir("", "dm")
+		if err != nil {
+			panic("cannot make temp root for deamon namespace")
+		}
+		m, err := deamon.New(root)
+		if err != nil {
+			panic(fmt.Sprintln("failed to new master", err))
+		}
+		err = m.Ping()
+		if err != nil {
+			panic(fmt.Sprintln("failed to ping deamon", err))
+		}
+		m.Destroy()
 	}
 
 	if memfile {

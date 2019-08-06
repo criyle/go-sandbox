@@ -6,6 +6,8 @@ package deamon
 
 /*
 Protocol between client and deamon (not thread safe):
+- ping (alive check):
+	reply: pong
 - copyin (copy file into container):
   send: path, perm, <input fd>
   reply: "finished" (after copy finished) / "error"

@@ -86,6 +86,12 @@ func (r *Runner) Start() (int, error) {
 	// similar to exec_linux, avoid side effect by shuffling around
 	fd, nextfd := prepareFds(r.Files)
 	pipe := p2[1]
+	if nextfd <= pipe {
+		nextfd = pipe + 1
+	}
+	if nextfd <= int(r.ExecFile) {
+		nextfd = int(r.ExecFile) + 1
+	}
 
 	// Acquire the fork lock so that no other threads
 	// create new fds that are not yet close-on-exec
@@ -177,7 +183,7 @@ func (r *Runner) Start() (int, error) {
 	// Pass 1 & pass 2 assigns fds for child process
 	// Pass 1: fd[i] < i => nextfd
 	if pipe < nextfd {
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(pipe), uintptr(nextfd), syscall.FD_CLOEXEC)
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(pipe), uintptr(nextfd), syscall.O_CLOEXEC)
 		if err1 != 0 {
 			goto childerror
 		}
@@ -185,7 +191,7 @@ func (r *Runner) Start() (int, error) {
 		nextfd++
 	}
 	if r.ExecFile > 0 && int(r.ExecFile) < nextfd {
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, r.ExecFile, uintptr(nextfd), syscall.FD_CLOEXEC)
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, r.ExecFile, uintptr(nextfd), syscall.O_CLOEXEC)
 		if err1 != 0 {
 			goto childerror
 		}
@@ -194,7 +200,7 @@ func (r *Runner) Start() (int, error) {
 	}
 	for i := 0; i < len(fd); i++ {
 		if fd[i] >= 0 && fd[i] < int(i) {
-			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(fd[i]), uintptr(nextfd), syscall.FD_CLOEXEC)
+			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(fd[i]), uintptr(nextfd), syscall.O_CLOEXEC)
 			if err1 != 0 {
 				goto childerror
 			}
@@ -203,7 +209,6 @@ func (r *Runner) Start() (int, error) {
 			nextfd++
 		}
 	}
-
 	// Pass 2: fd[i] => i
 	for i := 0; i < len(fd); i++ {
 		if fd[i] == -1 {
@@ -448,7 +453,7 @@ func (r *Runner) Start() (int, error) {
 	}
 
 childerror:
-	syscall.RawSyscall(syscall.SYS_EXIT, uintptr(err1), 0, 0)
+	syscall.RawSyscall(syscall.SYS_EXIT, uintptr(err1+err2), 0, 0)
 	// cannot reach this point
 	panic("cannot reach")
 }
