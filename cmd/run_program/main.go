@@ -45,6 +45,7 @@ func main() {
 		cg       *cgroup.CGroup
 		err      error
 		execFile uintptr
+		rt       specs.TraceResult
 	)
 
 	deamon.ContainerInit()
@@ -119,22 +120,6 @@ func main() {
 		return nil
 	}
 
-	if useDeamon {
-		root, err := ioutil.TempDir("", "dm")
-		if err != nil {
-			panic("cannot make temp root for deamon namespace")
-		}
-		m, err := deamon.New(root)
-		if err != nil {
-			panic(fmt.Sprintln("failed to new master", err))
-		}
-		err = m.Ping()
-		if err != nil {
-			panic(fmt.Sprintln("failed to ping deamon", err))
-		}
-		m.Destroy()
-	}
-
 	if memfile {
 		fin, err := os.Open(args[0])
 		if err != nil {
@@ -175,7 +160,38 @@ func main() {
 		Stack:    stackLimit,
 	}
 
-	if namespace {
+	if useDeamon {
+		sTime := time.Now()
+		root, err := ioutil.TempDir("", "dm")
+		if err != nil {
+			panic("cannot make temp root for deamon namespace")
+		}
+		m, err := deamon.New(root)
+		if err != nil {
+			panic(fmt.Sprintln("failed to new master", err))
+		}
+		err = m.Ping()
+		if err != nil {
+			panic(fmt.Sprintln("failed to ping deamon", err))
+		}
+		rTime := time.Now()
+		s, err := m.Execve(&deamon.ExecveParam{
+			Args:     args,
+			Envv:     []string{pathEnv},
+			Fds:      fds,
+			RLimits:  rlims.PrepareRLimit(),
+			SyncFunc: syncFunc,
+		})
+		if err != nil {
+			panic(fmt.Sprintln("failed to execve", err))
+		}
+		println(<-s.Wait)
+		s.Kill <- 1
+		eTime := time.Now()
+		rt.SetUpTime = int64(rTime.Sub(sTime))
+		rt.RunningTime = int64(eTime.Sub(rTime))
+		m.Destroy()
+	} else if namespace {
 		h.SyscallAllow = append(h.SyscallAllow, h.SyscallTrace...)
 		root, err := ioutil.TempDir("", "ns")
 		if err != nil {
@@ -243,7 +259,9 @@ func main() {
 	}
 
 	// Run tracer
-	rt, err := runner.Start()
+	if runner != nil {
+		rt, err = runner.Start()
+	}
 	println("results:", rt, err)
 
 	if useCGroup {

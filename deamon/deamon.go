@@ -21,7 +21,7 @@ Protocol between client and deamon (not thread safe):
   send:
   reply: "success"
 - execve: (execute file inside container):
-  send: argv, envv, fd map, rlimits, <fds>
+  send: argv, envv, rlimits, <fds>
   reply:
     - success: "success", <pid>
     - failed: "failed"
@@ -44,11 +44,11 @@ type Cmd struct {
 	Flags  int             // open flags
 	Argv   []string        // execve argv
 	Envv   []string        // execve envv
-	FdMap  []int           // execvc fd map
 	RLmits []rlimit.RLimit // execve posix rlimit
 }
 
 // Reply is the reply message send back to controller
 type Reply struct {
-	Error string // empty if no error
+	Error  string // empty if no error
+	Status int    // waitpid exit status
 }
