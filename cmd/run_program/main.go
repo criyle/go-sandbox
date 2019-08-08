@@ -185,8 +185,16 @@ func main() {
 		if err != nil {
 			panic(fmt.Sprintln("failed to execve", err))
 		}
-		println(<-s.Wait)
-		s.Kill <- 1
+		tC := time.After(time.Duration(int64(realTimeLimit) * int64(time.Second)))
+		select {
+		case <-tC:
+			s.Kill <- 1
+			rt = <-s.Wait
+
+		case rt = <-s.Wait:
+			s.Kill <- 1
+		}
+		println(rt)
 		eTime := time.Now()
 		rt.SetUpTime = int64(rTime.Sub(sTime))
 		rt.RunningTime = int64(eTime.Sub(rTime))

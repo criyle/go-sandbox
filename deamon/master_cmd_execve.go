@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/criyle/go-judger/types/rlimit"
+	"github.com/criyle/go-judger/types/specs"
 	"github.com/criyle/go-judger/unixsocket"
 )
 
@@ -22,7 +23,7 @@ type ExecveParam struct {
 // Wait channel will produce the waitpid exit status
 // Kill channel will kill the process if value received
 type ExecveStatus struct {
-	Wait <-chan int
+	Wait <-chan specs.TraceResult
 	Kill chan<- int
 }
 
@@ -55,23 +56,23 @@ func (m *Master) Execve(param *ExecveParam) (*ExecveStatus, error) {
 	if err := m.sendCmd(&Cmd{Cmd: cmdOk}, nil); err != nil {
 		return nil, fmt.Errorf("execve: ok failed(%v)", err)
 	}
-	wait := make(chan int)
+	wait := make(chan specs.TraceResult)
 	kill := make(chan int)
 	// Wait
 	go func() {
-		reply2, _, err2 := m.recvReply()
-		if err2 != nil {
-			_ = err2
+		reply2, _, _ := m.recvReply()
+		wait <- specs.TraceResult{
+			ExitCode:    reply2.ExitStatus,
+			TraceStatus: reply2.TraceStatus,
 		}
-		wait <- reply2.Status
+		// done signal (should recv after kill)
+		m.recvReply()
+		close(wait)
 	}()
 	// Kill
 	go func() {
 		<-kill
-		err3 := m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
-		if err3 != nil {
-			_ = err3
-		}
+		m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
 	}()
 	return &ExecveStatus{
 		Wait: wait,

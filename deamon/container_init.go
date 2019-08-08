@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/criyle/go-judger/forkexec"
+	"github.com/criyle/go-judger/types/specs"
 	"github.com/criyle/go-judger/unixsocket"
 )
 
@@ -77,17 +78,15 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 			},
 		}
 		if err2 := sendReply(s, &Reply{}, &msg2); err2 != nil {
-			_ = err2
+			return fmt.Errorf("syncFunc: sendReply(%v)", err2)
 		}
 		cmd2, _, err2 := recvCmd(s)
 		if err2 != nil {
-			_ = err2
+			return fmt.Errorf("syncFunc: recvCmd(%v)", err2)
 		}
 		switch cmd2.Cmd {
 		case cmdKill:
-			return fmt.Errorf("kill")
-		case cmdOk:
-			return nil
+			return fmt.Errorf("syncFunc: recved kill")
 		}
 		return nil
 	}
@@ -103,37 +102,68 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 	}
 	pid, err := r.Start()
 	if err != nil {
-		_ = err
+		reply := Reply{Error: fmt.Sprintf("execve: %v", err)}
+		sendReply(s, &reply, nil)
+		return nil
 	}
+
+	done := make(chan int)
 	// recv kill
 	go func() {
 		// msg must be kill
-		if _, _, err3 := recvCmd(s); err3 != nil {
-			_ = err3
-		}
+		recvCmd(s)
 		// kill all
 		syscall.Kill(-1, syscall.SIGKILL)
+		// collect zombies
+		for {
+			_, err = syscall.Wait4(-1, nil, 0, nil)
+			if err != nil {
+				break
+			}
+		}
+		// signal done
+		close(done)
 	}()
-	var wstatus syscall.WaitStatus
+
 	// wait pid
+	var wstatus syscall.WaitStatus
 loop:
 	for {
 		_, err = syscall.Wait4(pid, &wstatus, 0, nil)
 		if err != nil {
-			_ = err
+			reply := Reply{Error: fmt.Sprintf("execve: wait4 %v", err)}
+			sendReply(s, &reply, nil)
+			break loop
 		}
 		switch {
 		case wstatus.Exited():
-			reply := Reply{
-				Status: wstatus.ExitStatus(),
+			reply := Reply{ExitStatus: wstatus.ExitStatus()}
+			sendReply(s, &reply, nil)
+			break loop
+
+		case wstatus.Signaled():
+			var status specs.TraceCode
+			switch wstatus.Signal() {
+			// kill signal treats as TLE
+			case syscall.SIGKILL:
+				status = specs.TraceCodeTLE
+			case syscall.SIGXCPU:
+				status = specs.TraceCodeTLE
+			case syscall.SIGXFSZ:
+				status = specs.TraceCodeOLE
+			case syscall.SIGSYS:
+				status = specs.TraceCodeBan
+			default:
+				status = specs.TraceCodeRE
 			}
-			if err = sendReply(s, &reply, nil); err != nil {
-				_ = err
-			}
+			reply := Reply{TraceStatus: status}
+			sendReply(s, &reply, nil)
 			break loop
 		}
 	}
-	return nil
+	// wait for kill msg and reply done for finish
+	<-done
+	return sendReply(s, &Reply{}, nil)
 }
 
 func recvCmd(s *unixsocket.Socket) (*Cmd, *unixsocket.Msg, error) {
