@@ -28,6 +28,7 @@ Protocol between client and deamon (not thread safe):
   send (success): "init_finished" (as cmd)
     - reply: "finished" / send: "kill" (as cmd)
     - send: "kill" (as cmd) / reply: "finished"
+	reply:
 
 Any socket related error will cause the deamon exit (with all process inside container)
 */
@@ -46,6 +47,7 @@ type Cmd struct {
 	Argv   []string        // execve argv
 	Envv   []string        // execve envv
 	RLmits []rlimit.RLimit // execve posix rlimit
+	FdExec bool            // if use fexecve (fd[0] as exec)
 }
 
 // Reply is the reply message send back to controller

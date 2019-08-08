@@ -64,9 +64,16 @@ func handlePing(s *unixsocket.Socket) error {
 }
 
 func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
-	var files []uintptr
+	var (
+		files    []uintptr
+		execFile uintptr
+	)
 	if msg != nil {
 		files = intSliceToUintptr(msg.Fds)
+	}
+	if cmd.FdExec && len(files) > 0 {
+		execFile = files[0]
+		files = files[1:]
 	}
 
 	syncFunc := func(pid int) error {
@@ -93,6 +100,7 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 	r := forkexec.Runner{
 		Args:       cmd.Argv,
 		Env:        cmd.Envv,
+		ExecFile:   execFile,
 		RLimits:    cmd.RLmits,
 		Files:      files,
 		WorkDir:    "/w",

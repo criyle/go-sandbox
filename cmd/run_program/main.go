@@ -179,6 +179,7 @@ func main() {
 			Args:     args,
 			Envv:     []string{pathEnv},
 			Fds:      fds,
+			ExecFile: execFile,
 			RLimits:  rlims.PrepareRLimit(),
 			SyncFunc: syncFunc,
 		})

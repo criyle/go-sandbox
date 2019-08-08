@@ -13,6 +13,8 @@ type ExecveParam struct {
 	Args []string
 	Envv []string
 	Fds  []uintptr
+	// fexecve fd
+	ExecFile uintptr
 	// POSIX Resource limit set by set rlimit
 	RLimits []rlimit.RLimit
 	// SyncFunc called with pid before execve
@@ -29,14 +31,20 @@ type ExecveStatus struct {
 
 // Execve runs process inside container
 func (m *Master) Execve(param *ExecveParam) (*ExecveStatus, error) {
+	var files []int
+	if param.ExecFile > 0 {
+		files = append(files, int(param.ExecFile))
+	}
+	files = append(files, uintptrSliceToInt(param.Fds)...)
 	msg := &unixsocket.Msg{
-		Fds: uintptrSliceToInt(param.Fds),
+		Fds: files,
 	}
 	cmd := Cmd{
 		Cmd:    cmdExecve,
 		Argv:   param.Args,
 		Envv:   param.Envv,
 		RLmits: param.RLimits,
+		FdExec: param.ExecFile > 0,
 	}
 	if err := m.sendCmd(&cmd, msg); err != nil {
 		return nil, fmt.Errorf("execve: sendCmd %v", err)
