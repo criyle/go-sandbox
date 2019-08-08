@@ -1,5 +1,7 @@
 package deamon
 
+import "syscall"
+
 func intSliceToUintptr(s []int) []uintptr {
 	var r []uintptr
 	if len(s) > 0 {
@@ -20,4 +22,10 @@ func uintptrSliceToInt(s []uintptr) []int {
 		}
 	}
 	return r
+}
+
+func closeFds(s []int) {
+	for _, f := range s {
+		syscall.Close(f)
+	}
 }
