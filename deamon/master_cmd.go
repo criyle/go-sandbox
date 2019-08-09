@@ -78,7 +78,7 @@ func (m *Master) Delete(p string) error {
 }
 
 // Reset remove all from /tmp and /w
-func (m *Master) Reset(p string) error {
+func (m *Master) Reset() error {
 	cmd := Cmd{
 		Cmd: cmdReset,
 	}

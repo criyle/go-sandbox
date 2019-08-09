@@ -87,7 +87,7 @@ func handleCopyIn(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 	}
 	defer inf.Close()
 
-	outf, err := os.OpenFile(cmd.Path, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 666)
+	outf, err := os.OpenFile(cmd.Path, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0666)
 	if err != nil {
 		return sendErrorReply(s, "copyin: open write file %v", err)
 	}
