@@ -9,10 +9,10 @@ Protocol between client and deamon (not thread safe):
 - ping (alive check):
 	reply: pong
 - copyin (copy file into container):
-  send: path, perm, <input fd>
+  send: path, <input fd>
   reply: "finished" (after copy finished) / "error"
-- open (open file inside container):
-  send: path, flags, perm
+- open (open file in read-only mode inside container):
+  send: path
   reply: "success", <file fd> / "error"
 - delete (unlik file / rmdir dir inside container):
   send: path
@@ -41,9 +41,7 @@ import (
 // Cmd is the control message send into deamon
 type Cmd struct {
 	Cmd    string          // type of the cmd
-	Path   string          // path
-	Perm   int             // write perm / open perm
-	Flags  int             // open flags
+	Path   string          // path (copyin / open)
 	Argv   []string        // execve argv
 	Envv   []string        // execve envv
 	RLmits []rlimit.RLimit // execve posix rlimit

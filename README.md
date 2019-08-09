@@ -25,6 +25,7 @@ New Features:
 5.  Use Linux Namespace to isolate file access (elimilate ptrace)
 6.  Use Linux Control Groups to limit & acct CPU & memory (elimilate wait4.rusage)
 7.  Container tech with execveat memfd, sethostname, setdomainname
+8.  Pre-fork container deamons to run programs inside
 
 Default file access action:
 
@@ -32,7 +33,7 @@ Default file access action:
 -   check file read: `readlink`, `readlinkat`
 -   check file write: `unlink`, `unlinkat`, `chmod`, `rename`
 -   check file access: `stat`, `lstat`, `access`, `faccessat`
--   check file exec: `execve`
+-   check file exec: `execveat`
 
 Packages:
 
@@ -41,6 +42,7 @@ Packages:
 -   memfd: read regular file and creates a seaed memfd for its contents
 -   unixsocket: send / recv oob msg from a unix socket
 -   cgroup: creates cgroup directories and collects resource usage / limits
+-   deamon: creates pre-forked container to run programs inside
 -   tracer: ptrace tracer and provides syscall trap filter context
 -   runprogram: wrapper to call forkexec and trecer
 -   rununshared: wrapper to call forkexec and unshared namespaces
@@ -52,23 +54,23 @@ Packages:
 
 Executable:
 
--   run_program: under construction
+-   run_program: safely run program by unshare / ptrace / pre-forked containers
 
 Configuations:
 
 -   run_program/config.go: all configs toward running specs
 
-Benchmarks for unshare:
+Benchmarks (docker desktop amd64 / native arm64):
 
--   1ms: fork, unshare pid / user / cgroup
--   50ms: unshare ipc / mount
--   100ms: unshare pid & user & cgroup & mount & pivot root
--   400ms: unshare net
--   800ms: unshare all
--   880ms: unshare all & pivot root
+-   1ms / 2ms: fork, unshare pid / user / cgroup
+-   4ms / 8ms: run inside pre-forked container
+-   50ms / 25ms: unshare ipc / mount
+-   100ms / 44ms: unshare pid & user & cgroup & mount & pivot root
+-   400ms / 63ms: unshare net
+-   800ms / 170ms: unshare all
+-   880ms / 170ms: unshare all & pivot root
 
 It seems unshare net or ipc takes time, maybe limits action by seccomp instead.
+Pre-forked container also saves time for container creation / cleanup.
 
 TODO:
-
-1.  Add ability to pre-fork container deamons

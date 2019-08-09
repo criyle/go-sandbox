@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"io"
 	"os"
 	"syscall"
 
@@ -53,6 +54,19 @@ func handleCmd(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 	switch cmd.Cmd {
 	case cmdPing:
 		return handlePing(s)
+
+	case cmdCopyIn:
+		return handleCopyIn(s, cmd, msg)
+
+	case cmdOpen:
+		return handleOpen(s, cmd)
+
+	case cmdDelete:
+		return handleDelete(s, cmd)
+
+	case cmdReset:
+		return handleReset(s)
+
 	case cmdExecve:
 		return handleExecve(s, cmd, msg)
 	}
@@ -60,6 +74,62 @@ func handleCmd(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 }
 
 func handlePing(s *unixsocket.Socket) error {
+	return sendReply(s, &Reply{}, nil)
+}
+
+func handleCopyIn(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
+	if len(msg.Fds) == 0 {
+		return sendErrorReply(s, "copyin: did not receive fd")
+	}
+	inf := os.NewFile(uintptr(msg.Fds[0]), cmd.Path)
+	if inf == nil {
+		return sendErrorReply(s, "copyin: newfile failed %v", msg.Fds[0])
+	}
+	defer inf.Close()
+
+	outf, err := os.OpenFile(cmd.Path, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 666)
+	if err != nil {
+		return sendErrorReply(s, "copyin: open write file %v", err)
+	}
+	defer outf.Close()
+
+	_, err = io.Copy(outf, inf)
+	if err != nil {
+		return sendErrorReply(s, "copyin: io.copy %v", err)
+	}
+	return sendReply(s, &Reply{}, nil)
+}
+
+func handleOpen(s *unixsocket.Socket, cmd *Cmd) error {
+	outf, err := os.Open(cmd.Path)
+	if err != nil {
+		return sendErrorReply(s, "open: %v", err)
+	}
+	defer outf.Close()
+
+	msg := unixsocket.Msg{
+		Fds: []int{int(outf.Fd())},
+	}
+	return sendReply(s, &Reply{}, &msg)
+}
+
+func handleDelete(s *unixsocket.Socket, cmd *Cmd) error {
+	err := os.Remove(cmd.Path)
+	if err != nil {
+		return sendErrorReply(s, "delete: %v", err)
+	}
+	return sendReply(s, &Reply{}, nil)
+}
+
+func handleReset(s *unixsocket.Socket) error {
+	err := removeContents("/tmp")
+	if err != nil {
+		return sendErrorReply(s, "reset: /tmp %v", err)
+	}
+	err = removeContents("/w")
+	if err != nil {
+		return sendErrorReply(s, "reset: /w %v", err)
+	}
 	return sendReply(s, &Reply{}, nil)
 }
 
@@ -112,9 +182,7 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 	}
 	pid, err := r.Start()
 	if err != nil {
-		reply := Reply{Error: fmt.Sprintf("execve: %v", err)}
-		sendReply(s, &reply, nil)
-		return nil
+		return sendErrorReply(s, "execve: %v", err)
 	}
 
 	done := make(chan int)
@@ -141,8 +209,7 @@ loop:
 	for {
 		_, err = syscall.Wait4(pid, &wstatus, 0, nil)
 		if err != nil {
-			reply := Reply{Error: fmt.Sprintf("execve: wait4 %v", err)}
-			sendReply(s, &reply, nil)
+			sendErrorReply(s, "execve: wait4 %v", err)
 			break loop
 		}
 		switch {
@@ -201,4 +268,10 @@ func sendReply(s *unixsocket.Socket, reply *Reply, msg *unixsocket.Msg) error {
 		return err
 	}
 	return nil
+}
+
+// sendErrorReply sends error reply
+func sendErrorReply(s *unixsocket.Socket, ft string, v ...interface{}) error {
+	reply := Reply{Error: fmt.Sprintf(ft, v...)}
+	return sendReply(s, &reply, nil)
 }

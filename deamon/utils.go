@@ -1,6 +1,10 @@
 package deamon
 
-import "syscall"
+import (
+	"os"
+	"path"
+	"syscall"
+)
 
 func intSliceToUintptr(s []int) []uintptr {
 	var r []uintptr
@@ -28,4 +32,26 @@ func closeFds(s []int) {
 	for _, f := range s {
 		syscall.Close(f)
 	}
+}
+
+// removeContents delete content of a directory
+func removeContents(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+
+	names, err := d.Readdirnames(-1)
+	if err != nil {
+		return err
+	}
+
+	for _, name := range names {
+		err = os.RemoveAll(path.Join(dir, name))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
