@@ -62,7 +62,7 @@ func New(root string) (*Master, error) {
 	}
 
 	r := &forkexec.Runner{
-		Args:         []string{os.Args[0]},
+		Args:         []string{os.Args[0], initArg},
 		Env:          []string{DefaultPath},
 		ExecFile:     execFile.Fd(),
 		Files:        []uintptr{fnull.Fd(), fnull.Fd(), fnull.Fd(), uintptr(outf.Fd())},

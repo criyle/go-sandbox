@@ -19,7 +19,11 @@ import (
 // and exits when at socket close
 func ContainerInit() (err error) {
 	// noop if self is not container init process
+	// Notice: docker init is also 1, additional check for args[1] == init
 	if os.Getpid() != 1 {
+		return nil
+	}
+	if len(os.Args) != 2 || os.Args[1] != initArg {
 		return nil
 	}
 

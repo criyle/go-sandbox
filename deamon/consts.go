@@ -9,4 +9,6 @@ const (
 	cmdExecve = "execve"
 	cmdOk     = "ok"
 	cmdKill   = "kill"
+
+	initArg = "init"
 )
