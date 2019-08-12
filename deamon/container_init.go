@@ -20,10 +20,7 @@ import (
 func ContainerInit() (err error) {
 	// noop if self is not container init process
 	// Notice: docker init is also 1, additional check for args[1] == init
-	if os.Getpid() != 1 {
-		return nil
-	}
-	if len(os.Args) != 2 || os.Args[1] != initArg {
+	if os.Getpid() != 1 || len(os.Args) != 2 || os.Args[1] != initArg {
 		return nil
 	}
 
@@ -255,8 +252,7 @@ func recvCmd(s *unixsocket.Socket) (*Cmd, *unixsocket.Msg, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed RecvMsg(%v)", err)
 	}
-	dec := gob.NewDecoder(bytes.NewReader(buffer[:n]))
-	if err := dec.Decode(&cmd); err != nil {
+	if err := gob.NewDecoder(bytes.NewReader(buffer[:n])).Decode(&cmd); err != nil {
 		return nil, nil, fmt.Errorf("failed to decode(%v)", err)
 	}
 	return &cmd, msg, nil
@@ -264,8 +260,7 @@ func recvCmd(s *unixsocket.Socket) (*Cmd, *unixsocket.Msg, error) {
 
 func sendReply(s *unixsocket.Socket, reply *Reply, msg *unixsocket.Msg) error {
 	var buffer bytes.Buffer
-	enc := gob.NewEncoder(&buffer)
-	if err := enc.Encode(reply); err != nil {
+	if err := gob.NewEncoder(&buffer).Encode(reply); err != nil {
 		return err
 	}
 	if err := s.SendMsg(buffer.Bytes(), msg); err != nil {

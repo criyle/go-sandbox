@@ -86,12 +86,6 @@ func (r *Runner) Start() (int, error) {
 	// similar to exec_linux, avoid side effect by shuffling around
 	fd, nextfd := prepareFds(r.Files)
 	pipe := p2[1]
-	if nextfd <= pipe {
-		nextfd = pipe + 1
-	}
-	if nextfd <= int(r.ExecFile) {
-		nextfd = int(r.ExecFile) + 1
-	}
 
 	// Acquire the fork lock so that no other threads
 	// create new fds that are not yet close-on-exec
@@ -109,11 +103,15 @@ func (r *Runner) Start() (int, error) {
 		afterFork()
 		syscall.ForkLock.Unlock()
 
+		// clone syscall failed
+		if err1 != 0 {
+			return int(pid), syscall.Errno(err1)
+		}
+
 		// synchronize with child for uid / gid map
 		if unshareUser {
 			unix.Close(p[0])
-			err = writeIDMaps(int(pid))
-			if err != nil {
+			if err = writeIDMaps(int(pid)); err != nil {
 				err2 = err.(syscall.Errno)
 			}
 			syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[1]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
@@ -122,24 +120,46 @@ func (r *Runner) Start() (int, error) {
 
 		// sync with child
 		unix.Close(p2[1])
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p2[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
-		if err1 != 0 {
+
+		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p2[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+		// child returned error code
+		if r1 != unsafe.Sizeof(err2) || err2 != 0 || err1 != 0 {
 			unix.Close(p2[0])
-			return int(pid), syscall.Errno(err1)
+			if r1 == unsafe.Sizeof(err2) {
+				err = syscall.Errno(err2)
+			}
+			if err == nil {
+				err = syscall.EPIPE
+			}
+			handleChildFailed(pid)
+			return 0, err
 		}
 
 		if r.SyncFunc != nil {
 			err = r.SyncFunc(int(pid))
 		}
+		// if syncfunc return error, then fail child immediately
 		if err == nil {
 			err1 = 0
 			syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p2[0]), uintptr(unsafe.Pointer(&err1)), uintptr(unsafe.Sizeof((err1))))
+		} else {
+			unix.Close(p2[0])
+			handleChildFailed(pid)
+			return 0, err
 		}
 
+		// if read anything mean child failed after sync (close_on_exec so it should not block)
+		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p2[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 		unix.Close(p2[0])
-
-		if err1 != 0 {
-			return int(pid), syscall.Errno(err1)
+		if r1 != 0 || err1 != 0 {
+			if r1 == unsafe.Sizeof(err2) {
+				err = syscall.Errno(err2)
+			}
+			if err == nil {
+				err = syscall.EPIPE
+			}
+			handleChildFailed(pid)
+			return 0, err
 		}
 		return int(pid), nil
 	}
@@ -199,6 +219,10 @@ func (r *Runner) Start() (int, error) {
 		nextfd++
 	}
 	for i := 0; i < len(fd); i++ {
+		// Avoid fd rewrite
+		for nextfd == i || (r.ExecFile > 0 && nextfd == int(r.ExecFile)) {
+			nextfd++
+		}
 		if fd[i] >= 0 && fd[i] < int(i) {
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(fd[i]), uintptr(nextfd), syscall.O_CLOEXEC)
 			if err1 != 0 {
@@ -453,7 +477,21 @@ func (r *Runner) Start() (int, error) {
 	}
 
 childerror:
-	syscall.RawSyscall(syscall.SYS_EXIT, uintptr(err1+err2), 0, 0)
+	// send error code on pipe
+	syscall.RawSyscall(unix.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err1)), unsafe.Sizeof(err1))
+	for {
+		syscall.RawSyscall(syscall.SYS_EXIT, uintptr(err1+err2), 0, 0)
+	}
 	// cannot reach this point
-	panic("cannot reach")
+}
+
+func handleChildFailed(pid uintptr) {
+	var wstatus syscall.WaitStatus
+	// make sure not blocked
+	unix.Kill(int(pid), syscall.SIGKILL)
+	// child failed; wait for it to exit, to make sure the zombies don't accumulate
+	_, err3 := syscall.Wait4(int(pid), &wstatus, 0, nil)
+	for err3 == syscall.EINTR {
+		_, err3 = syscall.Wait4(int(pid), &wstatus, 0, nil)
+	}
 }
