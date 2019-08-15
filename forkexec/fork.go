@@ -20,13 +20,12 @@ func afterForkInChild()
 // Return pid and potential error
 // Reference to src/syscall/exec_linux.go
 // The runtime OS thread must be locked before calling this function
-//go:noinline
+// if ptrace is set to true
 //go:norace
 func (r *Runner) Start() (int, error) {
 	var (
 		err1, err2  syscall.Errno
 		r1          uintptr
-		p           [2]int
 		unshareUser = r.UnshareFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
 	)
 
@@ -65,27 +64,17 @@ func (r *Runner) Start() (int, error) {
 		return 0, nil
 	}
 
-	// pipe p used to notify child the uid / gid mapping have been setup
-	if unshareUser {
-		err = unix.Pipe2(p[:], unix.O_CLOEXEC)
-		if err != nil {
-			return 0, err
-		}
-	}
-
-	// socketpair p2 used to sync with parent before final execve
-	p2, err := syscall.Socketpair(syscall.AF_LOCAL, syscall.SOCK_STREAM|syscall.SOCK_CLOEXEC, 0)
+	// socketpair p used to notify child the uid / gid mapping have been setup
+	// socketpair p is also used to sync with parent before final execve
+	// p[0] is used by parent and p[1] is used by child
+	p, err := syscall.Socketpair(syscall.AF_LOCAL, syscall.SOCK_STREAM|syscall.SOCK_CLOEXEC, 0)
 	if err != nil {
-		if p[0] > 0 { // avoid fd leak
-			unix.Close(p[0])
-			unix.Close(p[1])
-		}
 		return 0, err
 	}
 
 	// similar to exec_linux, avoid side effect by shuffling around
 	fd, nextfd := prepareFds(r.Files)
-	pipe := p2[1]
+	pipe := p[1]
 
 	// Acquire the fork lock so that no other threads
 	// create new fds that are not yet close-on-exec
@@ -103,28 +92,27 @@ func (r *Runner) Start() (int, error) {
 		afterFork()
 		syscall.ForkLock.Unlock()
 
+		// sync with child
+		unix.Close(p[1])
+
 		// clone syscall failed
 		if err1 != 0 {
+			unix.Close(p[0])
 			return int(pid), syscall.Errno(err1)
 		}
 
 		// synchronize with child for uid / gid map
 		if unshareUser {
-			unix.Close(p[0])
 			if err = writeIDMaps(int(pid)); err != nil {
 				err2 = err.(syscall.Errno)
 			}
-			syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[1]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
-			unix.Close(p[1])
+			syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 		}
 
-		// sync with child
-		unix.Close(p2[1])
-
-		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p2[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 		// child returned error code
 		if r1 != unsafe.Sizeof(err2) || err2 != 0 || err1 != 0 {
-			unix.Close(p2[0])
+			unix.Close(p[0])
 			if r1 == unsafe.Sizeof(err2) {
 				err = syscall.Errno(err2)
 			}
@@ -138,19 +126,23 @@ func (r *Runner) Start() (int, error) {
 		if r.SyncFunc != nil {
 			err = r.SyncFunc(int(pid))
 		}
-		// if syncfunc return error, then fail child immediately
+		// if syncfunc return error, then fail child immediately. Otherwise, ack child (err1 == 0)
 		if err == nil {
-			err1 = 0
-			syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p2[0]), uintptr(unsafe.Pointer(&err1)), uintptr(unsafe.Sizeof((err1))))
+			syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[0]), uintptr(unsafe.Pointer(&err1)), uintptr(unsafe.Sizeof((err1))))
 		} else {
-			unix.Close(p2[0])
+			unix.Close(p[0])
 			handleChildFailed(pid)
 			return 0, err
 		}
 
+		// if stopped before execve, then do not wait until execve
+		if r.Ptrace && r.Seccomp != nil || r.StopBeforeSeccomp {
+			return int(pid), nil
+		}
+
 		// if read anything mean child failed after sync (close_on_exec so it should not block)
-		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p2[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
-		unix.Close(p2[0])
+		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+		unix.Close(p[0])
 		if r1 != 0 || err1 != 0 {
 			if r1 == unsafe.Sizeof(err2) {
 				err = syscall.Errno(err2)
@@ -173,11 +165,11 @@ func (r *Runner) Start() (int, error) {
 	// We need parent to setup uid_map / gid_map for us since we do not have capabilities
 	// in the original namespace
 	// At the same time, socket pair / pipe sychronization is required as well
+	if _, _, err1 = syscall.RawSyscall(syscall.SYS_CLOSE, uintptr(p[0]), 0, 0); err1 != 0 {
+		goto childerror
+	}
 	if unshareUser {
-		if _, _, err1 = syscall.RawSyscall(syscall.SYS_CLOSE, uintptr(p[1]), 0, 0); err1 != 0 {
-			goto childerror
-		}
-		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), unsafe.Sizeof(err2))
+		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), unsafe.Sizeof(err2))
 		if err1 != 0 {
 			goto childerror
 		}
@@ -187,9 +179,6 @@ func (r *Runner) Start() (int, error) {
 		}
 		if err2 != 0 {
 			err1 = err2
-			goto childerror
-		}
-		if _, _, err1 = syscall.RawSyscall(syscall.SYS_CLOSE, uintptr(p[0]), 0, 0); err1 != 0 {
 			goto childerror
 		}
 	}

@@ -1,6 +1,6 @@
 # go-judger
 
-Original goal is to reimplement [uoj-judger/run_program](https://github.com/vfleaking/uoj) in GO language using [libseccomp](https://github.com/seccomp/libseccomp-golang). As technology grows, implements new technologies such as Linux namespace & cgroup.
+Original goal is to reimplement [uoj-judger/run_program](https://github.com/vfleaking/uoj) in GO language using [libseccomp](https://github.com/seccomp/libseccomp-golang). As technology grows, it also implements new technologies such as Linux namespace & cgroup.
 
 ## Install
 
