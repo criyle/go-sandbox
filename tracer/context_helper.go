@@ -14,7 +14,7 @@ func ptraceReadStr(pid int, addr uintptr, buff []byte) {
 
 func processVMReadv(pid int, localIov, remoteIov []unix.Iovec,
 	flags uintptr) (r1, r2 uintptr, err syscall.Errno) {
-	return syscall.RawSyscall6(unix.SYS_PROCESS_VM_READV, uintptr(pid),
+	return syscall.Syscall6(unix.SYS_PROCESS_VM_READV, uintptr(pid),
 		uintptr(unsafe.Pointer(&localIov[0])), uintptr(len(localIov)),
 		uintptr(unsafe.Pointer(&remoteIov[0])), uintptr(len(remoteIov)),
 		flags)

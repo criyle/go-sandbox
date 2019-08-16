@@ -95,6 +95,8 @@ func (h *tracerHandler) Handle(ctx *tracer.Context) tracer.TraceAction {
 
 	case "execve":
 		action = h.checkRead(ctx, ctx.Arg0())
+	case "execveat":
+		action = h.checkRead(ctx, ctx.Arg1())
 
 	case "chmod":
 		action = h.checkWrite(ctx, ctx.Arg0())

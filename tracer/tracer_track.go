@@ -238,7 +238,8 @@ func handleTrap(handler Handler, pid int) error {
 
 			switch act {
 			case TraceBan:
-				// Set the syscallno to -1 and return value into register. https://www.kernel.org/doc/Documentation/prctl/seccomp_filter.txt
+				// Set the syscallno to -1 and return value into register to skip syscall.
+				// https://www.kernel.org/doc/Documentation/prctl/seccomp_filter.txt
 				return ctx.skipSyscall()
 
 			case TraceKill:
@@ -256,8 +257,9 @@ func handleTrap(handler Handler, pid int) error {
 
 // set Ptrace option that set up seccomp, exit kill and all mult-process actions
 func setPtraceOption(pid int) error {
-	return unix.PtraceSetOptions(pid, unix.PTRACE_O_TRACESECCOMP|unix.PTRACE_O_EXITKILL|
-		unix.PTRACE_O_TRACEFORK|unix.PTRACE_O_TRACECLONE|unix.PTRACE_O_TRACEEXEC|unix.PTRACE_O_TRACEVFORK)
+	const ptraceFlags = unix.PTRACE_O_TRACESECCOMP | unix.PTRACE_O_EXITKILL | unix.PTRACE_O_TRACEFORK |
+		unix.PTRACE_O_TRACECLONE | unix.PTRACE_O_TRACEEXEC | unix.PTRACE_O_TRACEVFORK
+	return unix.PtraceSetOptions(pid, ptraceFlags)
 }
 
 // kill all tracee according to pids
@@ -267,10 +269,10 @@ func killAll(pgid int) {
 
 // collect died child processes
 func collectZombie(pgid int) {
+	var wstatus unix.WaitStatus
 	// collect zombies
 	for {
-		var wstatus unix.WaitStatus
-		if _, err := unix.Wait4(-pgid, &wstatus, unix.WALL|unix.WNOWAIT, nil); err != nil {
+		if _, err := unix.Wait4(-pgid, &wstatus, unix.WALL|unix.WNOHANG, nil); err != nil {
 			break
 		}
 	}
