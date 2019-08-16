@@ -137,6 +137,7 @@ func (r *Runner) Start() (int, error) {
 
 		// if stopped before execve, then do not wait until execve
 		if r.Ptrace && r.Seccomp != nil || r.StopBeforeSeccomp {
+			unix.Close(p[0])
 			return int(pid), nil
 		}
 

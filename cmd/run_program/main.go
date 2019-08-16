@@ -18,7 +18,18 @@ import (
 )
 
 const (
-	pathEnv = "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+	pathEnv = "PATH=/usr/local/bin:/usr/bin:/bin"
+)
+
+var (
+	addReadable, addWritable, addRawReadable, addRawWritable       arrayFlags
+	allowProc, unsafe, showDetails, namespace, useCGroup, memfile  bool
+	timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint64
+	inputFileName, outputFileName, errorFileName, workPath         string
+
+	useDeamon     bool
+	pType, result string
+	args          []string
 )
 
 // Runner can be ptraced runner or namespaced runner
@@ -33,21 +44,6 @@ func printUsage() {
 }
 
 func main() {
-	var (
-		addReadable, addWritable, addRawReadable, addRawWritable       arrayFlags
-		allowProc, unsafe, showDetails, namespace, useCGroup, memfile  bool
-		useDeamon                                                      bool
-		pType, result                                                  string
-		timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint64
-		inputFileName, outputFileName, errorFileName, workPath         string
-
-		runner   Runner
-		cg       *cgroup.CGroup
-		err      error
-		execFile uintptr
-		rt       specs.TraceResult
-	)
-
 	deamon.ContainerInit()
 
 	flag.Usage = printUsage
@@ -75,15 +71,9 @@ func main() {
 	flag.BoolVar(&useDeamon, "deamon", false, "Use deamon container to execute file")
 	flag.Parse()
 
-	args := flag.Args()
+	args = flag.Args()
 	if len(args) == 0 {
 		printUsage()
-	}
-
-	println := func(v ...interface{}) {
-		if showDetails {
-			fmt.Fprintln(os.Stderr, v...)
-		}
 	}
 
 	if realTimeLimit < timeLimit {
@@ -95,6 +85,33 @@ func main() {
 	if workPath == "" {
 		workPath, _ = os.Getwd()
 	}
+	rt, f, err := run()
+
+	if err != nil {
+		debug(err)
+		c, ok := err.(specs.TraceCode)
+		if !ok {
+			c = specs.TraceCodeFatal
+		}
+		// Handle fatal error from trace
+		fmt.Fprintf(f, "%d %d %d %d\n", int(c), rt.UserTime, rt.UserMem, rt.ExitCode)
+		if c == specs.TraceCodeFatal {
+			os.Exit(1)
+		}
+	} else {
+		fmt.Fprintf(f, "%d %d %d %d\n", 0, rt.UserTime, rt.UserMem, rt.ExitCode)
+	}
+}
+
+func run() (*specs.TraceResult, *os.File, error) {
+	var (
+		runner   Runner
+		cg       *cgroup.CGroup
+		err      error
+		execFile uintptr
+		rt       specs.TraceResult
+		f        *os.File
+	)
 
 	addRead := runconfig.GetExtraSet(addReadable, addRawReadable)
 	addWrite := runconfig.GetExtraSet(addWritable, addRawWritable)
@@ -103,11 +120,11 @@ func main() {
 	if useCGroup {
 		cg, err = cgroup.NewCGroup("run_program")
 		if err != nil {
-			panic(err)
+			return nil, nil, err
 		}
 		defer cg.Destroy()
 		if err = cg.SetMemoryLimitInBytes(memoryLimit << 20); err != nil {
-			panic(err)
+			return nil, nil, err
 		}
 	}
 
@@ -123,23 +140,22 @@ func main() {
 	if memfile {
 		fin, err := os.Open(args[0])
 		if err != nil {
-			panic(fmt.Sprintln("filed to open args[0]", err))
+			return nil, nil, fmt.Errorf("filed to open args[0]: %v", err)
 		}
 		execf, err := memfd.DupToMemfd("run_program", fin)
 		if err != nil {
-			panic(fmt.Sprintln("dup to memfd failed", err))
+			return nil, nil, fmt.Errorf("dup to memfd failed: %v", err)
 		}
 		fin.Close()
 		defer execf.Close()
 		execFile = execf.Fd()
-		println("memfd: ", execFile)
+		debug("memfd: ", execFile)
 	}
 
 	// open input / output / err files
 	files, err := prepareFiles(inputFileName, outputFileName, errorFileName)
 	if err != nil {
-		println(err)
-		os.Exit(1)
+		return nil, nil, fmt.Errorf("failed to prepare files: %v", err)
 	}
 	defer closeFiles(files)
 
@@ -164,18 +180,22 @@ func main() {
 		sTime := time.Now()
 		root, err := ioutil.TempDir("", "dm")
 		if err != nil {
-			panic("cannot make temp root for deamon namespace")
+			return nil, nil, fmt.Errorf("cannot make temp root for deamon namespace: %v", err)
 		}
+		defer os.RemoveAll(root)
+
 		m, err := deamon.New(root)
 		if err != nil {
-			panic(fmt.Sprintln("failed to new master", err))
+			return nil, nil, fmt.Errorf("failed to new master: %v", err)
 		}
 		err = m.Ping()
 		if err != nil {
-			panic(fmt.Sprintln("failed to ping deamon", err))
+			return nil, nil, fmt.Errorf("failed to ping deamon: %v", err)
 		}
+
 		rTime := time.Now()
-		s, err := m.Execve(&deamon.ExecveParam{
+		done := make(chan struct{})
+		s, err := m.Execve(done, &deamon.ExecveParam{
 			Args:     args,
 			Envv:     []string{pathEnv},
 			Fds:      fds,
@@ -184,18 +204,16 @@ func main() {
 			SyncFunc: syncFunc,
 		})
 		if err != nil {
-			panic(fmt.Sprintln("failed to execve", err))
+			return nil, nil, fmt.Errorf("failed to execve: %v", err)
 		}
 		tC := time.After(time.Duration(int64(realTimeLimit) * int64(time.Second)))
 		select {
 		case <-tC:
-			s.Kill <- 1
-			rt = <-s.Wait
+			close(done)
+			rt = <-s
 
-		case rt = <-s.Wait:
-			s.Kill <- 1
+		case rt = <-s:
 		}
-		println(rt)
 		eTime := time.Now()
 		rt.SetUpTime = int64(rTime.Sub(sTime))
 		rt.RunningTime = int64(eTime.Sub(rTime))
@@ -204,8 +222,10 @@ func main() {
 		h.SyscallAllow = append(h.SyscallAllow, h.SyscallTrace...)
 		root, err := ioutil.TempDir("", "ns")
 		if err != nil {
-			panic("cannot make temp root for new namespace")
+			return nil, nil, fmt.Errorf("cannot make temp root for new namespace")
 		}
+		defer os.RemoveAll(root)
+
 		runner = &rununshared.RunUnshared{
 			Args:     h.Args,
 			Env:      []string{pathEnv},
@@ -253,16 +273,14 @@ func main() {
 		}
 	}
 
-	var f *os.File
 	if result == "stdout" {
 		f = os.Stdout
 	} else if result == "stderr" {
 		f = os.Stderr
 	} else {
-		f, err := os.OpenFile(result, os.O_WRONLY|os.O_CREATE, 0755)
+		f, err := os.Create(result)
 		if err != nil {
-			println("Failed to open result file: ", err)
-			os.Exit(1)
+			return nil, nil, fmt.Errorf("Failed to open result file: %v", err)
 		}
 		defer f.Close()
 	}
@@ -271,33 +289,26 @@ func main() {
 	if runner != nil {
 		rt, err = runner.Start()
 	}
-	println("results:", rt, err)
+	debug("results:", rt, err)
 
 	if useCGroup {
 		cpu, err := cg.CpuacctUsage()
 		if err != nil {
-			panic(err)
+			return nil, nil, fmt.Errorf("cgroup cpu: %v", err)
 		}
 		memory, err := cg.MemoryMaxUsageInBytes()
 		if err != nil {
-			panic(err)
+			return nil, nil, fmt.Errorf("cgroup memory: %v", err)
 		}
-		println("cgroup: cpu: ", cpu, " memory: ", memory)
+		debug("cgroup: cpu: ", cpu, " memory: ", memory)
 		rt.UserTime = cpu / uint64(time.Millisecond)
 		rt.UserMem = memory >> 10
 	}
+	return &rt, f, nil
+}
 
-	if err != nil {
-		c, ok := err.(specs.TraceCode)
-		if !ok {
-			c = specs.TraceCodeFatal
-		}
-		// Handle fatal error from trace
-		fmt.Fprintf(f, "%d %d %d %d\n", int(c), rt.UserTime, rt.UserMem, rt.ExitCode)
-		if c == specs.TraceCodeFatal {
-			os.Exit(1)
-		}
-	} else {
-		fmt.Fprintf(f, "%d %d %d %d\n", 0, rt.UserTime, rt.UserMem, rt.ExitCode)
+func debug(v ...interface{}) {
+	if showDetails {
+		fmt.Fprintln(os.Stderr, v...)
 	}
 }

@@ -186,22 +186,28 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 		return sendErrorReply(s, "execve: %v", err)
 	}
 
-	done := make(chan int)
+	// done is to signal kill goroutine exits
+	done := make(chan struct{})
+	// waitDone is to signal kill goroutine to collect zombies
+	waitDone := make(chan struct{})
+
 	// recv kill
 	go func() {
+		// signal done
+		defer close(done)
 		// msg must be kill
 		recvCmd(s)
 		// kill all
 		syscall.Kill(-1, syscall.SIGKILL)
+		// make sure collect zombie does not consume the exit status
+		<-waitDone
 		// collect zombies
 		for {
-			_, err = syscall.Wait4(-1, nil, 0, nil)
+			_, err = syscall.Wait4(-1, nil, syscall.WNOHANG, nil)
 			if err != nil {
 				break
 			}
 		}
-		// signal done
-		close(done)
 	}()
 
 	// wait pid
@@ -209,6 +215,8 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 loop:
 	for {
 		_, err = syscall.Wait4(pid, &wstatus, 0, nil)
+		// sync with kill goroutine
+		close(waitDone)
 		if err != nil {
 			sendErrorReply(s, "execve: wait4 %v", err)
 			break loop
@@ -223,9 +231,7 @@ loop:
 			var status specs.TraceCode
 			switch wstatus.Signal() {
 			// kill signal treats as TLE
-			case syscall.SIGKILL:
-				status = specs.TraceCodeTLE
-			case syscall.SIGXCPU:
+			case syscall.SIGXCPU, syscall.SIGKILL:
 				status = specs.TraceCodeTLE
 			case syscall.SIGXFSZ:
 				status = specs.TraceCodeOLE

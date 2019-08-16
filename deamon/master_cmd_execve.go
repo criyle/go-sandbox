@@ -21,16 +21,9 @@ type ExecveParam struct {
 	SyncFunc func(pid int) error
 }
 
-// ExecveStatus is the return value for execve
-// Wait channel will produce the waitpid exit status
-// Kill channel will kill the process if value received
-type ExecveStatus struct {
-	Wait <-chan specs.TraceResult
-	Kill chan<- int
-}
-
 // Execve runs process inside container
-func (m *Master) Execve(param *ExecveParam) (*ExecveStatus, error) {
+// accepts done for cancelation
+func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan specs.TraceResult, error) {
 	var files []int
 	if param.ExecFile > 0 {
 		files = append(files, int(param.ExecFile))
@@ -57,33 +50,37 @@ func (m *Master) Execve(param *ExecveParam) (*ExecveStatus, error) {
 		m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
 		return nil, fmt.Errorf("execve: no pid recved or error(%v)", reply.Error)
 	}
-	if err := param.SyncFunc(int(msg.Cred.Pid)); err != nil {
-		m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
-		return nil, fmt.Errorf("execve: syncfunc failed(%v)", err)
+	if param.SyncFunc != nil {
+		if err := param.SyncFunc(int(msg.Cred.Pid)); err != nil {
+			m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
+			return nil, fmt.Errorf("execve: syncfunc failed(%v)", err)
+		}
 	}
 	if err := m.sendCmd(&Cmd{Cmd: cmdOk}, nil); err != nil {
 		return nil, fmt.Errorf("execve: ok failed(%v)", err)
 	}
-	wait := make(chan specs.TraceResult)
-	kill := make(chan int)
+	// make sure goroutine not leaked (blocked) even if result is not consumed
+	wait := make(chan specs.TraceResult, 1)
+	waitDone := make(chan struct{})
 	// Wait
 	go func() {
+		defer close(wait)
 		reply2, _, _ := m.recvReply()
+		close(waitDone)
 		wait <- specs.TraceResult{
 			ExitCode:    reply2.ExitStatus,
 			TraceStatus: reply2.TraceStatus,
 		}
 		// done signal (should recv after kill)
 		m.recvReply()
-		close(wait)
 	}()
-	// Kill
+	// Kill (if wait is done, a kill message need to be send to collect zombies)
 	go func() {
-		<-kill
+		select {
+		case <-done:
+		case <-waitDone:
+		}
 		m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
 	}()
-	return &ExecveStatus{
-		Wait: wait,
-		Kill: kill,
-	}, nil
+	return wait, nil
 }
