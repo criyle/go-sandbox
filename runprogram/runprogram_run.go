@@ -10,19 +10,19 @@ import (
 )
 
 // Start starts the tracing process
-func (r *RunProgram) Start() (rt specs.TraceResult, err error) {
+func (r *RunProgram) Start(done <-chan struct{}) (<-chan specs.TraceResult, error) {
 	// build seccomp filter
 	filter, err := buildFilter(r.ShowDetails, r.SyscallAllowed, r.SyscallTraced)
 	if err != nil {
 		println(err)
-		return
+		return nil, err
 	}
 	defer filter.Release()
 
 	bpf, err := seccomp.FilterToBPF(filter)
 	if err != nil {
 		println(err)
-		return
+		return nil, err
 	}
 
 	ch := &forkexec.Runner{
@@ -42,7 +42,7 @@ func (r *RunProgram) Start() (rt specs.TraceResult, err error) {
 		Unsafe:      r.Unsafe,
 		Handler:     r.Handler,
 	}
-	return tracer.Trace(th, ch, specs.ResLimit(r.TraceLimit))
+	return tracer.Trace(done, th, ch, specs.ResLimit(r.TraceLimit))
 }
 
 // build filter builds the libseccomp filter according to the allow, trace and show details

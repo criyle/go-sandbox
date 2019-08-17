@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/signal"
 	"time"
 
 	"github.com/criyle/go-judger/cgroup"
@@ -34,7 +35,7 @@ var (
 
 // Runner can be ptraced runner or namespaced runner
 type Runner interface {
-	Start() (specs.TraceResult, error)
+	Start(<-chan struct{}) (<-chan specs.TraceResult, error)
 }
 
 func printUsage() {
@@ -85,8 +86,33 @@ func main() {
 	if workPath == "" {
 		workPath, _ = os.Getwd()
 	}
-	rt, f, err := run()
 
+	var (
+		f   *os.File
+		err error
+	)
+	if result == "stdout" {
+		f = os.Stdout
+	} else if result == "stderr" {
+		f = os.Stderr
+	} else {
+		f, err = os.Create(result)
+		if err != nil {
+			debug("Failed to open result file:", err)
+			return
+		}
+		defer f.Close()
+	}
+
+	rt, err := run()
+	if rt == nil {
+		rt = &specs.TraceResult{
+			TraceStatus: specs.TraceCodeFatal,
+		}
+	}
+	if err == nil && rt.TraceStatus != specs.TraceCodeNormal {
+		err = rt.TraceStatus
+	}
 	if err != nil {
 		debug(err)
 		c, ok := err.(specs.TraceCode)
@@ -103,14 +129,22 @@ func main() {
 	}
 }
 
-func run() (*specs.TraceResult, *os.File, error) {
+type deamonRunner struct {
+	*deamon.Master
+	*deamon.ExecveParam
+}
+
+func (r *deamonRunner) Start(done <-chan struct{}) (<-chan specs.TraceResult, error) {
+	return r.Master.Execve(done, r.ExecveParam)
+}
+
+func run() (*specs.TraceResult, error) {
 	var (
 		runner   Runner
 		cg       *cgroup.CGroup
 		err      error
 		execFile uintptr
 		rt       specs.TraceResult
-		f        *os.File
 	)
 
 	addRead := runconfig.GetExtraSet(addReadable, addRawReadable)
@@ -120,11 +154,11 @@ func run() (*specs.TraceResult, *os.File, error) {
 	if useCGroup {
 		cg, err = cgroup.NewCGroup("run_program")
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		defer cg.Destroy()
 		if err = cg.SetMemoryLimitInBytes(memoryLimit << 20); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -140,11 +174,11 @@ func run() (*specs.TraceResult, *os.File, error) {
 	if memfile {
 		fin, err := os.Open(args[0])
 		if err != nil {
-			return nil, nil, fmt.Errorf("filed to open args[0]: %v", err)
+			return nil, fmt.Errorf("filed to open args[0]: %v", err)
 		}
 		execf, err := memfd.DupToMemfd("run_program", fin)
 		if err != nil {
-			return nil, nil, fmt.Errorf("dup to memfd failed: %v", err)
+			return nil, fmt.Errorf("dup to memfd failed: %v", err)
 		}
 		fin.Close()
 		defer execf.Close()
@@ -155,7 +189,7 @@ func run() (*specs.TraceResult, *os.File, error) {
 	// open input / output / err files
 	files, err := prepareFiles(inputFileName, outputFileName, errorFileName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to prepare files: %v", err)
+		return nil, fmt.Errorf("failed to prepare files: %v", err)
 	}
 	defer closeFiles(files)
 
@@ -177,52 +211,37 @@ func run() (*specs.TraceResult, *os.File, error) {
 	}
 
 	if useDeamon {
-		sTime := time.Now()
 		root, err := ioutil.TempDir("", "dm")
 		if err != nil {
-			return nil, nil, fmt.Errorf("cannot make temp root for deamon namespace: %v", err)
+			return nil, fmt.Errorf("cannot make temp root for deamon namespace: %v", err)
 		}
 		defer os.RemoveAll(root)
 
 		m, err := deamon.New(root)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to new master: %v", err)
+			return nil, fmt.Errorf("failed to new master: %v", err)
 		}
+		defer m.Destroy()
 		err = m.Ping()
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to ping deamon: %v", err)
+			return nil, fmt.Errorf("failed to ping deamon: %v", err)
 		}
-
-		rTime := time.Now()
-		done := make(chan struct{})
-		s, err := m.Execve(done, &deamon.ExecveParam{
-			Args:     args,
-			Envv:     []string{pathEnv},
-			Fds:      fds,
-			ExecFile: execFile,
-			RLimits:  rlims.PrepareRLimit(),
-			SyncFunc: syncFunc,
-		})
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to execve: %v", err)
+		runner = &deamonRunner{
+			Master: m,
+			ExecveParam: &deamon.ExecveParam{
+				Args:     args,
+				Envv:     []string{pathEnv},
+				Fds:      fds,
+				ExecFile: execFile,
+				RLimits:  rlims.PrepareRLimit(),
+				SyncFunc: syncFunc,
+			},
 		}
-		tC := time.After(time.Duration(int64(realTimeLimit) * int64(time.Second)))
-		select {
-		case <-tC:
-			close(done)
-			rt = <-s
-
-		case rt = <-s:
-		}
-		eTime := time.Now()
-		rt.SetUpTime = int64(rTime.Sub(sTime))
-		rt.RunningTime = int64(eTime.Sub(rTime))
-		m.Destroy()
 	} else if namespace {
 		h.SyscallAllow = append(h.SyscallAllow, h.SyscallTrace...)
 		root, err := ioutil.TempDir("", "ns")
 		if err != nil {
-			return nil, nil, fmt.Errorf("cannot make temp root for new namespace")
+			return nil, fmt.Errorf("cannot make temp root for new namespace")
 		}
 		defer os.RemoveAll(root)
 
@@ -273,38 +292,54 @@ func run() (*specs.TraceResult, *os.File, error) {
 		}
 	}
 
-	if result == "stdout" {
-		f = os.Stdout
-	} else if result == "stderr" {
-		f = os.Stderr
-	} else {
-		f, err := os.Create(result)
-		if err != nil {
-			return nil, nil, fmt.Errorf("Failed to open result file: %v", err)
-		}
-		defer f.Close()
-	}
+	// gracefully shutdown
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
 
 	// Run tracer
-	if runner != nil {
-		rt, err = runner.Start()
+	sTime := time.Now()
+	done := make(chan struct{})
+	s, err := runner.Start(done)
+	rTime := time.Now()
+	if err != nil {
+		return nil, fmt.Errorf("failed to execve: %v", err)
 	}
+	tC := time.After(time.Duration(int64(realTimeLimit) * int64(time.Second)))
+	select {
+	case <-sig:
+		close(done)
+		rt = <-s
+		rt.TraceStatus = specs.TraceCodeFatal
+
+	case <-tC:
+		close(done)
+		rt = <-s
+
+	case rt = <-s:
+	}
+	eTime := time.Now()
+
+	if rt.SetUpTime == 0 {
+		rt.SetUpTime = int64(rTime.Sub(sTime))
+		rt.RunningTime = int64(eTime.Sub(rTime))
+	}
+
 	debug("results:", rt, err)
 
 	if useCGroup {
 		cpu, err := cg.CpuacctUsage()
 		if err != nil {
-			return nil, nil, fmt.Errorf("cgroup cpu: %v", err)
+			return nil, fmt.Errorf("cgroup cpu: %v", err)
 		}
 		memory, err := cg.MemoryMaxUsageInBytes()
 		if err != nil {
-			return nil, nil, fmt.Errorf("cgroup memory: %v", err)
+			return nil, fmt.Errorf("cgroup memory: %v", err)
 		}
 		debug("cgroup: cpu: ", cpu, " memory: ", memory)
 		rt.UserTime = cpu / uint64(time.Millisecond)
 		rt.UserMem = memory >> 10
 	}
-	return &rt, f, nil
+	return &rt, nil
 }
 
 func debug(v ...interface{}) {

@@ -77,7 +77,8 @@ var (
 
 	// default syscalls to trace
 	defaultSyscallTraces = []string{
-		// should be traced
+		// execute file
+		"execve",
 		"execveat",
 
 		// file open

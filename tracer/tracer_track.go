@@ -15,19 +15,41 @@ const (
 	MsgHandle
 )
 
-// Trace traces all child process that created by runner
-// this function should called only once and in the same thread that
-// exec tracee
-func Trace(handler Handler, runner Runner, limits specs.ResLimit) (result specs.TraceResult, err error) {
+// Trace starts new goroutine and trace runner with ptrace
+func Trace(done <-chan struct{}, handler Handler, runner Runner, limits specs.ResLimit) (<-chan specs.TraceResult, error) {
+	var err error
+	result := make(chan specs.TraceResult, 1)
+	start := make(chan struct{})
+	finish := make(chan struct{})
+
+	// run
+	go func() {
+		defer close(finish)
+		ret, err2 := TraceRun(done, start, handler, runner, limits)
+		err = err2
+		result <- ret
+	}()
+
+	select {
+	case <-start:
+	case <-finish:
+	}
+	return result, err
+}
+
+// TraceRun start and traces all child process by runner in the calling goroutine
+// parameter done used to cancel work, start is used notify child starts
+func TraceRun(done <-chan struct{}, start chan<- struct{},
+	handler Handler, runner Runner, limits specs.ResLimit) (result specs.TraceResult, err error) {
 	var (
-		wstatus unix.WaitStatus         // wait4 wait status
-		rusage  unix.Rusage             // wait4 rusage
-		tle     bool                    // whether the timmer triggered due to timeout
-		traced  = make(map[int]bool)    // store all process that have set ptrace options
-		execved = false                 // store whether the runner process have successfully execvd
-		pid     int                     // store pid of wait4 result
-		sTime   = time.Now().UnixNano() // records start time for trace process
-		fTime   int64                   // records finish time for execve
+		wstatus unix.WaitStatus      // wait4 wait status
+		rusage  unix.Rusage          // wait4 rusage
+		tle     bool                 // whether the timmer triggered due to timeout
+		traced  = make(map[int]bool) // store all process that have set ptrace options
+		execved = false              // store whether the runner process have successfully execvd
+		pid     int                  // store pid of wait4 result
+		sTime   = time.Now()         // records start time for trace process
+		fTime   time.Time            // records finish time for execve
 	)
 
 	// ptrace is thread based (kernel proc)
@@ -43,16 +65,23 @@ func Trace(handler Handler, runner Runner, limits specs.ResLimit) (result specs.
 		return result, err
 	}
 
-	// Set real time limit, kill process after it
-	timer := time.AfterFunc(time.Duration(int64(limits.RealTimeLimit)*1e6), func() {
-		tle = true
-		killAll(pgid)
-	})
+	close(start)
+	finish := make(chan struct{})
+	defer close(finish)
+
+	// handle cancelation
+	go func() {
+		select {
+		case <-done:
+			tle = true
+			killAll(pgid)
+		case <-finish:
+		}
+	}()
 
 	// handler potential panic and tle
 	// also ensure processes was well terminated
 	defer func() {
-		timer.Stop()
 		if tle {
 			err = specs.TraceCodeTLE
 		}
@@ -63,8 +92,8 @@ func Trace(handler Handler, runner Runner, limits specs.ResLimit) (result specs.
 		// kill all tracee upon return
 		killAll(pgid)
 		collectZombie(pgid)
-		result.TraceStat.SetUpTime = fTime - sTime
-		result.RunningTime = time.Now().UnixNano() - fTime
+		result.SetUpTime = fTime.Sub(sTime).Nanoseconds()
+		result.RunningTime = time.Since(fTime).Nanoseconds()
 	}()
 
 	// trace unixs
@@ -125,7 +154,7 @@ func Trace(handler Handler, runner Runner, limits specs.ResLimit) (result specs.
 			if pid == pgid {
 				delete(traced, pid)
 				switch sig {
-				case unix.SIGXCPU:
+				case unix.SIGXCPU, unix.SIGKILL:
 					status = specs.TraceCodeTLE
 				case unix.SIGXFSZ:
 					status = specs.TraceCodeOLE
@@ -176,7 +205,7 @@ func Trace(handler Handler, runner Runner, limits specs.ResLimit) (result specs.
 				case unix.PTRACE_EVENT_EXEC:
 					// forked tracee have successfully called execve
 					if !execved {
-						fTime = time.Now().UnixNano()
+						fTime = time.Now()
 						execved = true
 					}
 					handler.Debug("ptrace stop exec")
