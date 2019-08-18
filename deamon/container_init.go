@@ -142,8 +142,11 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 	if msg != nil {
 		files = intSliceToUintptr(msg.Fds)
 	}
+	// don't leak fds to child
+	closeOnExecFds(msg.Fds)
 	// release files after execve
 	defer closeFds(msg.Fds)
+
 	if cmd.FdExec && len(files) > 0 {
 		execFile = files[0]
 		files = files[1:]

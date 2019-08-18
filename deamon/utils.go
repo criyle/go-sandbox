@@ -28,6 +28,12 @@ func uintptrSliceToInt(s []uintptr) []int {
 	return r
 }
 
+func closeOnExecFds(s []int) {
+	for _, f := range s {
+		syscall.CloseOnExec(f)
+	}
+}
+
 func closeFds(s []int) {
 	for _, f := range s {
 		syscall.Close(f)
