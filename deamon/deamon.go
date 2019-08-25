@@ -34,8 +34,8 @@ Any socket related error will cause the deamon exit (with all process inside con
 */
 
 import (
-	"github.com/criyle/go-judger/types/rlimit"
-	"github.com/criyle/go-judger/types/specs"
+	"github.com/criyle/go-sandbox/types/rlimit"
+	"github.com/criyle/go-sandbox/types/specs"
 )
 
 // Cmd is the control message send into deamon

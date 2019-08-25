@@ -8,14 +8,14 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/criyle/go-judger/cgroup"
-	"github.com/criyle/go-judger/deamon"
-	"github.com/criyle/go-judger/memfd"
-	"github.com/criyle/go-judger/runconfig"
-	"github.com/criyle/go-judger/runprogram"
-	"github.com/criyle/go-judger/rununshared"
-	"github.com/criyle/go-judger/types/rlimit"
-	"github.com/criyle/go-judger/types/specs"
+	"github.com/criyle/go-sandbox/cgroup"
+	"github.com/criyle/go-sandbox/deamon"
+	"github.com/criyle/go-sandbox/memfd"
+	"github.com/criyle/go-sandbox/runconfig"
+	"github.com/criyle/go-sandbox/runprogram"
+	"github.com/criyle/go-sandbox/rununshared"
+	"github.com/criyle/go-sandbox/types/rlimit"
+	"github.com/criyle/go-sandbox/types/specs"
 )
 
 const (

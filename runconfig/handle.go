@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/criyle/go-judger/runprogram"
+	"github.com/criyle/go-sandbox/runprogram"
 )
 
 // Handler defines file access restricted handler to call the runprogram

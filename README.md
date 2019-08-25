@@ -1,12 +1,12 @@
-# go-judger
+# go-sandbox
 
-Original goal is to reimplement [uoj-judger/run_program](https://github.com/vfleaking/uoj) in GO language using [libseccomp](https://github.com/seccomp/libseccomp-golang). As technology grows, it also implements new technologies such as Linux namespace & cgroup.
+Original goal is to reimplement [uoj-judger/run_program](https://github.com/vfleaking/uoj) in GO language using [libseccomp](https://github.com/seccomp/libseccomp-golang). As technology grows, it also implements new technologies including Linux namespace & cgroup.
 
 ## Install
 
 - install go compiler: `apt install golang-go`
 - install libseccomp-dev: `apt install libseccomp-dev`
-- install: `go install github.com/criyle/go-judger/...`
+- install: `go install github.com/criyle/go-sandbox/...`
 
 ## Technologies
 
@@ -18,7 +18,7 @@ Original goal is to reimplement [uoj-judger/run_program](https://github.com/vfle
 
 Improvements:
 
-1. Percise resource limits (s -> ms, mb -> kb)
+1. Precise resource limits (s -> ms, mb -> kb)
 2. More architectures (arm32, arm64, x86)
 3. Allow multiple traced programs in different threads
 4. Allow pipes as input / output files
@@ -63,7 +63,7 @@ Default file access syscall check:
 
 - run_program: safely run program by unshare / ptrace / pre-forked containers
 
-## Configuations
+## Configurations
 
 - run_program/config.go: all configs toward running specs
 
@@ -84,7 +84,7 @@ Pre-forked container also saves time for container creation / cleanup.
 $ go test -bench . -benchtime 10s
 goos: linux
 goarch: amd64
-pkg: github.com/criyle/go-judger/forkexec
+pkg: github.com/criyle/go-sandbox/forkexec
 BenchmarkSimpleFork-4              	   10000	   1106064 ns/op
 BenchmarkUnsharePid-4              	   10000	   1367824 ns/op
 BenchmarkUnshareUser-4             	   10000	   1311523 ns/op
@@ -97,7 +97,7 @@ BenchmarkFastUnshareMountPivot-4   	     100	 114364585 ns/op
 BenchmarkUnshareAll-4              	     100	 851014031 ns/op
 BenchmarkUnshareMountPivot-4       	      20	 901204445 ns/op
 PASS
-ok  	github.com/criyle/go-judger/forkexec	262.112s
+ok  	github.com/criyle/go-sandbox/forkexec	262.112s
 ```
 
 ## TODO

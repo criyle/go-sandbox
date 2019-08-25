@@ -1,4 +1,4 @@
-module github.com/criyle/go-judger
+module github.com/criyle/go-sandbox
 
 go 1.12
 

@@ -3,7 +3,7 @@ package deamon
 import (
 	"os"
 
-	"github.com/criyle/go-judger/types/mount"
+	"github.com/criyle/go-sandbox/types/mount"
 	"golang.org/x/sys/unix"
 )
 

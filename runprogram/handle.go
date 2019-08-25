@@ -8,8 +8,8 @@ import (
 
 	libseccomp "github.com/seccomp/libseccomp-golang"
 
-	"github.com/criyle/go-judger/tracer"
-	"github.com/criyle/go-judger/types/specs"
+	"github.com/criyle/go-sandbox/tracer"
+	"github.com/criyle/go-sandbox/types/specs"
 )
 
 type tracerHandler struct {

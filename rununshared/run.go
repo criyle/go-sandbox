@@ -5,9 +5,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/criyle/go-judger/forkexec"
-	"github.com/criyle/go-judger/seccomp"
-	"github.com/criyle/go-judger/types/specs"
+	"github.com/criyle/go-sandbox/forkexec"
+	"github.com/criyle/go-sandbox/seccomp"
+	"github.com/criyle/go-sandbox/types/specs"
 	libseccomp "github.com/seccomp/libseccomp-golang"
 	"golang.org/x/sys/unix"
 )

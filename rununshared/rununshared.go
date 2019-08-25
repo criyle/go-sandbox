@@ -1,9 +1,9 @@
 package rununshared
 
 import (
-	"github.com/criyle/go-judger/types/mount"
-	"github.com/criyle/go-judger/types/rlimit"
-	"github.com/criyle/go-judger/types/specs"
+	"github.com/criyle/go-sandbox/types/mount"
+	"github.com/criyle/go-sandbox/types/rlimit"
+	"github.com/criyle/go-sandbox/types/specs"
 )
 
 // RunUnshared runs program in unshared namespaces

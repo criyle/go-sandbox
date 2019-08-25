@@ -8,9 +8,9 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/criyle/go-judger/forkexec"
-	"github.com/criyle/go-judger/types/specs"
-	"github.com/criyle/go-judger/unixsocket"
+	"github.com/criyle/go-sandbox/forkexec"
+	"github.com/criyle/go-sandbox/types/specs"
+	"github.com/criyle/go-sandbox/unixsocket"
 )
 
 // ContainerInit is called for container init process

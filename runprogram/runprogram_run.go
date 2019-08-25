@@ -3,10 +3,10 @@ package runprogram
 import (
 	libseccomp "github.com/seccomp/libseccomp-golang"
 
-	"github.com/criyle/go-judger/forkexec"
-	"github.com/criyle/go-judger/seccomp"
-	"github.com/criyle/go-judger/tracer"
-	"github.com/criyle/go-judger/types/specs"
+	"github.com/criyle/go-sandbox/forkexec"
+	"github.com/criyle/go-sandbox/seccomp"
+	"github.com/criyle/go-sandbox/tracer"
+	"github.com/criyle/go-sandbox/types/specs"
 )
 
 // Start starts the tracing process

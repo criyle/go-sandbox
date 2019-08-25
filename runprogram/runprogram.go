@@ -3,8 +3,8 @@ package runprogram
 import (
 	"syscall"
 
-	"github.com/criyle/go-judger/types/rlimit"
-	"github.com/criyle/go-judger/types/specs"
+	"github.com/criyle/go-sandbox/types/rlimit"
+	"github.com/criyle/go-sandbox/types/specs"
 )
 
 // RunProgram defines the spec to run a program safely

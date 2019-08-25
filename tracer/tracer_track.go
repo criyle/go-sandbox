@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/criyle/go-judger/types/specs"
+	"github.com/criyle/go-sandbox/types/specs"
 	unix "golang.org/x/sys/unix"
 )
 
