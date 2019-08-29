@@ -3,8 +3,8 @@ package runprogram
 import (
 	libseccomp "github.com/seccomp/libseccomp-golang"
 
-	"github.com/criyle/go-sandbox/forkexec"
-	"github.com/criyle/go-sandbox/seccomp"
+	"github.com/criyle/go-sandbox/pkg/forkexec"
+	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/tracer"
 	"github.com/criyle/go-sandbox/types/specs"
 )

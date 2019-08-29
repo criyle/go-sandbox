@@ -3,9 +3,9 @@ package deamon
 import (
 	"fmt"
 
-	"github.com/criyle/go-sandbox/types/rlimit"
+	"github.com/criyle/go-sandbox/pkg/rlimit"
 	"github.com/criyle/go-sandbox/types/specs"
-	"github.com/criyle/go-sandbox/unixsocket"
+	"github.com/criyle/go-sandbox/pkg/unixsocket"
 )
 
 // ExecveParam is parameters to run process inside container

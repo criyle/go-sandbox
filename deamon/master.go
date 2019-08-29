@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/criyle/go-sandbox/forkexec"
-	"github.com/criyle/go-sandbox/memfd"
-	"github.com/criyle/go-sandbox/unixsocket"
+	"github.com/criyle/go-sandbox/pkg/forkexec"
+	"github.com/criyle/go-sandbox/pkg/memfd"
+	"github.com/criyle/go-sandbox/pkg/unixsocket"
 	"golang.org/x/sys/unix"
 )
 

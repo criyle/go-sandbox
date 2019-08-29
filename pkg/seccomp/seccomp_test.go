@@ -3,7 +3,7 @@ package seccomp
 import (
 	"testing"
 
-	libseccomp "github.com/seccomp/libseccomp-golang"
+	libseccomp "github.com/pkg/seccomp/libseccomp-golang"
 )
 
 var (

@@ -1,6 +1,6 @@
 # go-sandbox
 
-Original goal is to reimplement [uoj-judger/run_program](https://github.com/vfleaking/uoj) in GO language using [libseccomp](https://github.com/seccomp/libseccomp-golang). As technology grows, it also implements new technologies including Linux namespace & cgroup.
+Original goal is to reimplement [uoj-judger/run_program](https://github.com/vfleaking/uoj) in GO language using [libseccomp](https://github.com/pkg/seccomp/libseccomp-golang). As technology grows, it also implements new technologies including Linux namespace & cgroup.
 
 ## Install
 
@@ -42,21 +42,24 @@ Default file access syscall check:
 1. Pre-fork container deamons to run programs inside
 2. Unix socket to pass fd inside / outside
 
-## Packages
+## Packages (/pkg)
 
 - seccomp: provides utility function that wrappers libseccomp
 - forkexec: fork-exec provides mount, unshare, ptrace, seccomp, capset before exec
 - memfd: read regular file and creates a seaed memfd for its contents
 - unixsocket: send / recv oob msg from a unix socket
 - cgroup: creates cgroup directories and collects resource usage / limits
-- deamon: creates pre-forked container to run programs inside
+- mount: provides utility function that wrappers mount syscall
+- rlimit: provides utility function that defines rlimit syscall
+
+## Packages
+
 - tracer: ptrace tracer and provides syscall trap filter context
+- deamon: creates pre-forked container to run programs inside
 - runprogram: wrapper to call forkexec and trecer
 - rununshared: wrapper to call forkexec and unshared namespaces
 - runconfig: defines arch & language specified trace condition for seccomp and ptrace
 - types: general runtime specs
-  - mount: provides utility function that wrappers mount syscall
-  - rlimit: provides utility function that defines rlimit syscall
   - specs: provides general res / result data structures
 
 ## Executable
@@ -84,7 +87,7 @@ Pre-forked container also saves time for container creation / cleanup.
 $ go test -bench . -benchtime 10s
 goos: linux
 goarch: amd64
-pkg: github.com/criyle/go-sandbox/forkexec
+pkg: github.com/criyle/go-sandbox/pkg/forkexec
 BenchmarkSimpleFork-4              	   10000	   1106064 ns/op
 BenchmarkUnsharePid-4              	   10000	   1367824 ns/op
 BenchmarkUnshareUser-4             	   10000	   1311523 ns/op
@@ -97,7 +100,7 @@ BenchmarkFastUnshareMountPivot-4   	     100	 114364585 ns/op
 BenchmarkUnshareAll-4              	     100	 851014031 ns/op
 BenchmarkUnshareMountPivot-4       	      20	 901204445 ns/op
 PASS
-ok  	github.com/criyle/go-sandbox/forkexec	262.112s
+ok  	github.com/criyle/go-sandbox/pkg/forkexec	262.112s
 ```
 
 ## TODO

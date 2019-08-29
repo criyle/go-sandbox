@@ -268,7 +268,7 @@ func handleTrap(handler Handler, pid int) error {
 			switch act {
 			case TraceBan:
 				// Set the syscallno to -1 and return value into register to skip syscall.
-				// https://www.kernel.org/doc/Documentation/prctl/seccomp_filter.txt
+				// https://www.kernel.org/doc/Documentation/prctl/pkg/seccomp_filter.txt
 				return ctx.skipSyscall()
 
 			case TraceKill:

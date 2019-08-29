@@ -4,5 +4,5 @@ go 1.12
 
 require (
 	github.com/seccomp/libseccomp-golang v0.9.1
-	golang.org/x/sys v0.0.0-20190813064441-fde4db37ae7a
+	golang.org/x/sys v0.0.0-20190826190057-c7b8b68b1456
 )

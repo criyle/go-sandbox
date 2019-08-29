@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/criyle/go-sandbox/unixsocket"
+	"github.com/criyle/go-sandbox/pkg/unixsocket"
 )
 
 // Ping send ping message to container

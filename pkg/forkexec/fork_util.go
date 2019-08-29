@@ -3,7 +3,7 @@ package forkexec
 import (
 	"syscall"
 
-	"github.com/criyle/go-sandbox/types/mount"
+	"github.com/criyle/go-sandbox/pkg/mount"
 )
 
 // prepareExec prepares execve parameters

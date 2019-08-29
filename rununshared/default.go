@@ -3,7 +3,7 @@ package rununshared
 import (
 	"os"
 
-	"github.com/criyle/go-sandbox/types/mount"
+	"github.com/criyle/go-sandbox/pkg/mount"
 	"golang.org/x/sys/unix"
 )
 

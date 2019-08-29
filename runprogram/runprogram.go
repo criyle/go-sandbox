@@ -3,7 +3,7 @@ package runprogram
 import (
 	"syscall"
 
-	"github.com/criyle/go-sandbox/types/rlimit"
+	"github.com/criyle/go-sandbox/pkg/rlimit"
 	"github.com/criyle/go-sandbox/types/specs"
 )
 

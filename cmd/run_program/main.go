@@ -8,13 +8,13 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/criyle/go-sandbox/cgroup"
 	"github.com/criyle/go-sandbox/deamon"
-	"github.com/criyle/go-sandbox/memfd"
+	"github.com/criyle/go-sandbox/pkg/cgroup"
+	"github.com/criyle/go-sandbox/pkg/memfd"
+	"github.com/criyle/go-sandbox/pkg/rlimit"
 	"github.com/criyle/go-sandbox/runconfig"
 	"github.com/criyle/go-sandbox/runprogram"
 	"github.com/criyle/go-sandbox/rununshared"
-	"github.com/criyle/go-sandbox/types/rlimit"
 	"github.com/criyle/go-sandbox/types/specs"
 )
 

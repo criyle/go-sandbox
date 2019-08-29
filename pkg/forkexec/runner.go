@@ -5,8 +5,8 @@ package forkexec
 import (
 	"syscall"
 
-	"github.com/criyle/go-sandbox/types/mount"
-	"github.com/criyle/go-sandbox/types/rlimit"
+	"github.com/criyle/go-sandbox/pkg/mount"
+	"github.com/criyle/go-sandbox/pkg/rlimit"
 )
 
 // Runner is the RunProgramConfig including the exec path, argv
