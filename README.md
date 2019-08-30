@@ -54,21 +54,21 @@ Default file access syscall check:
 
 ## Packages
 
-- tracer: ptrace tracer and provides syscall trap filter context
 - deamon: creates pre-forked container to run programs inside
-- runprogram: wrapper to call forkexec and trecer
-- rununshared: wrapper to call forkexec and unshared namespaces
-- runconfig: defines arch & language specified trace condition for seccomp and ptrace
-- types: general runtime specs
-  - specs: provides general res / result data structures
+- runner: interface to run program
+  - config: defines arch & language specified trace condition for seccomp and ptrace
+  - ptrace: wrapper to call forkexec and ptracer
+  - unshare: wrapper to call forkexec and unshared namespaces
+- ptracer: ptrace tracer and provides syscall trap filter context
+- types: provides general res / result data structures
 
 ## Executable
 
-- run_program: safely run program by unshare / ptrace / pre-forked containers
+- runprog: safely run program by unshare / ptrace / pre-forked containers
 
 ## Configurations
 
-- run_program/config.go: all configs toward running specs
+- run/config/config.go: all configs toward running specs
 
 ## Benchmarks (docker desktop amd64 / native arm64)
 

@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	"github.com/criyle/go-sandbox/pkg/rlimit"
-	"github.com/criyle/go-sandbox/types/specs"
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
+	"github.com/criyle/go-sandbox/types"
 )
 
 // ExecveParam is parameters to run process inside container
@@ -23,7 +23,7 @@ type ExecveParam struct {
 
 // Execve runs process inside container
 // accepts done for cancelation
-func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan specs.TraceResult, error) {
+func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.Result, error) {
 	var files []int
 	if param.ExecFile > 0 {
 		files = append(files, int(param.ExecFile))
@@ -60,16 +60,16 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan specs.
 		return nil, fmt.Errorf("execve: ok failed(%v)", err)
 	}
 	// make sure goroutine not leaked (blocked) even if result is not consumed
-	wait := make(chan specs.TraceResult, 1)
+	wait := make(chan types.Result, 1)
 	waitDone := make(chan struct{})
 	// Wait
 	go func() {
 		defer close(wait)
 		reply2, _, _ := m.recvReply()
 		close(waitDone)
-		wait <- specs.TraceResult{
-			ExitCode:    reply2.ExitStatus,
-			TraceStatus: reply2.TraceStatus,
+		wait <- types.Result{
+			ExitStatus: reply2.ExitStatus,
+			Status:     reply2.Status,
 		}
 		// done signal (should recv after kill)
 		m.recvReply()

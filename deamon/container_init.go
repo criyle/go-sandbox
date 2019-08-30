@@ -10,7 +10,7 @@ import (
 
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
-	"github.com/criyle/go-sandbox/types/specs"
+	"github.com/criyle/go-sandbox/types"
 )
 
 // ContainerInit is called for container init process
@@ -231,19 +231,19 @@ loop:
 			break loop
 
 		case wstatus.Signaled():
-			var status specs.TraceCode
+			var status types.Status
 			switch wstatus.Signal() {
 			// kill signal treats as TLE
 			case syscall.SIGXCPU, syscall.SIGKILL:
-				status = specs.TraceCodeTLE
+				status = types.StatusTLE
 			case syscall.SIGXFSZ:
-				status = specs.TraceCodeOLE
+				status = types.StatusOLE
 			case syscall.SIGSYS:
-				status = specs.TraceCodeBan
+				status = types.StatusBan
 			default:
-				status = specs.TraceCodeRE
+				status = types.StatusRE
 			}
-			reply := Reply{TraceStatus: status}
+			reply := Reply{Status: status}
 			sendReply(s, &reply, nil)
 			break loop
 		}

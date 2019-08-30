@@ -35,7 +35,7 @@ Any socket related error will cause the deamon exit (with all process inside con
 
 import (
 	"github.com/criyle/go-sandbox/pkg/rlimit"
-	"github.com/criyle/go-sandbox/types/specs"
+	"github.com/criyle/go-sandbox/types"
 )
 
 // Cmd is the control message send into deamon
@@ -50,7 +50,7 @@ type Cmd struct {
 
 // Reply is the reply message send back to controller
 type Reply struct {
-	Error       string          // empty if no error
-	ExitStatus  int             // waitpid exit status
-	TraceStatus specs.TraceCode // TraceCode
+	Error      string       // empty if no error
+	ExitStatus int          // waitpid exit status
+	Status     types.Status // return status
 }

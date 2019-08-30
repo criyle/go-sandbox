@@ -9,7 +9,7 @@ import (
 	"github.com/criyle/go-sandbox/pkg/rlimit"
 )
 
-// Runner is the RunProgramConfig including the exec path, argv
+// Runner is the runptraceConfig including the exec path, argv
 // and resource limits. It creates tracee for ptrace-based tracer.
 // It can also create unshared process in another namespace
 type Runner struct {
