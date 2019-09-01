@@ -1,5 +1,7 @@
 package ptracer
 
+import "github.com/criyle/go-sandbox/types"
+
 // TraceAction defines the action returned by TraceHandle
 type TraceAction int
 
@@ -11,6 +13,13 @@ const (
 	// TraceKill refered as dangerous action have been detacted
 	TraceKill
 )
+
+// Tracer defines a ptracer instance
+type Tracer struct {
+	Handler
+	Runner
+	types.Limit
+}
 
 // Runner represents the process runner
 type Runner interface {

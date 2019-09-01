@@ -6,8 +6,7 @@ import (
 	"path"
 	"syscall"
 
-	libseccomp "github.com/seccomp/libseccomp-golang"
-
+	"github.com/criyle/go-sandbox/pkg/seccomp/libseccomp"
 	"github.com/criyle/go-sandbox/ptracer"
 	"github.com/criyle/go-sandbox/types"
 )
@@ -27,7 +26,7 @@ func (h *tracerHandler) getString(ctx *ptracer.Context, addr uint) string {
 	return absPath(ctx.Pid, ctx.GetString(uintptr(addr)))
 }
 
-func (h *tracerHandler) checkOpen(ctx *ptracer.Context, addr uint, flags uint) TraceAction {
+func (h *tracerHandler) checkOpen(ctx *ptracer.Context, addr uint, flags uint) ptracer.TraceAction {
 	fn := h.getString(ctx, addr)
 	isReadOnly := (flags&syscall.O_ACCMODE == syscall.O_RDONLY) &&
 		(flags&syscall.O_CREAT == 0) &&
@@ -41,19 +40,19 @@ func (h *tracerHandler) checkOpen(ctx *ptracer.Context, addr uint, flags uint) T
 	return h.Handler.CheckWrite(fn)
 }
 
-func (h *tracerHandler) checkRead(ctx *ptracer.Context, addr uint) TraceAction {
+func (h *tracerHandler) checkRead(ctx *ptracer.Context, addr uint) ptracer.TraceAction {
 	fn := h.getString(ctx, addr)
 	h.Debug("check read: ", fn)
 	return h.Handler.CheckRead(fn)
 }
 
-func (h *tracerHandler) checkWrite(ctx *ptracer.Context, addr uint) TraceAction {
+func (h *tracerHandler) checkWrite(ctx *ptracer.Context, addr uint) ptracer.TraceAction {
 	fn := h.getString(ctx, addr)
 	h.Debug("check write: ", fn)
 	return h.Handler.CheckWrite(fn)
 }
 
-func (h *tracerHandler) checkStat(ctx *ptracer.Context, addr uint) TraceAction {
+func (h *tracerHandler) checkStat(ctx *ptracer.Context, addr uint) ptracer.TraceAction {
 	fn := h.getString(ctx, addr)
 	h.Debug("check stat: ", fn)
 	return h.Handler.CheckStat(fn)
@@ -61,11 +60,15 @@ func (h *tracerHandler) checkStat(ctx *ptracer.Context, addr uint) TraceAction {
 
 func (h *tracerHandler) Handle(ctx *ptracer.Context) ptracer.TraceAction {
 	var (
-		action           TraceAction
+		action           ptracer.TraceAction
 		syscallNo        = ctx.SyscallNo()
-		syscallName, err = libseccomp.ScmpSyscall(syscallNo).GetName()
+		syscallName, err = libseccomp.ToSyscallName(syscallNo)
 	)
 	h.Debug("syscall: ", syscallNo, syscallName, err)
+	if err != nil {
+		h.Debug("invalid syscall no")
+		return ptracer.TraceKill
+	}
 
 	switch syscallName {
 	case "open":
@@ -107,9 +110,9 @@ func (h *tracerHandler) Handle(ctx *ptracer.Context) ptracer.TraceAction {
 	}
 
 	switch action {
-	case TraceAllow:
+	case ptracer.TraceAllow:
 		return ptracer.TraceAllow
-	case TraceBan:
+	case ptracer.TraceBan:
 		h.Debug("<soft ban syscall>")
 		return softBanSyscall(ctx)
 	default:
@@ -119,7 +122,7 @@ func (h *tracerHandler) Handle(ctx *ptracer.Context) ptracer.TraceAction {
 
 func (h *tracerHandler) GetSyscallName(ctx *ptracer.Context) (string, error) {
 	syscallNo := ctx.SyscallNo()
-	return libseccomp.ScmpSyscall(syscallNo).GetName()
+	return libseccomp.ToSyscallName(syscallNo)
 }
 
 func (h *tracerHandler) HandlerDisallow(name string) error {

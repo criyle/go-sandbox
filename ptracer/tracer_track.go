@@ -6,18 +6,12 @@ import (
 
 	unix "golang.org/x/sys/unix"
 
+	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/types"
 )
 
-// MsgDisallow, Msghandle defines the action needed when traped by
-// seccomp filter
-const (
-	MsgDisallow int16 = iota + 1
-	MsgHandle
-)
-
 // Trace starts new goroutine and trace runner with ptrace
-func Trace(done <-chan struct{}, handler Handler, runner Runner, limits types.Limit) (<-chan types.Result, error) {
+func (t *Tracer) Trace(done <-chan struct{}) (<-chan types.Result, error) {
 	var err error
 	result := make(chan types.Result, 1)
 	start := make(chan struct{})
@@ -26,7 +20,7 @@ func Trace(done <-chan struct{}, handler Handler, runner Runner, limits types.Li
 	// run
 	go func() {
 		defer close(finish)
-		ret, err2 := TraceRun(done, start, handler, runner, limits)
+		ret, err2 := t.TraceRun(done, start)
 		err = err2
 		result <- ret
 	}()
@@ -40,8 +34,7 @@ func Trace(done <-chan struct{}, handler Handler, runner Runner, limits types.Li
 
 // TraceRun start and traces all child process by runner in the calling goroutine
 // parameter done used to cancel work, start is used notify child starts
-func TraceRun(done <-chan struct{}, start chan<- struct{},
-	handler Handler, runner Runner, limits types.Limit) (result types.Result, err error) {
+func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result types.Result, err error) {
 	var (
 		wstatus unix.WaitStatus      // wait4 wait status
 		rusage  unix.Rusage          // wait4 rusage
@@ -58,10 +51,10 @@ func TraceRun(done <-chan struct{}, start chan<- struct{},
 	defer runtime.UnlockOSThread()
 
 	// Start the runner
-	pgid, err := runner.Start()
-	handler.Debug("tracer started: ", pgid, err)
+	pgid, err := t.Runner.Start()
+	t.Handler.Debug("tracer started: ", pgid, err)
 	if err != nil {
-		handler.Debug("start tracee failed: ", err)
+		t.Handler.Debug("start tracee failed: ", err)
 		result.Status = types.StatusRE
 		return result, err
 	}
@@ -87,7 +80,7 @@ func TraceRun(done <-chan struct{}, start chan<- struct{},
 			err = types.StatusTLE
 		}
 		if err2 := recover(); err2 != nil {
-			handler.Debug(err2)
+			t.Handler.Debug(err2)
 			err = types.StatusFatal
 		}
 		// kill all tracee upon return
@@ -107,10 +100,10 @@ func TraceRun(done <-chan struct{}, start chan<- struct{},
 			pid, err = unix.Wait4(pgid, &wstatus, unix.WALL, &rusage)
 		}
 		if err != nil {
-			handler.Debug("wait4 failed: ", err)
+			t.Handler.Debug("wait4 failed: ", err)
 			return result, types.StatusFatal
 		}
-		handler.Debug("------ ", pid, " ------")
+		t.Handler.Debug("------ ", pid, " ------")
 
 		status := types.StatusNormal
 		if pid == pgid {
@@ -119,10 +112,10 @@ func TraceRun(done <-chan struct{}, start chan<- struct{},
 			userMem := uint64(rusage.Maxrss)                                 // kb
 
 			// check tle / mle
-			if userTime > limits.TimeLimit {
+			if userTime > t.Limit.TimeLimit {
 				status = types.StatusTLE
 			}
-			if userMem > limits.MemoryLimit {
+			if userMem > t.Limit.MemoryLimit {
 				status = types.StatusMLE
 			}
 			result = types.Result{
@@ -139,7 +132,7 @@ func TraceRun(done <-chan struct{}, start chan<- struct{},
 		switch {
 		case wstatus.Exited():
 			delete(traced, pid)
-			handler.Debug("process exited: ", pid, wstatus.ExitStatus())
+			t.Handler.Debug("process exited: ", pid, wstatus.ExitStatus())
 			if pid == pgid {
 				if execved {
 					result.ExitStatus = wstatus.ExitStatus()
@@ -151,7 +144,7 @@ func TraceRun(done <-chan struct{}, start chan<- struct{},
 
 		case wstatus.Signaled():
 			sig := wstatus.Signal()
-			handler.Debug("ptrace signaled: ", sig)
+			t.Handler.Debug("ptrace signaled: ", sig)
 			if pid == pgid {
 				delete(traced, pid)
 				switch sig {
@@ -172,7 +165,7 @@ func TraceRun(done <-chan struct{}, start chan<- struct{},
 		case wstatus.Stopped():
 			// Set option if the process is newly forked
 			if !traced[pid] {
-				handler.Debug("set ptrace option")
+				t.Handler.Debug("set ptrace option")
 				traced[pid] = true
 				// Ptrace set option valid if the tracee is stopped
 				err = setPtraceOption(pid)
@@ -188,31 +181,31 @@ func TraceRun(done <-chan struct{}, start chan<- struct{},
 				case unix.PTRACE_EVENT_SECCOMP:
 					if execved {
 						// give the customized handle for syscall
-						err := handleTrap(handler, pid)
+						err := t.handleTrap(pid)
 						if err != nil {
 							result.Status = types.StatusBan
 							return result, err
 						}
 					} else {
-						handler.Debug("ptrace seccomp before execve (should be the execve syscall)")
+						t.Handler.Debug("ptrace seccomp before execve (should be the execve syscall)")
 					}
 
 				case unix.PTRACE_EVENT_CLONE:
-					handler.Debug("ptrace stop clone")
+					t.Handler.Debug("ptrace stop clone")
 				case unix.PTRACE_EVENT_VFORK:
-					handler.Debug("ptrace stop vfork")
+					t.Handler.Debug("ptrace stop vfork")
 				case unix.PTRACE_EVENT_FORK:
-					handler.Debug("ptrace stop fork")
+					t.Handler.Debug("ptrace stop fork")
 				case unix.PTRACE_EVENT_EXEC:
 					// forked tracee have successfully called execve
 					if !execved {
 						fTime = time.Now()
 						execved = true
 					}
-					handler.Debug("ptrace stop exec")
+					t.Handler.Debug("ptrace stop exec")
 
 				default:
-					handler.Debug("ptrace unexpected trap cause: ", trapCause)
+					t.Handler.Debug("ptrace unexpected trap cause: ", trapCause)
 				}
 				unix.PtraceCont(pid, 0)
 			} else {
@@ -230,9 +223,9 @@ func TraceRun(done <-chan struct{}, start chan<- struct{},
 				// Likely encountered SIGSEGV (segment violation)
 				// Or compiler child exited
 				if stopSig != unix.SIGSTOP {
-					handler.Debug("ptrace unexpected stop signal: ", stopSig)
+					t.Handler.Debug("ptrace unexpected stop signal: ", stopSig)
 				}
-				handler.Debug("ptrace stopped")
+				t.Handler.Debug("ptrace stopped")
 				unix.PtraceCont(pid, int(stopSig))
 			}
 		}
@@ -240,31 +233,31 @@ func TraceRun(done <-chan struct{}, start chan<- struct{},
 }
 
 // handleTrap handles the seccomp trap including the custom handle
-func handleTrap(handler Handler, pid int) error {
-	handler.Debug("seccomp traced")
+func (t *Tracer) handleTrap(pid int) error {
+	t.Handler.Debug("seccomp traced")
 	msg, err := unix.PtraceGetEventMsg(pid)
 	if err != nil {
-		handler.Debug("PtraceGetEventMsg failed:", err)
+		t.Handler.Debug("PtraceGetEventMsg failed:", err)
 		return err
 	}
 	switch int16(msg) {
-	case MsgDisallow:
+	case seccomp.MsgDisallow:
 		ctx, err := getTrapContext(pid)
 		if err != nil {
-			handler.Debug("getTrapContext failed:", err)
+			t.Handler.Debug("getTrapContext failed:", err)
 			return err
 		}
-		syscallName, err := handler.GetSyscallName(ctx)
-		handler.Debug("disallowed syscall: ", ctx.SyscallNo(), syscallName, err)
-		return handler.HandlerDisallow(syscallName)
+		syscallName, err := t.Handler.GetSyscallName(ctx)
+		t.Handler.Debug("disallowed syscall: ", ctx.SyscallNo(), syscallName, err)
+		return t.Handler.HandlerDisallow(syscallName)
 
-	case MsgHandle:
-		if handler != nil {
+	case seccomp.MsgHandle:
+		if t.Handler != nil {
 			ctx, err := getTrapContext(pid)
 			if err != nil {
 				return err
 			}
-			act := handler.Handle(ctx)
+			act := t.Handler.Handle(ctx)
 
 			switch act {
 			case TraceBan:
@@ -279,7 +272,7 @@ func handleTrap(handler Handler, pid int) error {
 
 	default:
 		// undefined seccomp message, possible set up filter wrong
-		handler.Debug("unknown seccomp trap message: ", msg)
+		t.Handler.Debug("unknown seccomp trap message: ", msg)
 	}
 
 	return nil

@@ -4,6 +4,8 @@ import (
 	"syscall"
 
 	"github.com/criyle/go-sandbox/pkg/rlimit"
+	"github.com/criyle/go-sandbox/pkg/seccomp"
+	"github.com/criyle/go-sandbox/ptracer"
 	"github.com/criyle/go-sandbox/types"
 )
 
@@ -25,14 +27,13 @@ type Runner struct {
 	RLimits rlimit.RLimits
 
 	// Res limit enforced by tracer
-	TraceLimit types.Limit
+	Limit types.Limit
 
-	// Allowed / Traced syscall names
-	// Notice: file access syscalls should be traced
-	// If traced syscall is file access, it will checked by file access handler
-	// otherwise it will checked by syscall access handler
-	SyscallAllowed []string
-	SyscallTraced  []string
+	// Defines seccomp filter for the ptrace runner
+	// file access syscalls need to set as ActionTrace
+	// allowed need to set as ActionAllow
+	// default action should be ActionTrace / ActionKill
+	Seccomp seccomp.Filter
 
 	// Traced syscall handler
 	Handler Handler
@@ -44,24 +45,13 @@ type Runner struct {
 	SyncFunc func(pid int) error
 }
 
-// TraceAction defines action against a syscall check
-type TraceAction int
-
 // BanRet defines the return value for a syscall ban acction
 var BanRet = syscall.EACCES
 
-// TraceAllow allow the access, trace ban ignores the syscall and set the
-// return value to BanRet, TraceKill stops the trace action
-const (
-	TraceAllow = iota + 1
-	TraceBan
-	TraceKill
-)
-
 // Handler defines the action when a file access encountered
 type Handler interface {
-	CheckRead(string) TraceAction
-	CheckWrite(string) TraceAction
-	CheckStat(string) TraceAction
-	CheckSyscall(string) TraceAction
+	CheckRead(string) ptracer.TraceAction
+	CheckWrite(string) ptracer.TraceAction
+	CheckStat(string) ptracer.TraceAction
+	CheckSyscall(string) ptracer.TraceAction
 }

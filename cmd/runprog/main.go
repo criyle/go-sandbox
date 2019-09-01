@@ -12,6 +12,8 @@ import (
 	"github.com/criyle/go-sandbox/pkg/cgroup"
 	"github.com/criyle/go-sandbox/pkg/memfd"
 	"github.com/criyle/go-sandbox/pkg/rlimit"
+	"github.com/criyle/go-sandbox/pkg/seccomp"
+	"github.com/criyle/go-sandbox/pkg/seccomp/libseccomp"
 	"github.com/criyle/go-sandbox/runner"
 	"github.com/criyle/go-sandbox/runner/config"
 	"github.com/criyle/go-sandbox/runner/ptrace"
@@ -206,6 +208,11 @@ func start() (*types.Result, error) {
 		Stack:    stackLimit,
 	}
 
+	actionDefault := seccomp.ActionKill
+	if showDetails {
+		actionDefault = seccomp.ActionTrace.WithReturnCode(seccomp.MsgDisallow)
+	}
+
 	if useDeamon {
 		root, err := ioutil.TempDir("", "dm")
 		if err != nil {
@@ -234,7 +241,14 @@ func start() (*types.Result, error) {
 			},
 		}
 	} else if namespace {
-		h.SyscallAllow = append(h.SyscallAllow, h.SyscallTrace...)
+		builder := libseccomp.Builder{
+			Allow:   append(h.SyscallAllow, h.SyscallTrace...),
+			Default: actionDefault,
+		}
+		filter, err := builder.Build()
+		if err != nil {
+			return nil, fmt.Errorf("cannot build seccomp filter %v", err)
+		}
 		root, err := ioutil.TempDir("", "ns")
 		if err != nil {
 			return nil, fmt.Errorf("cannot make temp root for new namespace")
@@ -248,12 +262,12 @@ func start() (*types.Result, error) {
 			WorkDir:  "/w",
 			Files:    fds,
 			RLimits:  rlims,
-			ResLimits: types.Limit{
+			Limit: types.Limit{
 				TimeLimit:   timeLimit * 1e3,
 				MemoryLimit: memoryLimit << 10,
 			},
-			SyscallAllowed: h.SyscallAllow,
-			Root:           root,
+			Seccomp: filter,
+			Root:    root,
 			Mounts: unshare.GetDefaultMounts(root, []unshare.AddBind{
 				{
 					Source: workPath,
@@ -266,23 +280,31 @@ func start() (*types.Result, error) {
 			DomainName:  "run_program",
 		}
 	} else {
+		builder := libseccomp.Builder{
+			Allow:   h.SyscallAllow,
+			Trace:   h.SyscallTrace,
+			Default: actionDefault,
+		}
+		filter, err := builder.Build()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create seccomp filter %v", err)
+		}
 		runner = &ptrace.Runner{
 			Args:     h.Args,
 			Env:      []string{pathEnv},
 			ExecFile: execFile,
 			WorkDir:  workPath,
 			RLimits:  rlims,
-			TraceLimit: types.Limit{
+			Limit: types.Limit{
 				TimeLimit:   timeLimit * 1e3,
 				MemoryLimit: memoryLimit << 10,
 			},
-			Files:          fds,
-			SyscallAllowed: h.SyscallAllow,
-			SyscallTraced:  h.SyscallTrace,
-			ShowDetails:    showDetails,
-			Unsafe:         unsafe,
-			Handler:        h,
-			SyncFunc:       syncFunc,
+			Files:       fds,
+			Seccomp:     filter,
+			ShowDetails: showDetails,
+			Unsafe:      unsafe,
+			Handler:     h,
+			SyncFunc:    syncFunc,
 		}
 	}
 

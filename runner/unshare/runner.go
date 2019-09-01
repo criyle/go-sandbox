@@ -3,6 +3,7 @@ package unshare
 import (
 	"github.com/criyle/go-sandbox/pkg/mount"
 	"github.com/criyle/go-sandbox/pkg/rlimit"
+	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/types"
 )
 
@@ -25,10 +26,10 @@ type Runner struct {
 	RLimits rlimit.RLimits
 
 	// Resource limit enforced by tracer
-	ResLimits types.Limit
+	Limit types.Limit
 
-	// Allowed syscall names
-	SyscallAllowed []string
+	// Seccomp defines the seccomp filter attach to the process (should be whitelist only)
+	Seccomp seccomp.Filter
 
 	// New root
 	Root string

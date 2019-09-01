@@ -5,11 +5,9 @@ import (
 	"os"
 	"time"
 
-	libseccomp "github.com/seccomp/libseccomp-golang"
 	"golang.org/x/sys/unix"
 
 	"github.com/criyle/go-sandbox/pkg/forkexec"
-	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/types"
 )
 
@@ -20,19 +18,7 @@ const (
 
 // Start starts the unshared process
 func (r *Runner) Start(done <-chan struct{}) (<-chan types.Result, error) {
-	filter, err := seccomp.BuildFilter(libseccomp.ActKill, libseccomp.ActTrap, r.SyscallAllowed, []string{})
-	if err != nil {
-		println(err)
-		return nil, err
-	}
-	defer filter.Release()
-
-	bpf, err := seccomp.FilterToBPF(filter)
-	if err != nil {
-		println(err)
-		return nil, err
-	}
-
+	var err error
 	ch := &forkexec.Runner{
 		Args:              r.Args,
 		Env:               r.Env,
@@ -40,7 +26,7 @@ func (r *Runner) Start(done <-chan struct{}) (<-chan types.Result, error) {
 		RLimits:           r.RLimits.PrepareRLimit(),
 		Files:             r.Files,
 		WorkDir:           r.WorkDir,
-		Seccomp:           bpf,
+		Seccomp:           r.Seccomp.SockFprog(),
 		NoNewPrivs:        true,
 		StopBeforeSeccomp: false,
 		UnshareFlags:      UnshareFlags,
@@ -117,6 +103,7 @@ func (r *Runner) Trace(done <-chan struct{}, start chan<- struct{},
 	}()
 
 	fTime = time.Now()
+loop:
 	for {
 		_, err := unix.Wait4(pgid, &wstatus, 0, &rusage)
 		r.println("wait4: ", wstatus)
@@ -129,10 +116,10 @@ func (r *Runner) Trace(done <-chan struct{}, start chan<- struct{},
 		userMem := uint64(rusage.Maxrss)                                 // kb
 
 		// check tle / mle
-		if userTime > r.ResLimits.TimeLimit {
+		if userTime > r.Limit.TimeLimit {
 			status = types.StatusTLE
 		}
-		if userMem > r.ResLimits.MemoryLimit {
+		if userMem > r.Limit.MemoryLimit {
 			status = types.StatusMLE
 		}
 		result = types.Result{
@@ -161,7 +148,7 @@ func (r *Runner) Trace(done <-chan struct{}, start chan<- struct{},
 				status = types.StatusRE
 			}
 			result.Status = status
-			return result, status
+			break loop
 		}
 	}
 	return result, status
