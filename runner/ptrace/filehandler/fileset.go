@@ -1,4 +1,4 @@
-package config
+package filehandler
 
 import (
 	"path/filepath"

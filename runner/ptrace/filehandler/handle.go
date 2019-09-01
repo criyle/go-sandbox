@@ -1,19 +1,14 @@
-package config
+package filehandler
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/criyle/go-sandbox/ptracer"
 )
 
 // Handler defines file access restricted handler to call the ptrace
 // safe runner
 type Handler struct {
-	SyscallAllow, SyscallTrace, Args []string
-	FileSet                          *FileSets
-	SyscallCounter                   SyscallCounter
-	ShowDetails                      bool
+	FileSet        *FileSets
+	SyscallCounter SyscallCounter
 }
 
 // CheckRead checks whether the file have read permission
@@ -60,13 +55,5 @@ func (h *Handler) onDgsFileDetect(name string) ptracer.TraceAction {
 	if h.FileSet.IsSoftBanFile(name) {
 		return ptracer.TraceBan
 	}
-	h.print("Dangerous fileopen: ", name)
 	return ptracer.TraceKill
-}
-
-// print is used to print debug information
-func (h *Handler) print(v ...interface{}) {
-	if h.ShowDetails {
-		fmt.Fprintln(os.Stderr, v...)
-	}
 }

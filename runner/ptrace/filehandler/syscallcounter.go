@@ -1,4 +1,4 @@
-package config
+package filehandler
 
 // SyscallCounter defines a count-down for each each syscall occurs
 type SyscallCounter map[string]int

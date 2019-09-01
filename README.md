@@ -1,6 +1,6 @@
 # go-sandbox
 
-Original goal is to reimplement [uoj-judger/run_program](https://github.com/vfleaking/uoj) in GO language using [libseccomp](https://github.com/pkg/seccomp/libseccomp-golang). As technology grows, it also implements new technologies including Linux namespace & cgroup.
+Original goal was to reimplement [uoj-judger/run_program](https://github.com/vfleaking/uoj) in GO language using [libseccomp](https://github.com/pkg/seccomp/libseccomp-golang). As technology grows, it also implements new technologies including Linux namespace and cgroup.
 
 ## Install
 
@@ -19,7 +19,7 @@ Original goal is to reimplement [uoj-judger/run_program](https://github.com/vfle
 Improvements:
 
 1. Precise resource limits (s -> ms, mb -> kb)
-2. More architectures (arm32, arm64, x86)
+2. More architectures (arm32, arm64)
 3. Allow multiple traced programs in different threads
 4. Allow pipes as input / output files
 
@@ -44,7 +44,8 @@ Default file access syscall check:
 
 ## Packages (/pkg)
 
-- seccomp: provides utility function that wrappers libseccomp
+- seccomp: provides seccomp type definition
+  - libseccomp: provides utility function that wrappers libseccomp
 - forkexec: fork-exec provides mount, unshare, ptrace, seccomp, capset before exec
 - memfd: read regular file and creates a seaed memfd for its contents
 - unixsocket: send / recv oob msg from a unix socket
@@ -54,10 +55,11 @@ Default file access syscall check:
 
 ## Packages
 
+- config: defines arch & language specified trace condition for ptrace runner from UOJ
 - deamon: creates pre-forked container to run programs inside
 - runner: interface to run program
-  - config: defines arch & language specified trace condition for seccomp and ptrace
   - ptrace: wrapper to call forkexec and ptracer
+    - filehandler: an implementation of UOJ file set
   - unshare: wrapper to call forkexec and unshared namespaces
 - ptracer: ptrace tracer and provides syscall trap filter context
 - types: provides general res / result data structures
@@ -68,7 +70,7 @@ Default file access syscall check:
 
 ## Configurations
 
-- run/config/config.go: all configs toward running specs
+- config/config.go: all configs toward running specs (similar to UOJ)
 
 ## Benchmarks (docker desktop amd64 / native arm64)
 

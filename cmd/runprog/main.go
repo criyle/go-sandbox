@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/criyle/go-sandbox/config"
 	"github.com/criyle/go-sandbox/deamon"
 	"github.com/criyle/go-sandbox/pkg/cgroup"
 	"github.com/criyle/go-sandbox/pkg/memfd"
@@ -15,8 +16,8 @@ import (
 	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/pkg/seccomp/libseccomp"
 	"github.com/criyle/go-sandbox/runner"
-	"github.com/criyle/go-sandbox/runner/config"
 	"github.com/criyle/go-sandbox/runner/ptrace"
+	"github.com/criyle/go-sandbox/runner/ptrace/filehandler"
 	"github.com/criyle/go-sandbox/runner/unshare"
 	"github.com/criyle/go-sandbox/types"
 )
@@ -145,9 +146,9 @@ func start() (*types.Result, error) {
 		rt       types.Result
 	)
 
-	addRead := config.GetExtraSet(addReadable, addRawReadable)
-	addWrite := config.GetExtraSet(addWritable, addRawWritable)
-	h := config.GetConf(pType, workPath, args, addRead, addWrite, allowProc, showDetails)
+	addRead := filehandler.GetExtraSet(addReadable, addRawReadable)
+	addWrite := filehandler.GetExtraSet(addWritable, addRawWritable)
+	args, allow, trace, h := config.GetConf(pType, workPath, args, addRead, addWrite, allowProc)
 
 	if useCGroup {
 		cg, err = cgroup.NewCGroup("run_program")
@@ -242,7 +243,7 @@ func start() (*types.Result, error) {
 		}
 	} else if namespace {
 		builder := libseccomp.Builder{
-			Allow:   append(h.SyscallAllow, h.SyscallTrace...),
+			Allow:   append(allow, trace...),
 			Default: actionDefault,
 		}
 		filter, err := builder.Build()
@@ -256,7 +257,7 @@ func start() (*types.Result, error) {
 		defer os.RemoveAll(root)
 
 		runner = &unshare.Runner{
-			Args:     h.Args,
+			Args:     args,
 			Env:      []string{pathEnv},
 			ExecFile: execFile,
 			WorkDir:  "/w",
@@ -281,8 +282,8 @@ func start() (*types.Result, error) {
 		}
 	} else {
 		builder := libseccomp.Builder{
-			Allow:   h.SyscallAllow,
-			Trace:   h.SyscallTrace,
+			Allow:   allow,
+			Trace:   trace,
 			Default: actionDefault,
 		}
 		filter, err := builder.Build()
@@ -290,7 +291,7 @@ func start() (*types.Result, error) {
 			return nil, fmt.Errorf("failed to create seccomp filter %v", err)
 		}
 		runner = &ptrace.Runner{
-			Args:     h.Args,
+			Args:     args,
 			Env:      []string{pathEnv},
 			ExecFile: execFile,
 			WorkDir:  workPath,
