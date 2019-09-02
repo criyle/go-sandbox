@@ -1,3 +1,6 @@
+// +build linux
+
+// Package memfd provides a wrapper to linux memfd
 package memfd
 
 import (
@@ -8,21 +11,31 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const createFlag = unix.MFD_CLOEXEC | unix.MFD_ALLOW_SEALING
 const roSeal = unix.F_SEAL_SEAL | unix.F_SEAL_SHRINK | unix.F_SEAL_GROW | unix.F_SEAL_WRITE
 
-// DupToMemfd convers a fd to sealed memfd for given name
-func DupToMemfd(name string, fin *os.File) (*os.File, error) {
-	fd, err := unix.MemfdCreate(name, unix.MFD_CLOEXEC|unix.MFD_ALLOW_SEALING)
+// New creates a new memfd, caller need to close the file
+func New(name string) (*os.File, error) {
+	fd, err := unix.MemfdCreate(name, createFlag)
 	if err != nil {
-		return nil, fmt.Errorf("DupToMemfd: memfd_create failed(%v)", err)
+		return nil, fmt.Errorf("memfd: memfd_create failed %v", err)
 	}
 	file := os.NewFile(uintptr(fd), name)
 	if file == nil {
 		unix.Close(fd)
-		return nil, fmt.Errorf("DupToMemfd: memfd new file failed")
+		return nil, fmt.Errorf("memfd: MewFile failed")
 	}
-	// TODO: Send file might be more efficient here
-	if _, err = io.Copy(file, fin); err != nil {
+	return file, nil
+}
+
+// DupToMemfd reads content from reader to sealed (readonly) memfd for given name
+func DupToMemfd(name string, reader io.Reader) (*os.File, error) {
+	file, err := New(name)
+	if err != nil {
+		return nil, fmt.Errorf("DupToMemfd: new memfd failed %v", err)
+	}
+	// linux syscall sendfile might be more efficient here if reader is a file
+	if _, err = io.Copy(file, reader); err != nil {
 		file.Close()
 		return nil, fmt.Errorf("DupToMemfd: memfd io copy failed(%v)", err)
 	}

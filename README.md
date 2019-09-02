@@ -52,6 +52,7 @@ Default file access syscall check:
 - cgroup: creates cgroup directories and collects resource usage / limits
 - mount: provides utility function that wrappers mount syscall
 - rlimit: provides utility function that defines rlimit syscall
+- pipe: provides wrapper to collect all written content through pipe
 
 ## Packages
 
