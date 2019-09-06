@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/criyle/go-sandbox/config"
-	"github.com/criyle/go-sandbox/deamon"
+	"github.com/criyle/go-sandbox/daemon"
 	"github.com/criyle/go-sandbox/pkg/cgroup"
 	"github.com/criyle/go-sandbox/pkg/memfd"
 	"github.com/criyle/go-sandbox/pkg/rlimit"
@@ -32,7 +32,7 @@ var (
 	timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint64
 	inputFileName, outputFileName, errorFileName, workPath         string
 
-	useDeamon     bool
+	usedaemon     bool
 	pType, result string
 	args          []string
 )
@@ -44,7 +44,7 @@ func printUsage() {
 }
 
 func main() {
-	deamon.ContainerInit()
+	daemon.ContainerInit()
 
 	flag.Usage = printUsage
 	flag.Uint64Var(&timeLimit, "tl", 1, "Set time limit (in second)")
@@ -68,7 +68,7 @@ func main() {
 	flag.BoolVar(&namespace, "ns", false, "Use namespace to restrict file accesses")
 	flag.BoolVar(&useCGroup, "cgroup", false, "Use cgroup to colloct resource usage")
 	flag.BoolVar(&memfile, "memfd", false, "Use memfd as exec file")
-	flag.BoolVar(&useDeamon, "deamon", false, "Use deamon container to execute file")
+	flag.BoolVar(&usedaemon, "daemon", false, "Use daemon container to execute file")
 	flag.Parse()
 
 	args = flag.Args()
@@ -128,12 +128,12 @@ func main() {
 	}
 }
 
-type deamonRunner struct {
-	*deamon.Master
-	*deamon.ExecveParam
+type daemonRunner struct {
+	*daemon.Master
+	*daemon.ExecveParam
 }
 
-func (r *deamonRunner) Start(done <-chan struct{}) (<-chan types.Result, error) {
+func (r *daemonRunner) Start(done <-chan struct{}) (<-chan types.Result, error) {
 	return r.Master.Execve(done, r.ExecveParam)
 }
 
@@ -214,25 +214,25 @@ func start() (*types.Result, error) {
 		actionDefault = seccomp.ActionTrace.WithReturnCode(seccomp.MsgDisallow)
 	}
 
-	if useDeamon {
+	if usedaemon {
 		root, err := ioutil.TempDir("", "dm")
 		if err != nil {
-			return nil, fmt.Errorf("cannot make temp root for deamon namespace: %v", err)
+			return nil, fmt.Errorf("cannot make temp root for daemon namespace: %v", err)
 		}
 		defer os.RemoveAll(root)
 
-		m, err := deamon.New(root)
+		m, err := daemon.New(root)
 		if err != nil {
 			return nil, fmt.Errorf("failed to new master: %v", err)
 		}
 		defer m.Destroy()
 		err = m.Ping()
 		if err != nil {
-			return nil, fmt.Errorf("failed to ping deamon: %v", err)
+			return nil, fmt.Errorf("failed to ping daemon: %v", err)
 		}
-		runner = &deamonRunner{
+		runner = &daemonRunner{
 			Master: m,
-			ExecveParam: &deamon.ExecveParam{
+			ExecveParam: &daemon.ExecveParam{
 				Args:     args,
 				Envv:     []string{pathEnv},
 				Fds:      fds,

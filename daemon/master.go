@@ -1,4 +1,4 @@
-package deamon
+package daemon
 
 import (
 	"fmt"
@@ -21,44 +21,44 @@ func New(root string) (*Master, error) {
 	// dummy stdin / stdout / stderr
 	fnull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0666)
 	if err != nil {
-		return nil, fmt.Errorf("deamon: failed to open devNull(%v)", err)
+		return nil, fmt.Errorf("daemon: failed to open devNull(%v)", err)
 	}
 	defer fnull.Close()
 
 	// prepare self memfd
 	self, err := os.Open("/proc/self/exe")
 	if err != nil {
-		return nil, fmt.Errorf("deamon: failed to open /proc/self/exe(%v)", err)
+		return nil, fmt.Errorf("daemon: failed to open /proc/self/exe(%v)", err)
 	}
 	defer self.Close()
 
-	execFile, err := memfd.DupToMemfd("deamon", self)
+	execFile, err := memfd.DupToMemfd("daemon", self)
 	if err != nil {
-		return nil, fmt.Errorf("deamon: failed to create memfd(%v)", err)
+		return nil, fmt.Errorf("daemon: failed to create memfd(%v)", err)
 	}
 	defer execFile.Close()
 
 	// prepare socket
 	ins, outs, err := unixsocket.NewSocketPair()
 	if err != nil {
-		return nil, fmt.Errorf("deamon: failed to create socket(%v)", err)
+		return nil, fmt.Errorf("daemon: failed to create socket(%v)", err)
 	}
 	outf, err := outs.Conn.File()
 	if err != nil {
 		ins.Conn.Close()
 		outs.Conn.Close()
-		return nil, fmt.Errorf("deamon: failed to dup file outs(%v)", err)
+		return nil, fmt.Errorf("daemon: failed to dup file outs(%v)", err)
 	}
 	defer outf.Close()
 	if err = ins.SetPassCred(1); err != nil {
 		ins.Conn.Close()
 		outs.Conn.Close()
-		return nil, fmt.Errorf("deamon: failed to set pass_cred ins(%v)", err)
+		return nil, fmt.Errorf("daemon: failed to set pass_cred ins(%v)", err)
 	}
 	if err = outs.SetPassCred(1); err != nil {
 		ins.Conn.Close()
 		outs.Conn.Close()
-		return nil, fmt.Errorf("deamon: failed to set pass_cred outs(%v)", err)
+		return nil, fmt.Errorf("daemon: failed to set pass_cred outs(%v)", err)
 	}
 
 	r := &forkexec.Runner{
@@ -69,22 +69,22 @@ func New(root string) (*Master, error) {
 		WorkDir:      "/w",
 		UnshareFlags: forkexec.UnshareFlags,
 		Mounts:       DefaultMounts,
-		HostName:     "deamon",
-		DomainName:   "deamon",
+		HostName:     "daemon",
+		DomainName:   "daemon",
 		PivotRoot:    root,
 	}
 	pid, err := r.Start()
 	if err != nil {
 		ins.Conn.Close()
 		outs.Conn.Close()
-		return nil, fmt.Errorf("deamon: failed to execve(%v)", err)
+		return nil, fmt.Errorf("daemon: failed to execve(%v)", err)
 	}
 
 	outs.Conn.Close()
 	return &Master{pid, ins}, nil
 }
 
-// Destroy kill the deamon process (with container)
+// Destroy kill the daemon process (with container)
 func (m *Master) Destroy() error {
 	var wstatus unix.WaitStatus
 	unix.Kill(m.pid, unix.SIGKILL)

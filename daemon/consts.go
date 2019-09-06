@@ -1,4 +1,4 @@
-package deamon
+package daemon
 
 const (
 	cmdPing   = "ping"

@@ -1,11 +1,11 @@
-// Package deamon provides pre-forked container to reduce the container
-// create / destroy costs (about 160ms). It creates deamon within unshared
+// Package daemon provides pre-forked container to reduce the container
+// create / destroy costs (about 160ms). It creates daemon within unshared
 // container and communicate with original process using unix socket with
 // oob for fd / pid and structs are encoded in gob format.
-package deamon
+package daemon
 
 /*
-Protocol between client and deamon (not thread safe):
+Protocol between client and daemon (not thread safe):
 - ping (alive check):
 	reply: pong
 - copyin (copy file into container):
@@ -30,7 +30,7 @@ Protocol between client and deamon (not thread safe):
     - send: "kill" (as cmd) / reply: "finished"
 	reply:
 
-Any socket related error will cause the deamon exit (with all process inside container)
+Any socket related error will cause the daemon exit (with all process inside container)
 */
 
 import (
@@ -38,7 +38,7 @@ import (
 	"github.com/criyle/go-sandbox/types"
 )
 
-// Cmd is the control message send into deamon
+// Cmd is the control message send into daemon
 type Cmd struct {
 	Cmd    string          // type of the cmd
 	Path   string          // path (copyin / open)

@@ -39,7 +39,7 @@ Default file access syscall check:
 
 ### pre-forked container
 
-1. Pre-fork container deamons to run programs inside
+1. Pre-fork container daemons to run programs inside
 2. Unix socket to pass fd inside / outside
 
 ## Packages (/pkg)
@@ -57,7 +57,7 @@ Default file access syscall check:
 ## Packages
 
 - config: defines arch & language specified trace condition for ptrace runner from UOJ
-- deamon: creates pre-forked container to run programs inside
+- daemon: creates pre-forked container to run programs inside
 - runner: interface to run program
   - ptrace: wrapper to call forkexec and ptracer
     - filehandler: an implementation of UOJ file set
