@@ -70,9 +70,14 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 		// done signal (should recv after kill)
 		m.recvReply()
 		// emit result after all communication finish
+		status := reply2.Status
+		if reply2.Error != "" {
+			status = types.StatusFatal
+		}
 		wait <- types.Result{
 			ExitStatus: reply2.ExitStatus,
-			Status:     reply2.Status,
+			Status:     status,
+			Error:      reply2.Error,
 		}
 	}()
 	// Kill (if wait is done, a kill message need to be send to collect zombies)

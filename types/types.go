@@ -6,6 +6,7 @@ import "time"
 type Result struct {
 	Status            // the final status for the process
 	ExitStatus int    // exit Status
+	Error      string // potential detailed error message
 	UserTime   uint64 // used user CPU time (in ms)
 	UserMem    uint64 // used user memory (in kb)
 	Stat              // collects time usage for the runner
