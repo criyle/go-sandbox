@@ -44,5 +44,9 @@ func DupToMemfd(name string, reader io.Reader) (*os.File, error) {
 		file.Close()
 		return nil, fmt.Errorf("DupToMemfd: memfd seal failed(%v)", err)
 	}
+	if _, err := file.Seek(0, 0); err != nil {
+		file.Close()
+		return nil, fmt.Errorf("DupToMemfd: seek failed(%v)", err)
+	}
 	return file, nil
 }
