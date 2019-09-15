@@ -184,20 +184,18 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 		DropCaps:   true,
 		SyncFunc:   syncFunc,
 	}
+	// starts the runner, error is handled same as wait4 to make api simple
 	pid, err := r.Start()
-	if err != nil {
-		return sendErrorReply(s, "execve: %v", err)
-	}
 
 	// done is to signal kill goroutine exits
-	done := make(chan struct{})
+	killDone := make(chan struct{})
 	// waitDone is to signal kill goroutine to collect zombies
 	waitDone := make(chan struct{})
 
 	// recv kill
 	go func() {
 		// signal done
-		defer close(done)
+		defer close(killDone)
 		// msg must be kill
 		recvCmd(s)
 		// kill all
@@ -206,29 +204,27 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 		<-waitDone
 		// collect zombies
 		for {
-			_, err = syscall.Wait4(-1, nil, syscall.WNOHANG, nil)
-			if err != nil {
+			pid, err := syscall.Wait4(-1, nil, syscall.WNOHANG, nil)
+			if err != nil || pid <= 0 {
 				break
 			}
 		}
 	}()
 
-	// wait pid
+	// wait pid if no error encoutered for execve
 	var wstatus syscall.WaitStatus
-loop:
-	for {
+	if err == nil {
 		_, err = syscall.Wait4(pid, &wstatus, 0, nil)
-		// sync with kill goroutine
-		close(waitDone)
-		if err != nil {
-			sendErrorReply(s, "execve: wait4 %v", err)
-			break loop
-		}
+	}
+	// sync with kill goroutine
+	close(waitDone)
+	if err != nil {
+		sendErrorReply(s, "execve: wait4 %v", err)
+	} else {
 		switch {
 		case wstatus.Exited():
 			reply := Reply{ExitStatus: wstatus.ExitStatus()}
 			sendReply(s, &reply, nil)
-			break loop
 
 		case wstatus.Signaled():
 			var status types.Status
@@ -245,11 +241,12 @@ loop:
 			}
 			reply := Reply{Status: status}
 			sendReply(s, &reply, nil)
-			break loop
+		default:
+			sendErrorReply(s, "execve: unknown status %v", wstatus)
 		}
 	}
 	// wait for kill msg and reply done for finish
-	<-done
+	<-killDone
 	return sendReply(s, &Reply{}, nil)
 }
 
