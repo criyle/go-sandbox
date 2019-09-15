@@ -62,11 +62,13 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 	// make sure goroutine not leaked (blocked) even if result is not consumed
 	wait := make(chan types.Result, 1)
 	waitDone := make(chan struct{})
+	killDone := make(chan struct{})
 	// Wait
 	go func() {
 		defer close(wait)
 		reply2, _, _ := m.recvReply()
 		close(waitDone)
+		<-killDone
 		wait <- types.Result{
 			ExitStatus: reply2.ExitStatus,
 			Status:     reply2.Status,
@@ -81,6 +83,7 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 		case <-waitDone:
 		}
 		m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
+		close(killDone)
 	}()
 	return wait, nil
 }
