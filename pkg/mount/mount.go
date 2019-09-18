@@ -1,7 +1,6 @@
 package mount
 
 import (
-	"os"
 	"syscall"
 )
 
@@ -15,6 +14,7 @@ type Mount struct {
 type SyscallParams struct {
 	Source, Target, FsType, Data *byte
 	Flags                        uintptr
+	Prefixes                     []*byte
 }
 
 // ToSyscall convert Mount to SyscallPrams
@@ -38,53 +38,42 @@ func (m *Mount) ToSyscall() (*SyscallParams, error) {
 			return nil, err
 		}
 	}
+	prefix := pathPrefix(m.Target)
+	paths, err := arrayPtrFromStrings(prefix)
+	if err != nil {
+		return nil, err
+	}
 	return &SyscallParams{
-		Source: source,
-		Target: target,
-		FsType: fsType,
-		Flags:  m.Flags,
-		Data:   data,
+		Source:   source,
+		Target:   target,
+		FsType:   fsType,
+		Flags:    m.Flags,
+		Data:     data,
+		Prefixes: paths,
 	}, nil
 }
 
-// Mount calls mount syscall
-func (m *Mount) Mount() error {
-	if err := os.MkdirAll(m.Target, 0755); err != nil {
-		return err
-	}
-	if err := syscall.Mount(m.Source, m.Target, m.FsType, m.Flags, m.Data); err != nil {
-		return err
-	}
-	// Read-only bind mount need to be remounted
-	const bindRo = syscall.MS_BIND | syscall.MS_RDONLY
-	if m.Flags&bindRo == bindRo {
-		if err := syscall.Mount("", m.Target, m.FsType, m.Flags|syscall.MS_REMOUNT, m.Data); err != nil {
-			return err
+// pathPrefix get all components from path
+func pathPrefix(path string) []string {
+	ret := make([]string, 0)
+	for i := 1; i < len(path); i++ {
+		if path[i] == '/' {
+			ret = append(ret, path[:i])
 		}
 	}
-	return nil
+	ret = append(ret, path)
+	return ret
 }
 
-// ToSyscalls converts arrays of Mounts into SyscallParams
-func ToSyscalls(ms []*Mount) ([]*SyscallParams, error) {
-	ret := make([]*SyscallParams, 0, len(ms))
-	for _, m := range ms {
-		sp, err := m.ToSyscall()
+// arrayPtrFromStrings converts srings to c style strings
+func arrayPtrFromStrings(strs []string) ([]*byte, error) {
+	bytes := make([]*byte, 0, len(strs))
+	for _, s := range strs {
+		b, err := syscall.BytePtrFromString(s)
 		if err != nil {
 			return nil, err
 		}
-		ret = append(ret, sp)
+		bytes = append(bytes, b)
 	}
-	return ret, nil
-}
-
-// Mounts calls multiple mount syscalls
-func Mounts(ms []*Mount) error {
-	for _, m := range ms {
-		err := m.Mount()
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return bytes, nil
 }

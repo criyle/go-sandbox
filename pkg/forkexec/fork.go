@@ -58,12 +58,6 @@ func (r *Runner) Start() (int, error) {
 		return 0, err
 	}
 
-	// prepare mount param
-	mountParams, dirsToMake, err := prepareMounts(r.Mounts)
-	if err != nil {
-		return 0, nil
-	}
-
 	// socketpair p used to notify child the uid / gid mapping have been setup
 	// socketpair p is also used to sync with parent before final execve
 	// p[0] is used by parent and p[1] is used by child
@@ -277,9 +271,9 @@ func (r *Runner) Start() (int, error) {
 	}
 
 	// performing mounts
-	for i, m := range mountParams {
+	for _, m := range r.Mounts {
 		// mkdirs(target)
-		for _, p := range dirsToMake[i] {
+		for _, p := range m.Prefixes {
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIRAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(p)), 0755)
 			if err1 != 0 && err1 != syscall.EEXIST {
 				goto childerror

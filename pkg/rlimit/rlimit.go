@@ -8,10 +8,10 @@ import (
 type RLimits struct {
 	CPU          uint64 // in s
 	CPUHard      uint64 // in s
-	Data         uint64 // in kb
-	FileSize     uint64 // in kb
-	Stack        uint64 // in kb
-	AddressSpace uint64 // in kb
+	Data         uint64 // in bytes
+	FileSize     uint64 // in bytes
+	Stack        uint64 // in bytes
+	AddressSpace uint64 // in bytes
 }
 
 // RLimit is the resource limits defined by Linux setrlimit
@@ -23,7 +23,7 @@ type RLimit struct {
 }
 
 func getRlimit(cur, max uint64) syscall.Rlimit {
-	return syscall.Rlimit{Cur: uint64(cur), Max: uint64(max)}
+	return syscall.Rlimit{Cur: cur, Max: max}
 }
 
 // PrepareRLimit creates rlimit structures for tracee
@@ -44,25 +44,25 @@ func (r *RLimits) PrepareRLimit() []RLimit {
 	if r.Data > 0 {
 		ret = append(ret, RLimit{
 			Res:  syscall.RLIMIT_DATA,
-			Rlim: getRlimit(r.Data<<10, r.Data<<10),
+			Rlim: getRlimit(r.Data, r.Data),
 		})
 	}
 	if r.FileSize > 0 {
 		ret = append(ret, RLimit{
 			Res:  syscall.RLIMIT_FSIZE,
-			Rlim: getRlimit(r.FileSize<<10, r.FileSize<<10),
+			Rlim: getRlimit(r.FileSize, r.FileSize),
 		})
 	}
 	if r.Stack > 0 {
 		ret = append(ret, RLimit{
 			Res:  syscall.RLIMIT_STACK,
-			Rlim: getRlimit(r.Stack<<10, r.Stack<<10),
+			Rlim: getRlimit(r.Stack, r.Stack),
 		})
 	}
 	if r.AddressSpace > 0 {
 		ret = append(ret, RLimit{
 			Res:  syscall.RLIMIT_AS,
-			Rlim: getRlimit(r.AddressSpace<<10, r.AddressSpace<<10),
+			Rlim: getRlimit(r.AddressSpace, r.AddressSpace),
 		})
 	}
 	return ret

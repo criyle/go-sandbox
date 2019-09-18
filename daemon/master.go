@@ -6,6 +6,7 @@ import (
 
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/pkg/memfd"
+	"github.com/criyle/go-sandbox/pkg/mount"
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
 	"golang.org/x/sys/unix"
 )
@@ -43,22 +44,27 @@ func New(root string) (*Master, error) {
 	if err != nil {
 		return nil, fmt.Errorf("daemon: failed to create socket(%v)", err)
 	}
+	defer outs.Conn.Close()
+
 	outf, err := outs.Conn.File()
 	if err != nil {
 		ins.Conn.Close()
-		outs.Conn.Close()
 		return nil, fmt.Errorf("daemon: failed to dup file outs(%v)", err)
 	}
 	defer outf.Close()
+
 	if err = ins.SetPassCred(1); err != nil {
 		ins.Conn.Close()
-		outs.Conn.Close()
 		return nil, fmt.Errorf("daemon: failed to set pass_cred ins(%v)", err)
 	}
 	if err = outs.SetPassCred(1); err != nil {
 		ins.Conn.Close()
-		outs.Conn.Close()
 		return nil, fmt.Errorf("daemon: failed to set pass_cred outs(%v)", err)
+	}
+	mounts, err := mount.NewBuilder().WithMounts(DefaultMounts).Build(true)
+	if err != nil {
+		ins.Conn.Close()
+		return nil, fmt.Errorf("daemon: failed to build rootfs mount %v", err)
 	}
 
 	r := &forkexec.Runner{
@@ -68,7 +74,7 @@ func New(root string) (*Master, error) {
 		Files:        []uintptr{fnull.Fd(), fnull.Fd(), fnull.Fd(), uintptr(outf.Fd())},
 		WorkDir:      "/w",
 		UnshareFlags: forkexec.UnshareFlags,
-		Mounts:       DefaultMounts,
+		Mounts:       mounts,
 		HostName:     "daemon",
 		DomainName:   "daemon",
 		PivotRoot:    root,
@@ -76,11 +82,8 @@ func New(root string) (*Master, error) {
 	pid, err := r.Start()
 	if err != nil {
 		ins.Conn.Close()
-		outs.Conn.Close()
 		return nil, fmt.Errorf("daemon: failed to execve(%v)", err)
 	}
-
-	outs.Conn.Close()
 	return &Master{pid, ins}, nil
 }
 

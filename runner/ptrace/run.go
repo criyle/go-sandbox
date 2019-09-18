@@ -12,7 +12,7 @@ func (r *Runner) Start(done <-chan struct{}) (<-chan types.Result, error) {
 		Args:     r.Args,
 		Env:      r.Env,
 		ExecFile: r.ExecFile,
-		RLimits:  r.RLimits.PrepareRLimit(),
+		RLimits:  r.RLimits,
 		Files:    r.Files,
 		WorkDir:  r.WorkDir,
 		Seccomp:  r.Seccomp.SockFprog(),

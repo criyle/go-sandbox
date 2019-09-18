@@ -12,6 +12,7 @@ import (
 	"github.com/criyle/go-sandbox/daemon"
 	"github.com/criyle/go-sandbox/pkg/cgroup"
 	"github.com/criyle/go-sandbox/pkg/memfd"
+	"github.com/criyle/go-sandbox/pkg/mount"
 	"github.com/criyle/go-sandbox/pkg/rlimit"
 	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/pkg/seccomp/libseccomp"
@@ -205,8 +206,8 @@ func start() (*types.Result, error) {
 	rlims := rlimit.RLimits{
 		CPU:      timeLimit,
 		CPUHard:  realTimeLimit,
-		FileSize: outputLimit,
-		Stack:    stackLimit,
+		FileSize: outputLimit << 20,
+		Stack:    stackLimit << 20,
 	}
 
 	actionDefault := seccomp.ActionKill
@@ -255,26 +256,24 @@ func start() (*types.Result, error) {
 			return nil, fmt.Errorf("cannot make temp root for new namespace")
 		}
 		defer os.RemoveAll(root)
-
+		mounts, err := mount.NewBuilder().WithMounts(unshare.DefaultMounts).WithBind(root, "w", true).Build(true)
+		if err != nil {
+			return nil, fmt.Errorf("cannot make rootfs mounts")
+		}
 		runner = &unshare.Runner{
 			Args:     args,
 			Env:      []string{pathEnv},
 			ExecFile: execFile,
 			WorkDir:  "/w",
 			Files:    fds,
-			RLimits:  rlims,
+			RLimits:  rlims.PrepareRLimit(),
 			Limit: types.Limit{
 				TimeLimit:   timeLimit * 1e3,
 				MemoryLimit: memoryLimit << 10,
 			},
-			Seccomp: filter,
-			Root:    root,
-			Mounts: unshare.GetDefaultMounts(root, []unshare.AddBind{
-				{
-					Source: workPath,
-					Target: "w",
-				},
-			}),
+			Seccomp:     filter,
+			Root:        root,
+			Mounts:      mounts,
 			ShowDetails: showDetails,
 			SyncFunc:    syncFunc,
 			HostName:    "run_program",
@@ -295,7 +294,7 @@ func start() (*types.Result, error) {
 			Env:      []string{pathEnv},
 			ExecFile: execFile,
 			WorkDir:  workPath,
-			RLimits:  rlims,
+			RLimits:  rlims.PrepareRLimit(),
 			Limit: types.Limit{
 				TimeLimit:   timeLimit * 1e3,
 				MemoryLimit: memoryLimit << 10,

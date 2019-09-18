@@ -23,7 +23,7 @@ type Runner struct {
 	Files []uintptr
 
 	// Resource limit set by set rlimit
-	RLimits rlimit.RLimits
+	RLimits []rlimit.RLimit
 
 	// Resource limit enforced by tracer
 	Limit types.Limit
@@ -35,7 +35,7 @@ type Runner struct {
 	Root string
 
 	// Mount syscalls
-	Mounts []*mount.Mount
+	Mounts []mount.SyscallParams
 
 	// hostname & domainname
 	HostName, DomainName string

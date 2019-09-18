@@ -24,7 +24,7 @@ type Runner struct {
 	Files []uintptr
 
 	// Resource limit set by set rlimit
-	RLimits rlimit.RLimits
+	RLimits []rlimit.RLimit
 
 	// Res limit enforced by tracer
 	Limit types.Limit

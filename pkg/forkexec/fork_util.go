@@ -2,8 +2,6 @@ package forkexec
 
 import (
 	"syscall"
-
-	"github.com/criyle/go-sandbox/pkg/mount"
 )
 
 // prepareExec prepares execve parameters
@@ -62,48 +60,4 @@ func preparePivotRoot(r string) (*byte, *byte, error) {
 		return nil, nil, err
 	}
 	return root, oldRoot, nil
-}
-
-// prepareMounts prepare mkdir and mount syscall params
-func prepareMounts(ms []*mount.Mount) ([]*mount.SyscallParams, [][]*byte, error) {
-	params, err := mount.ToSyscalls(ms)
-	if err != nil {
-		return nil, nil, err
-	}
-	// evaluate paths that need to be created
-	pathsToCreate := make([][]*byte, 0, len(ms))
-	for _, m := range ms {
-		prefix := pathPrefix(m.Target)
-		paths, err := arrayPtrFromStrings(prefix)
-		if err != nil {
-			return nil, nil, err
-		}
-		pathsToCreate = append(pathsToCreate, paths)
-	}
-	return params, pathsToCreate, nil
-}
-
-// pathPrefix get all components from path
-func pathPrefix(path string) []string {
-	ret := make([]string, 0)
-	for i := 1; i < len(path); i++ {
-		if path[i] == '/' {
-			ret = append(ret, path[:i])
-		}
-	}
-	ret = append(ret, path)
-	return ret
-}
-
-// arrayPtrFromStrings convers srings to c style strings
-func arrayPtrFromStrings(strs []string) ([]*byte, error) {
-	bytes := make([]*byte, 0, len(strs))
-	for _, s := range strs {
-		b, err := syscall.BytePtrFromString(s)
-		if err != nil {
-			return nil, err
-		}
-		bytes = append(bytes, b)
-	}
-	return bytes, nil
 }

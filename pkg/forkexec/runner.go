@@ -56,23 +56,23 @@ type Runner struct {
 	// need CAP_SYS_ADMIN inside the namespace (e.g. unshare user namespace)
 	// if pivot root is provided, relative target is better for chdir-mount meta
 	// and pivot root will mount as tmpfs before any mount
-	Mounts []*mount.Mount
-
-	// HostName and DomainName to be set after unshare UTS & user (CAP_SYS_ADMIN)
-	HostName, DomainName string
+	Mounts []mount.SyscallParams
 
 	// pivot_root defines a readonly new root after unshare mount namespace
-	// it should be a directory in absolute path
-	// Before mounts, tt will call:
+	// it should be a directory in absolute path and should used with mounts
+	// Call path:
 	// mount("tmpfs", root, "tmpfs", 0, nil)
 	// chdir(root)
-	// After mounts, it will call:
+	// [do mounts]
 	// mkdir("old_root")
 	// pivot_root(root, "old_root")
 	// umount("old_root", MNT_DETACH)
 	// rmdir("old_root")
 	// mount("tmpfs", "/", "tmpfs", MS_BIND | MS_REMOUNT | MS_RDONLY | MS_NOATIME | MS_NOSUID, nil)
 	PivotRoot string
+
+	// HostName and DomainName to be set after unshare UTS & user (CAP_SYS_ADMIN)
+	HostName, DomainName string
 
 	// drop_caps calls cap_set(self, 0) to drop all capabilities
 	// from effective, permitted, inheritable capability sets before execve
