@@ -148,22 +148,17 @@ func benchmarkRun(r *Runner, b *testing.B) {
 	}
 }
 
-func getMounts(dirs []string) []*mount.Mount {
-	ret := make([]*mount.Mount, 0, len(dirs))
+func getMounts(dirs []string) []mount.SyscallParams {
+	builder := mount.NewBuilder()
 	for _, d := range dirs {
-		if _, err := os.Stat(d); !os.IsNotExist(err) {
-			ret = append(ret, getMount(d))
-		}
+		builder.WithMount(mount.Mount{
+			Source: d,
+			Target: d[1:],
+			Flags:  roBind,
+		})
 	}
-	return ret
-}
-
-func getMount(dir string) *mount.Mount {
-	return &mount.Mount{
-		Source: dir,
-		Target: dir[1:],
-		Flags:  roBind,
-	}
+	m, _ := builder.Build(true)
+	return m
 }
 
 func openNull(b *testing.B) *os.File {
