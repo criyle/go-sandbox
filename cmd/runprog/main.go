@@ -44,9 +44,12 @@ func printUsage() {
 	os.Exit(2)
 }
 
-func main() {
-	daemon.ContainerInit()
+func init() {
+	// container init
+	daemon.Init()
+}
 
+func main() {
 	flag.Usage = printUsage
 	flag.Uint64Var(&timeLimit, "tl", 1, "Set time limit (in second)")
 	flag.Uint64Var(&realTimeLimit, "rtl", 0, "Set real time limit (in second)")
@@ -222,7 +225,11 @@ func start() (*types.Result, error) {
 		}
 		defer os.RemoveAll(root)
 
-		m, err := daemon.New(root)
+		b := daemon.Builder{
+			Root: root,
+		}
+
+		m, err := b.Build()
 		if err != nil {
 			return nil, fmt.Errorf("failed to new master: %v", err)
 		}

@@ -13,11 +13,11 @@ import (
 	"github.com/criyle/go-sandbox/types"
 )
 
-// ContainerInit is called for container init process
+// Init is called for container init process
 // it will check if pid == 1, otherwise it is noop
-// ContainerInit will do infinite loop on socket commands,
-// and exits when at socket close
-func ContainerInit() (err error) {
+// Init will do infinite loop on socket commands,
+// and exits when at socket close, use it in init function
+func Init() (err error) {
 	// noop if self is not container init process
 	// Notice: docker init is also 1, additional check for args[1] == init
 	if os.Getpid() != 1 || len(os.Args) != 2 || os.Args[1] != initArg {
@@ -26,6 +26,10 @@ func ContainerInit() (err error) {
 
 	// exit process (with whole container) upon exit this function
 	defer func() {
+		if err2 := recover(); err2 != nil {
+			fmt.Fprintf(os.Stderr, "container_panic: %v", err)
+			os.Exit(1)
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "container_exit: %v", err)
 			os.Exit(1)
@@ -71,7 +75,7 @@ func handleCmd(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 	case cmdExecve:
 		return handleExecve(s, cmd, msg)
 	}
-	return nil
+	return fmt.Errorf("Unknown command: %v", cmd.Cmd)
 }
 
 func handlePing(s *unixsocket.Socket) error {
@@ -79,8 +83,9 @@ func handlePing(s *unixsocket.Socket) error {
 }
 
 func handleCopyIn(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
-	if len(msg.Fds) == 0 {
-		return sendErrorReply(s, "copyin: did not receive fd")
+	if len(msg.Fds) != 1 {
+		closeFds(msg.Fds)
+		return sendErrorReply(s, "copyin: unexpected number of fds(%d)", len(msg.Fds))
 	}
 	inf := os.NewFile(uintptr(msg.Fds[0]), cmd.Path)
 	if inf == nil {
@@ -109,27 +114,23 @@ func handleOpen(s *unixsocket.Socket, cmd *Cmd) error {
 	}
 	defer outf.Close()
 
-	msg := unixsocket.Msg{
+	return sendReply(s, &Reply{}, &unixsocket.Msg{
 		Fds: []int{int(outf.Fd())},
-	}
-	return sendReply(s, &Reply{}, &msg)
+	})
 }
 
 func handleDelete(s *unixsocket.Socket, cmd *Cmd) error {
-	err := os.Remove(cmd.Path)
-	if err != nil {
+	if err := os.Remove(cmd.Path); err != nil {
 		return sendErrorReply(s, "delete: %v", err)
 	}
 	return sendReply(s, &Reply{}, nil)
 }
 
 func handleReset(s *unixsocket.Socket) error {
-	err := removeContents("/tmp")
-	if err != nil {
+	if err := removeContents("/tmp"); err != nil {
 		return sendErrorReply(s, "reset: /tmp %v", err)
 	}
-	err = removeContents("/w")
-	if err != nil {
+	if err := removeContents("/w"); err != nil {
 		return sendErrorReply(s, "reset: /w %v", err)
 	}
 	return sendReply(s, &Reply{}, nil)
@@ -142,13 +143,17 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 	)
 	if msg != nil {
 		files = intSliceToUintptr(msg.Fds)
+		// don't leak fds to child
+		closeOnExecFds(msg.Fds)
+		// release files after execve
+		defer closeFds(msg.Fds)
 	}
-	// don't leak fds to child
-	closeOnExecFds(msg.Fds)
-	// release files after execve
-	defer closeFds(msg.Fds)
 
-	if cmd.FdExec && len(files) > 0 {
+	// if fexecve, then the first fd must be executable
+	if cmd.FdExec {
+		if len(files) == 0 {
+			return fmt.Errorf("execve: expected fexecve fd")
+		}
 		execFile = files[0]
 		files = files[1:]
 	}
@@ -168,8 +173,7 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 		if err2 != nil {
 			return fmt.Errorf("syncFunc: recvCmd(%v)", err2)
 		}
-		switch cmd2.Cmd {
-		case cmdKill:
+		if cmd2.Cmd == cmdKill {
 			return fmt.Errorf("syncFunc: recved kill")
 		}
 		return nil
@@ -185,7 +189,7 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 		DropCaps:   true,
 		SyncFunc:   syncFunc,
 	}
-	// starts the runner, error is handled same as wait4 to make api simple
+	// starts the runner, error is handled same as wait4 to make communication equal
 	pid, err := r.Start()
 
 	// done is to signal kill goroutine exits
@@ -205,8 +209,7 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 		<-waitDone
 		// collect zombies
 		for {
-			pid, err := syscall.Wait4(-1, nil, syscall.WNOHANG, nil)
-			if err != nil || pid <= 0 {
+			if pid, err := syscall.Wait4(-1, nil, syscall.WNOHANG, nil); err != nil || pid <= 0 {
 				break
 			}
 		}
@@ -219,13 +222,13 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 	}
 	// sync with kill goroutine
 	close(waitDone)
+
 	if err != nil {
 		sendErrorReply(s, "execve: wait4 %v", err)
 	} else {
 		switch {
 		case wstatus.Exited():
-			reply := Reply{ExitStatus: wstatus.ExitStatus()}
-			sendReply(s, &reply, nil)
+			sendReply(s, &Reply{ExitStatus: wstatus.ExitStatus()}, nil)
 
 		case wstatus.Signaled():
 			var status types.Status
@@ -240,8 +243,7 @@ func handleExecve(s *unixsocket.Socket, cmd *Cmd, msg *unixsocket.Msg) error {
 			default:
 				status = types.StatusRE
 			}
-			reply := Reply{Status: status}
-			sendReply(s, &reply, nil)
+			sendReply(s, &Reply{Status: status}, nil)
 		default:
 			sendErrorReply(s, "execve: unknown status %v", wstatus)
 		}

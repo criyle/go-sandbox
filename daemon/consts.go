@@ -11,4 +11,6 @@ const (
 	cmdKill   = "kill"
 
 	initArg = "init"
+
+	currentExec = "/proc/self/exe"
 )

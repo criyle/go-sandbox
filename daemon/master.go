@@ -7,71 +7,100 @@ import (
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/pkg/memfd"
 	"github.com/criyle/go-sandbox/pkg/mount"
+	"github.com/criyle/go-sandbox/pkg/pipe"
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
 	"golang.org/x/sys/unix"
 )
+
+// Builder builds instance of container masters
+type Builder struct {
+	// Root is container root mount path, empty uses current work path
+	Root string
+
+	// Mounts defines container mount points, empty uses default mounts
+	Mounts []mount.SyscallParams
+
+	// Stderr defines whether to collect container stderr output for debug
+	Stderr bool
+
+	// ExecFile defines executable that called Init, otherwise defer current
+	// executable (/proc/self/exe)
+	ExecFile *os.File
+}
 
 // Master manages single pre-forked container
 type Master struct {
 	pid    int                // underlying container init pid
 	socket *unixsocket.Socket // master - container communication
+	buff   *pipe.Buffer
 }
 
 // New creates new master with underlying container
-func New(root string) (*Master, error) {
-	// dummy stdin / stdout / stderr
-	fnull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0666)
+func (b *Builder) Build() (*Master, error) {
+	var (
+		err  error
+		buff *pipe.Buffer
+	)
+	// container mount points
+	mounts := b.Mounts
+	if len(mounts) == 0 {
+		if mounts, err = mount.NewBuilder().WithMounts(DefaultMounts).Build(true); err != nil {
+			return nil, fmt.Errorf("daemon: failed to build rootfs mount %v", err)
+		}
+	}
+	root := b.Root
+	if root == "" {
+		if root, err = os.Getwd(); err != nil {
+			return nil, fmt.Errorf("daemon: failed to get work directory %v", err)
+		}
+	}
+	// prepare stdin / stdout / stderr
+	fnull, err := os.OpenFile(os.DevNull, os.O_RDWR, os.ModePerm)
 	if err != nil {
 		return nil, fmt.Errorf("daemon: failed to open devNull(%v)", err)
 	}
 	defer fnull.Close()
 
-	// prepare self memfd
-	self, err := os.Open("/proc/self/exe")
-	if err != nil {
-		return nil, fmt.Errorf("daemon: failed to open /proc/self/exe(%v)", err)
+	files := make([]uintptr, 0, 4)
+	files = append(files, []uintptr{fnull.Fd(), fnull.Fd()}...)
+	if b.Stderr {
+		buff, err = pipe.NewBuffer(bufferSize)
+		if err != nil {
+			return nil, fmt.Errorf("daemon: failed to open stderr pipe: %v", err)
+		}
+		defer buff.W.Close()
+		files = append(files, buff.W.Fd())
+	} else {
+		files = append(files, fnull.Fd())
 	}
-	defer self.Close()
 
-	execFile, err := memfd.DupToMemfd("daemon", self)
+	// prepare self memfd
+	execFile, err := b.exec()
 	if err != nil {
-		return nil, fmt.Errorf("daemon: failed to create memfd(%v)", err)
+		return nil, fmt.Errorf("deamon: %v", err)
 	}
 	defer execFile.Close()
 
 	// prepare socket
-	ins, outs, err := unixsocket.NewSocketPair()
+	ins, outs, err := newPassCredSocketPair()
 	if err != nil {
-		return nil, fmt.Errorf("daemon: failed to create socket(%v)", err)
+		return nil, fmt.Errorf("daemon: failed to create socket: %v", err)
 	}
-	defer outs.Conn.Close()
+	defer outs.Close()
 
-	outf, err := outs.Conn.File()
+	outf, err := outs.File()
 	if err != nil {
-		ins.Conn.Close()
+		ins.Close()
 		return nil, fmt.Errorf("daemon: failed to dup file outs(%v)", err)
 	}
 	defer outf.Close()
 
-	if err = ins.SetPassCred(1); err != nil {
-		ins.Conn.Close()
-		return nil, fmt.Errorf("daemon: failed to set pass_cred ins(%v)", err)
-	}
-	if err = outs.SetPassCred(1); err != nil {
-		ins.Conn.Close()
-		return nil, fmt.Errorf("daemon: failed to set pass_cred outs(%v)", err)
-	}
-	mounts, err := mount.NewBuilder().WithMounts(DefaultMounts).Build(true)
-	if err != nil {
-		ins.Conn.Close()
-		return nil, fmt.Errorf("daemon: failed to build rootfs mount %v", err)
-	}
-
+	files = append(files, uintptr(outf.Fd()))
 	r := &forkexec.Runner{
 		Args:         []string{os.Args[0], initArg},
 		Env:          []string{DefaultPath},
 		ExecFile:     execFile.Fd(),
-		Files:        []uintptr{fnull.Fd(), fnull.Fd(), fnull.Fd(), uintptr(outf.Fd())},
+		Files:        files,
 		WorkDir:      "/w",
 		UnshareFlags: forkexec.UnshareFlags,
 		Mounts:       mounts,
@@ -81,16 +110,64 @@ func New(root string) (*Master, error) {
 	}
 	pid, err := r.Start()
 	if err != nil {
-		ins.Conn.Close()
+		ins.Close()
 		return nil, fmt.Errorf("daemon: failed to execve(%v)", err)
 	}
-	return &Master{pid, ins}, nil
+	return &Master{pid, ins, buff}, nil
 }
 
 // Destroy kill the daemon process (with container)
+// if stderr enabled, collect the output as error
 func (m *Master) Destroy() error {
 	var wstatus unix.WaitStatus
 	unix.Kill(m.pid, unix.SIGKILL)
-	_, err := unix.Wait4(m.pid, &wstatus, 0, nil)
-	return err
+	if _, err := unix.Wait4(m.pid, &wstatus, 0, nil); err != nil {
+		return err
+	}
+	if m.buff != nil {
+		<-m.buff.Done
+		return fmt.Errorf("destroy: %s", m.buff.Buffer.Bytes())
+	}
+	return nil
+}
+
+// exec prepares executable
+func (b *Builder) exec() (*os.File, error) {
+	if b.ExecFile != nil {
+		return b.ExecFile, nil
+	}
+	return OpenCurrentExec()
+}
+
+// OpenCurrentExec opens current executable and dup it to memfd
+func OpenCurrentExec() (*os.File, error) {
+	self, err := os.Open(currentExec)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open %v: %v", currentExec, err)
+	}
+	defer self.Close()
+
+	execFile, err := memfd.DupToMemfd("daemon", self)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create memfd: %v", err)
+	}
+	return execFile, nil
+}
+
+func newPassCredSocketPair() (*unixsocket.Socket, *unixsocket.Socket, error) {
+	ins, outs, err := unixsocket.NewSocketPair()
+	if err != nil {
+		return nil, nil, err
+	}
+	if err = ins.SetPassCred(1); err != nil {
+		ins.Close()
+		outs.Close()
+		return nil, nil, err
+	}
+	if err = outs.SetPassCred(1); err != nil {
+		ins.Close()
+		outs.Close()
+		return nil, nil, err
+	}
+	return ins, outs, nil
 }

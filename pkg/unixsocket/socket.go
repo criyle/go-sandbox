@@ -20,7 +20,7 @@ var oobPool = sync.Pool{
 
 // Socket represents a unix socket
 type Socket struct {
-	Conn *net.UnixConn
+	*net.UnixConn
 }
 
 // Msg is the oob msg with the message
@@ -67,7 +67,7 @@ func NewSocketPair() (*Socket, *Socket, error) {
 	}
 	outs, err := NewSocket(fd[1])
 	if err != nil {
-		ins.Conn.Close()
+		ins.Close()
 		syscall.Close(fd[1])
 		return nil, nil, fmt.Errorf("NewSocketPair: failed to call NewSocket outs(%v)", err)
 	}
@@ -76,7 +76,7 @@ func NewSocketPair() (*Socket, *Socket, error) {
 
 // SetPassCred set sockopt for pass cred for unix socket
 func (s *Socket) SetPassCred(option int) error {
-	sysconn, err := s.Conn.SyscallConn()
+	sysconn, err := s.SyscallConn()
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (s *Socket) SendMsg(b []byte, m *Msg) error {
 			oob = append(oob, syscall.UnixCredentials(m.Cred)...)
 		}
 	}
-	_, _, err := s.Conn.WriteMsgUnix(b, oob, nil)
+	_, _, err := s.WriteMsgUnix(b, oob, nil)
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func (s *Socket) SendMsg(b []byte, m *Msg) error {
 func (s *Socket) RecvMsg(b []byte) (int, *Msg, error) {
 	oob := oobPool.Get().([]byte)
 	defer oobPool.Put(oob)
-	n, oobn, _, _, err := s.Conn.ReadMsgUnix(b, oob)
+	n, oobn, _, _, err := s.ReadMsgUnix(b, oob)
 	if err != nil {
 		return 0, nil, err
 	}

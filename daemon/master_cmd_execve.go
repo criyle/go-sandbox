@@ -44,27 +44,27 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 	}
 	reply, msg, err := m.recvReply()
 	if err != nil {
-		return nil, fmt.Errorf("execve: RecvReply %v", err)
+		return nil, fmt.Errorf("execve: recvReply %v", err)
 	}
 	if reply.Error != "" || msg == nil || msg.Cred == nil {
-		m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
+		m.execveSyncKill()
 		return nil, fmt.Errorf("execve: no pid recved or error(%v)", reply.Error)
 	}
 	if param.SyncFunc != nil {
 		if err := param.SyncFunc(int(msg.Cred.Pid)); err != nil {
-			m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
+			m.execveSyncKill()
 			return nil, fmt.Errorf("execve: syncfunc failed(%v)", err)
 		}
 	}
+	// send to syncFunc ack ok
 	if err := m.sendCmd(&Cmd{Cmd: cmdOk}, nil); err != nil {
 		return nil, fmt.Errorf("execve: ok failed(%v)", err)
 	}
 	// make sure goroutine not leaked (blocked) even if result is not consumed
-	wait := make(chan types.Result, 1)
+	result := make(chan types.Result, 1)
 	waitDone := make(chan struct{})
 	// Wait
 	go func() {
-		defer close(wait)
 		reply2, _, _ := m.recvReply()
 		close(waitDone)
 		// done signal (should recv after kill)
@@ -74,7 +74,7 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 		if reply2.Error != "" {
 			status = types.StatusFatal
 		}
-		wait <- types.Result{
+		result <- types.Result{
 			ExitStatus: reply2.ExitStatus,
 			Status:     status,
 			Error:      reply2.Error,
@@ -88,5 +88,14 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 		}
 		m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
 	}()
-	return wait, nil
+	return result, nil
+}
+
+// handleSyncKill will send kill (for sync func), kill (for wait to kill all) and
+// then recv error and finish signal when terminated by syncFunc error
+func (m *Master) execveSyncKill() {
+	m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
+	m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
+	m.recvReply()
+	m.recvReply()
 }
