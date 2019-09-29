@@ -116,6 +116,8 @@ func main() {
 	if err == nil && rt.Status != types.StatusNormal {
 		err = rt.Status
 	}
+	debug("setupTime: ", rt.SetUpTime)
+	debug("runningTime: ", rt.RunningTime)
 	if err != nil {
 		debug(err)
 		c, ok := err.(types.Status)

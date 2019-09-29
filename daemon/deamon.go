@@ -53,4 +53,6 @@ type Reply struct {
 	Error      string       // empty if no error
 	ExitStatus int          // waitpid exit status
 	Status     types.Status // return status
+	UserTime   uint64       // waitpid user CPU (ms)
+	UserMem    uint64       // waitpid user memory (kb)
 }

@@ -9,11 +9,7 @@ type Result struct {
 	Error      string // potential detailed error message
 	UserTime   uint64 // used user CPU time (in ms)
 	UserMem    uint64 // used user memory (in kb)
-	Stat              // collects time usage for the runner
-}
-
-// Stat is the time usages in ns
-type Stat struct {
+	// collects time usage for the runner
 	SetUpTime   time.Duration
 	RunningTime time.Duration
 }

@@ -472,10 +472,10 @@ childerror:
 func handleChildFailed(pid uintptr) {
 	var wstatus syscall.WaitStatus
 	// make sure not blocked
-	unix.Kill(int(pid), syscall.SIGKILL)
+	syscall.Kill(int(pid), syscall.SIGKILL)
 	// child failed; wait for it to exit, to make sure the zombies don't accumulate
-	_, err3 := syscall.Wait4(int(pid), &wstatus, 0, nil)
-	for err3 == syscall.EINTR {
-		_, err3 = syscall.Wait4(int(pid), &wstatus, 0, nil)
+	_, err := syscall.Wait4(int(pid), &wstatus, 0, nil)
+	for err == syscall.EINTR {
+		_, err = syscall.Wait4(int(pid), &wstatus, 0, nil)
 	}
 }

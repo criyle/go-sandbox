@@ -35,7 +35,7 @@ type Master struct {
 	buff   *pipe.Buffer
 }
 
-// New creates new master with underlying container
+// Build creates new master with underlying container
 func (b *Builder) Build() (*Master, error) {
 	var (
 		err  error

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/criyle/go-sandbox/pkg/rlimit"
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
@@ -25,6 +26,8 @@ type ExecveParam struct {
 // accepts done for cancelation
 func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.Result, error) {
 	var files []int
+	sTime := time.Now()
+
 	if param.ExecFile > 0 {
 		files = append(files, int(param.ExecFile))
 	}
@@ -60,6 +63,7 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 	if err := m.sendCmd(&Cmd{Cmd: cmdOk}, nil); err != nil {
 		return nil, fmt.Errorf("execve: ok failed(%v)", err)
 	}
+	mTime := time.Now()
 	// make sure goroutine not leaked (blocked) even if result is not consumed
 	result := make(chan types.Result, 1)
 	waitDone := make(chan struct{})
@@ -75,9 +79,13 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 			status = types.StatusFatal
 		}
 		result <- types.Result{
-			ExitStatus: reply2.ExitStatus,
-			Status:     status,
-			Error:      reply2.Error,
+			Status:      status,
+			ExitStatus:  reply2.ExitStatus,
+			UserTime:    reply2.UserTime,
+			UserMem:     reply2.UserMem,
+			Error:       reply2.Error,
+			SetUpTime:   mTime.Sub(sTime),
+			RunningTime: time.Since(mTime),
 		}
 	}()
 	// Kill (if wait is done, a kill message need to be send to collect zombies)
