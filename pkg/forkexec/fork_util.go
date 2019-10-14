@@ -17,14 +17,14 @@ func prepareExec(Args, Env []string) (*byte, []*byte, []*byte, error) {
 		return nil, nil, nil, err
 	}
 	// make env
-	envv, err := syscall.SlicePtrFromStrings(Env)
+	env, err := syscall.SlicePtrFromStrings(Env)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return argv0, argv, envv, nil
+	return argv0, argv, env, nil
 }
 
-// prepareFds prapares fd array
+// prepareFds prepares fd array
 func prepareFds(files []uintptr) ([]int, int) {
 	fd := make([]int, len(files))
 	nextfd := len(files)

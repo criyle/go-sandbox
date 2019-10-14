@@ -3,7 +3,7 @@ package types
 // Status is the result Status
 type Status int
 
-// Different end condtion
+// Different end condition
 const (
 	StatusNormal  Status = iota // 0
 	StatusInvalid               // 1

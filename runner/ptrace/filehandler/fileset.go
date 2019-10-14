@@ -79,7 +79,7 @@ func (s *FileSet) AddRange(names []string, workPath string) {
 	}
 }
 
-// FileSets agregates multiple permissions including write / read / stat / soft ban
+// FileSets aggregates multiple permissions including write / read / stat / soft ban
 type FileSets struct {
 	Writable, Readable, Statable, SoftBan FileSet
 }
@@ -123,7 +123,7 @@ func (s *FileSets) AddFilePermission(name string, mode FilePerm) {
 	}
 }
 
-// GetExtraSet evaluates the concated file set according to real path or raw path
+// GetExtraSet evaluates the concatenated file set according to real path or raw path
 func GetExtraSet(extra, raw []string) []string {
 	rt := make([]string, 0, len(extra)+len(raw))
 	rt = append(rt, raw...)

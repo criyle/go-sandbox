@@ -12,7 +12,7 @@ const (
 	ActionKill
 )
 
-// MsgDisallow, Msghandle defines the action needed when traped by
+// MsgDisallow, Msghandle defines the action needed when trapped by
 // seccomp filter
 const (
 	MsgDisallow int16 = iota + 1

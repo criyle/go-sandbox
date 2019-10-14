@@ -53,7 +53,7 @@ func NewSocket(fd int) (*Socket, error) {
 	return &Socket{unixConn}, nil
 }
 
-// NewSocketPair creates conneted unix socketpair using SOCK_SEQPACKET
+// NewSocketPair creates connected unix socketpair using SOCK_SEQPACKET
 func NewSocketPair() (*Socket, *Socket, error) {
 	fd, err := syscall.Socketpair(syscall.AF_LOCAL, syscall.SOCK_SEQPACKET|syscall.SOCK_CLOEXEC, 0)
 	if err != nil {

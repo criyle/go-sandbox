@@ -10,7 +10,7 @@ const (
 	TraceAllow TraceAction = iota
 	// TraceBan blocked the syscall and set the return code specified by SetReturnCode
 	TraceBan
-	// TraceKill refered as dangerous action have been detacted
+	// TraceKill referred as dangerous action have been detected
 	TraceKill
 )
 

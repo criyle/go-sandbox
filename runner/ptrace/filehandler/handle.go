@@ -35,7 +35,7 @@ func (h *Handler) CheckStat(fn string) ptracer.TraceAction {
 	return ptracer.TraceAllow
 }
 
-// CheckSyscall checks syscalls other than allowed and traced agianst the
+// CheckSyscall checks syscalls other than allowed and traced against the
 // SyscallCounter
 func (h *Handler) CheckSyscall(syscallName string) ptracer.TraceAction {
 	// if it is traced, then try to count syscall

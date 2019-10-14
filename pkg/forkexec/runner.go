@@ -37,7 +37,7 @@ type Runner struct {
 	// runtime.LockOSThread is required for tracer to call ptrace syscalls
 	Ptrace bool
 
-	// no_new_privs calls ptctl(PR_SET_NO_NEW_PRIVS) to 0 to disable calls to
+	// no_new_privs calls prctl(PR_SET_NO_NEW_PRIVS) to 0 to disable calls to
 	// setuid processes. It is automatically enabled when seccomp filter is provided
 	NoNewPrivs bool
 
@@ -82,6 +82,6 @@ type Runner struct {
 	// Parent and child process with sync sataus through a socket pair.
 	// SyncFunc will invoke with the child pid. If SyncFunc return some error,
 	// parent will signal child to stop and report the error
-	// SyncFunc is called right before execve, thus it could track cpu more percisely
+	// SyncFunc is called right before execve, thus it could track cpu more accurately
 	SyncFunc func(int) error
 }

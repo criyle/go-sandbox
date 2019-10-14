@@ -244,7 +244,7 @@ func start() (*types.Result, error) {
 			Master: m,
 			ExecveParam: &daemon.ExecveParam{
 				Args:     args,
-				Envv:     []string{pathEnv},
+				Env:      []string{pathEnv},
 				Fds:      fds,
 				ExecFile: execFile,
 				RLimits:  rlims.PrepareRLimit(),

@@ -45,7 +45,7 @@ func Init() (err error) {
 	const defaultFd = 3
 	soc, err := unixsocket.NewSocket(defaultFd)
 	if err != nil {
-		return fmt.Errorf("container_init: faile to new socket(%v)", err)
+		return fmt.Errorf("container_init: failed to new socket(%v)", err)
 	}
 
 	// serve forever

@@ -16,7 +16,7 @@ func afterFork()
 //go:linkname afterForkInChild syscall.runtime_AfterForkInChild
 func afterForkInChild()
 
-// Start will fork, load seccomp and execv and being traced by ptrace
+// Start will fork, load seccomp and execve and being traced by ptrace
 // Return pid and potential error
 // Reference to src/syscall/exec_linux.go
 // The runtime OS thread must be locked before calling this function
@@ -29,7 +29,7 @@ func (r *Runner) Start() (int, error) {
 		unshareUser = r.UnshareFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
 	)
 
-	argv0, argv, envv, err := prepareExec(r.Args, r.Env)
+	argv0, argv, env, err := prepareExec(r.Args, r.Env)
 	if err != nil {
 		return 0, err
 	}
@@ -159,7 +159,7 @@ func (r *Runner) Start() (int, error) {
 	// and files
 	// We need parent to setup uid_map / gid_map for us since we do not have capabilities
 	// in the original namespace
-	// At the same time, socket pair / pipe sychronization is required as well
+	// At the same time, socket pair / pipe synchronization is required as well
 	if _, _, err1 = syscall.RawSyscall(syscall.SYS_CLOSE, uintptr(p[0]), 0, 0); err1 != 0 {
 		goto childerror
 	}
@@ -355,7 +355,7 @@ func (r *Runner) Start() (int, error) {
 
 	// Set limit
 	for _, rlim := range r.RLimits {
-		// Prlimit instead of setrlimit to avoid 32-bit limitation (linux > 3.2)
+		// prlimit instead of setrlimit to avoid 32-bit limitation (linux > 3.2)
 		_, _, err1 = syscall.RawSyscall6(syscall.SYS_PRLIMIT64, 0, uintptr(rlim.Res), uintptr(unsafe.Pointer(&rlim.Rlim)), 0, 0, 0)
 		if err1 != 0 {
 			goto childerror
@@ -445,19 +445,19 @@ func (r *Runner) Start() (int, error) {
 	}
 
 	// at this point, runner is successfully attached for seccomp trap filter
-	// or execve traped without seccomp filter
+	// or execve trapped without seccomp filter
 	// time to exec
 	// if execfile fd is specified, call fexecve
 	if r.ExecFile > 0 {
 		_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, r.ExecFile,
 			uintptr(unsafe.Pointer(&empty[0])),
 			uintptr(unsafe.Pointer(&argv[0])),
-			uintptr(unsafe.Pointer(&envv[0])), unix.AT_EMPTY_PATH, 0)
+			uintptr(unsafe.Pointer(&env[0])), unix.AT_EMPTY_PATH, 0)
 	} else {
 		_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, uintptr(_AT_FDCWD),
 			uintptr(unsafe.Pointer(argv0)),
 			uintptr(unsafe.Pointer(&argv[0])),
-			uintptr(unsafe.Pointer(&envv[0])), 0, 0)
+			uintptr(unsafe.Pointer(&env[0])), 0, 0)
 	}
 
 childerror:

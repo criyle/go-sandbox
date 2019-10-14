@@ -11,7 +11,7 @@ const (
 )
 
 // default parameters. I was tend to reuse the configs but it is hard since there are some
-// cross device symblics
+// cross device symbolic
 var (
 	DefaultPath = "PATH=/usr/local/bin:/usr/bin:/bin"
 

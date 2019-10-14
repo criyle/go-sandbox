@@ -47,16 +47,16 @@ func (c *containerServer) handleExecve(cmd *Cmd, msg *unixsocket.Msg) error {
 			return fmt.Errorf("syncFunc: recvCmd(%v)", err2)
 		}
 		if cmd2.Cmd == cmdKill {
-			return fmt.Errorf("syncFunc: recved kill")
+			return fmt.Errorf("syncFunc: received kill")
 		}
 		return nil
 	}
 
 	r := forkexec.Runner{
 		Args:       cmd.Argv,
-		Env:        cmd.Envv,
+		Env:        cmd.Env,
 		ExecFile:   execFile,
-		RLimits:    cmd.RLmits,
+		RLimits:    cmd.RLimits,
 		Files:      files,
 		WorkDir:    "/w",
 		NoNewPrivs: true,
@@ -89,7 +89,7 @@ func (c *containerServer) handleExecve(cmd *Cmd, msg *unixsocket.Msg) error {
 		}
 	}()
 
-	// wait pid if no error encoutered for execve
+	// wait pid if no error encountered for execve
 	var wstatus syscall.WaitStatus
 	var rusage syscall.Rusage
 	if err == nil {

@@ -12,7 +12,7 @@ import (
 // ExecveParam is parameters to run process inside container
 type ExecveParam struct {
 	Args []string
-	Envv []string
+	Env  []string
 	Fds  []uintptr
 	// fexecve fd
 	ExecFile uintptr
@@ -36,11 +36,11 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 		Fds: files,
 	}
 	cmd := Cmd{
-		Cmd:    cmdExecve,
-		Argv:   param.Args,
-		Envv:   param.Envv,
-		RLmits: param.RLimits,
-		FdExec: param.ExecFile > 0,
+		Cmd:     cmdExecve,
+		Argv:    param.Args,
+		Env:     param.Env,
+		RLimits: param.RLimits,
+		FdExec:  param.ExecFile > 0,
 	}
 	if err := m.sendCmd(&cmd, msg); err != nil {
 		return nil, fmt.Errorf("execve: sendCmd %v", err)
