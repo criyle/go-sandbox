@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	bind   = unix.MS_BIND | unix.MS_NOSUID | unix.MS_NOATIME | unix.MS_PRIVATE
+	bind   = unix.MS_BIND | unix.MS_NOSUID | unix.MS_PRIVATE
 	roBind = bind | unix.MS_RDONLY
-	mFlag  = unix.MS_NOSUID | unix.MS_NOATIME | unix.MS_NODEV | unix.MS_PRIVATE
+	mFlag  = unix.MS_NOSUID | unix.MS_NOATIME | unix.MS_NODEV
 )
 
 // Builder builds fork_exec friendly mount syscall format
@@ -23,7 +23,7 @@ func NewBuilder() *Builder {
 }
 
 // Build creates sequence of syscalls for fork_exec
-// skipNotExists skips bind mounts that source not exitst
+// skipNotExists skips bind mounts that source not exists
 func (b *Builder) Build(skipNotExists bool) ([]SyscallParams, error) {
 	ret := make([]SyscallParams, 0, len(b.Mounts))
 	for _, m := range b.Mounts {

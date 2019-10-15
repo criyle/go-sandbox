@@ -36,7 +36,7 @@ func NewPipe(writer io.Writer, n int64) (<-chan struct{}, *os.File, error) {
 
 // NewBuffer creates a os pipe, caller need to
 // caller need to close w
-// Notice: if rely on doen for finish, w need be closed in parent process
+// Notice: if rely on done for finish, w need be closed in parent process
 func NewBuffer(max int64) (*Buffer, error) {
 	buffer := new(bytes.Buffer)
 	done, w, err := NewPipe(buffer, max+1)
