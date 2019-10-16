@@ -7,9 +7,8 @@ import (
 )
 
 const (
-	bind   = unix.MS_BIND | unix.MS_NOSUID | unix.MS_PRIVATE
-	roBind = bind | unix.MS_RDONLY
-	mFlag  = unix.MS_NOSUID | unix.MS_NOATIME | unix.MS_NODEV
+	bind  = unix.MS_BIND | unix.MS_NOSUID | unix.MS_PRIVATE
+	mFlag = unix.MS_NOSUID | unix.MS_NOATIME | unix.MS_NODEV
 )
 
 // Builder builds fork_exec friendly mount syscall format
@@ -25,9 +24,11 @@ func NewBuilder() *Builder {
 // Build creates sequence of syscalls for fork_exec
 // skipNotExists skips bind mounts that source not exists
 func (b *Builder) Build(skipNotExists bool) ([]SyscallParams, error) {
+	var err error
 	ret := make([]SyscallParams, 0, len(b.Mounts))
 	for _, m := range b.Mounts {
-		if err := isBindMountNotExists(m); err != nil {
+		mknod := false
+		if mknod, err = isBindMountFileOrNotExists(m); err != nil {
 			if skipNotExists {
 				continue
 			}
@@ -37,18 +38,21 @@ func (b *Builder) Build(skipNotExists bool) ([]SyscallParams, error) {
 		if err != nil {
 			return nil, err
 		}
+		sp.MakeNod = mknod
 		ret = append(ret, *sp)
 	}
 	return ret, nil
 }
 
-func isBindMountNotExists(m Mount) error {
+func isBindMountFileOrNotExists(m Mount) (bool, error) {
 	if m.Flags&unix.MS_BIND == unix.MS_BIND {
-		if _, err := os.Stat(m.Source); os.IsNotExist(err) {
-			return err
+		if fi, err := os.Stat(m.Source); os.IsNotExist(err) {
+			return false, err
+		} else if !fi.IsDir() {
+			return true, err
 		}
 	}
-	return nil
+	return false, nil
 }
 
 // WithMounts add mounts to builder
@@ -67,7 +71,7 @@ func (b *Builder) WithMount(m Mount) *Builder {
 func (b *Builder) WithBind(source, target string, readonly bool) *Builder {
 	var flags uintptr = bind
 	if readonly {
-		flags = roBind
+		flags |= unix.MS_RDONLY
 	}
 	b.Mounts = append(b.Mounts, Mount{
 		Source: source,

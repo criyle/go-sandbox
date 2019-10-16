@@ -15,6 +15,7 @@ type SyscallParams struct {
 	Source, Target, FsType, Data *byte
 	Flags                        uintptr
 	Prefixes                     []*byte
+	MakeNod                      bool
 }
 
 // ToSyscall convert Mount to SyscallPrams
@@ -65,10 +66,10 @@ func pathPrefix(path string) []string {
 	return ret
 }
 
-// arrayPtrFromStrings converts srings to c style strings
-func arrayPtrFromStrings(strs []string) ([]*byte, error) {
-	bytes := make([]*byte, 0, len(strs))
-	for _, s := range strs {
+// arrayPtrFromStrings converts strings to c style strings
+func arrayPtrFromStrings(str []string) ([]*byte, error) {
+	bytes := make([]*byte, 0, len(str))
+	for _, s := range str {
 		b, err := syscall.BytePtrFromString(s)
 		if err != nil {
 			return nil, err

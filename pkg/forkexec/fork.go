@@ -273,7 +273,15 @@ func (r *Runner) Start() (int, error) {
 	// performing mounts
 	for _, m := range r.Mounts {
 		// mkdirs(target)
-		for _, p := range m.Prefixes {
+		for i, p := range m.Prefixes {
+			// if target mount point is a file, mknod(target)
+			if i == len(m.Prefixes)-1 && m.MakeNod {
+				_, _, err1 = syscall.RawSyscall(syscall.SYS_MKNODAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(p)), 0755)
+				if err1 != 0 && err1 != syscall.EEXIST {
+					goto childerror
+				}
+				break
+			}
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIRAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(p)), 0755)
 			if err1 != 0 && err1 != syscall.EEXIST {
 				goto childerror
