@@ -3,12 +3,21 @@ package daemon
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
 )
 
 // Ping send ping message to container
 func (m *Master) Ping() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// avoid infinite wait (max 3s)
+	const pingWait = 3 * time.Second
+	m.socket.SetDeadline(time.Now().Add(pingWait))
+	defer m.socket.SetDeadline(time.Time{})
+
 	// send ping
 	cmd := Cmd{
 		Cmd: cmdPing,
@@ -22,6 +31,9 @@ func (m *Master) Ping() error {
 
 // CopyIn copies file to container
 func (m *Master) CopyIn(f *os.File, p string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// send copyin
 	cmd := Cmd{
 		Cmd:  cmdCopyIn,
@@ -38,6 +50,9 @@ func (m *Master) CopyIn(f *os.File, p string) error {
 
 // Open open file in container
 func (m *Master) Open(p string) (*os.File, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	// send copyin
 	cmd := Cmd{
 		Cmd:  cmdOpen,
@@ -67,6 +82,9 @@ func (m *Master) Open(p string) (*os.File, error) {
 
 // Delete remove file from container
 func (m *Master) Delete(p string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	cmd := Cmd{
 		Cmd:  cmdDelete,
 		Path: p,
@@ -79,6 +97,9 @@ func (m *Master) Delete(p string) error {
 
 // Reset remove all from /tmp and /w
 func (m *Master) Reset() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	cmd := Cmd{
 		Cmd: cmdReset,
 	}

@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/pkg/memfd"
@@ -32,7 +33,8 @@ type Builder struct {
 type Master struct {
 	pid    int                // underlying container init pid
 	socket *unixsocket.Socket // master - container communication
-	buff   *pipe.Buffer
+	buff   *pipe.Buffer       // collect stderr output from container
+	mu     sync.Mutex         // lock to avoid race condition
 }
 
 // Build creates new master with underlying container
@@ -55,14 +57,14 @@ func (b *Builder) Build() (*Master, error) {
 		}
 	}
 	// prepare stdin / stdout / stderr
-	fnull, err := os.OpenFile(os.DevNull, os.O_RDWR, os.ModePerm)
+	devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, os.ModePerm)
 	if err != nil {
 		return nil, fmt.Errorf("daemon: failed to open devNull(%v)", err)
 	}
-	defer fnull.Close()
+	defer devNull.Close()
 
 	files := make([]uintptr, 0, 4)
-	files = append(files, []uintptr{fnull.Fd(), fnull.Fd()}...)
+	files = append(files, devNull.Fd(), devNull.Fd())
 	if b.Stderr {
 		buff, err = pipe.NewBuffer(bufferSize)
 		if err != nil {
@@ -71,7 +73,7 @@ func (b *Builder) Build() (*Master, error) {
 		defer buff.W.Close()
 		files = append(files, buff.W.Fd())
 	} else {
-		files = append(files, fnull.Fd())
+		files = append(files, devNull.Fd())
 	}
 
 	// prepare self memfd
@@ -113,7 +115,11 @@ func (b *Builder) Build() (*Master, error) {
 		ins.Close()
 		return nil, fmt.Errorf("daemon: failed to execve(%v)", err)
 	}
-	return &Master{pid, ins, buff}, nil
+	return &Master{
+		pid:    pid,
+		socket: ins,
+		buff:   buff,
+	}, nil
 }
 
 // Destroy kill the daemon process (with container)
