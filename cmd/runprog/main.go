@@ -157,7 +157,12 @@ func start() (*types.Result, error) {
 	args, allow, trace, h := config.GetConf(pType, workPath, args, addRead, addWrite, allowProc)
 
 	if useCGroup {
-		cg, err = cgroup.NewCGroup("run_program")
+		b, err := cgroup.NewBuilder("runprog").WithCPUAcct().WithMemory().WithPids().FilterByEnv()
+		if err != nil {
+			return nil, err
+		}
+		debug(b)
+		cg, err = b.Build()
 		if err != nil {
 			return nil, err
 		}

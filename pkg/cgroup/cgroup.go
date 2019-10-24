@@ -21,22 +21,37 @@ type CGroup struct {
 	cpuacct, memory, pids *SubCGroup
 }
 
-// NewCGroup creates new cgrouup directories
-func NewCGroup(prefix string) (*CGroup, error) {
-	cpuacctPath, err := CreateSubCGroupPath("cpuacct", prefix)
-	if err != nil {
-		return nil, err
+// Build creates new cgrouup directories
+func (b *Builder) Build() (cg *CGroup, err error) {
+	var (
+		cpuacctPath, memoryPath, pidsPath string
+	)
+	// if failed, remove potential created directory
+	defer func() {
+		if err != nil {
+			remove(cpuacctPath)
+			remove(memoryPath)
+			remove(pidsPath)
+		}
+	}()
+	if b.CPUAcct {
+		if cpuacctPath, err = CreateSubCGroupPath("cpuacct", b.Prefix); err != nil {
+			return
+		}
 	}
-	memoryPath, err := CreateSubCGroupPath("memory", prefix)
-	if err != nil {
-		return nil, err
+	if b.Memory {
+		if memoryPath, err = CreateSubCGroupPath("memory", b.Prefix); err != nil {
+			return
+		}
 	}
-	pidsPath, err := CreateSubCGroupPath("pids", prefix)
-	if err != nil {
-		return nil, err
+	if b.Pids {
+		if pidsPath, err = CreateSubCGroupPath("pids", b.Prefix); err != nil {
+			return
+		}
 	}
+
 	return &CGroup{
-		prefix:  prefix,
+		prefix:  b.Prefix,
 		cpuacct: NewSubCGroup(cpuacctPath),
 		memory:  NewSubCGroup(memoryPath),
 		pids:    NewSubCGroup(pidsPath),
@@ -57,18 +72,19 @@ func (c *CGroup) AddProc(pid int) error {
 	return nil
 }
 
-// Destroy removes dir for sub-cggroup
+// Destroy removes dir for sub-cggroup, errors are ignored if remove one failed
 func (c *CGroup) Destroy() error {
-	if err := os.Remove(c.cpuacct.path); err != nil {
-		return err
+	var err1 error
+	if err := remove(c.cpuacct.path); err != nil {
+		err1 = err
 	}
-	if err := os.Remove(c.memory.path); err != nil {
-		return err
+	if err := remove(c.memory.path); err != nil {
+		err1 = err
 	}
-	if err := os.Remove(c.pids.path); err != nil {
-		return err
+	if err := remove(c.pids.path); err != nil {
+		err1 = err
 	}
-	return nil
+	return err1
 }
 
 // CpuacctUsage read cpuacct.usage in ns
@@ -89,4 +105,11 @@ func (c *CGroup) SetMemoryLimitInBytes(i uint64) error {
 // SetPidsMax write pids.max
 func (c *CGroup) SetPidsMax(i uint64) error {
 	return c.pids.WriteUint("pids.max", i)
+}
+
+func remove(name string) error {
+	if name != "" {
+		return os.Remove(name)
+	}
+	return nil
 }
