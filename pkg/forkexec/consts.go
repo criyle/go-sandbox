@@ -20,13 +20,13 @@ const (
 
 // used by unshare remount / to private
 var (
-	none  = [...]byte{'n', 'o', 'n', 'e', 0}
-	slash = [...]byte{'/', 0}
-	empty = [...]byte{0}
-	tmpfs = [...]byte{'t', 'm', 'p', 'f', 's', 0}
+	none  = []byte("none\000")
+	slash = []byte("/\000")
+	empty = []byte("\000")
+	tmpfs = []byte("tmpfs\000")
 
 	// tmp dir made by pivot_root
-	OldRoot = "old_root"
+	oldRoot = []byte("old_root\000")
 
 	// go does not allow constant uintptr to be negative...
 	_AT_FDCWD = unix.AT_FDCWD

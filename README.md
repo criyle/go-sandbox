@@ -1,5 +1,7 @@
 # go-sandbox
 
+[![GoDoc](https://godoc.org/github.com/criyle/go-sandbox?status.svg)](https://godoc.org/github.com/criyle/go-sandbox)
+
 Original goal was to reimplement [uoj-judger/run_program](https://github.com/vfleaking/uoj) in GO language using [libseccomp](https://github.com/pkg/seccomp/libseccomp-golang). As technology grows, it also implements new technologies including Linux namespace and cgroup.
 
 ## Install
@@ -29,7 +31,7 @@ Default file access syscall check:
 - check file read: `readlink`, `readlinkat`
 - check file write: `unlink`, `unlinkat`, `chmod`, `rename`
 - check file access: `stat`, `lstat`, `access`, `faccessat`
-- check file exec: `execveat`
+- check file exec: `execve`, `execveat`
 
 ### linux namespace + cgroup
 
@@ -91,19 +93,17 @@ $ go test -bench . -benchtime 10s
 goos: linux
 goarch: amd64
 pkg: github.com/criyle/go-sandbox/pkg/forkexec
-BenchmarkSimpleFork-4              	   10000	   1106064 ns/op
-BenchmarkUnsharePid-4              	   10000	   1367824 ns/op
-BenchmarkUnshareUser-4             	   10000	   1311523 ns/op
-BenchmarkUnshareUts-4              	   10000	   1140427 ns/op
-BenchmarkUnshareCgroup-4           	   10000	   1112713 ns/op
-BenchmarkUnshareIpc-4              	     300	  58730786 ns/op
-BenchmarkUnshareMount-4            	     300	  55540758 ns/op
-BenchmarkUnshareNet-4              	     100	 396957720 ns/op
-BenchmarkFastUnshareMountPivot-4   	     100	 114364585 ns/op
-BenchmarkUnshareAll-4              	     100	 851014031 ns/op
-BenchmarkUnshareMountPivot-4       	      20	 901204445 ns/op
+BenchmarkSimpleFork-4              	   12789	    870486 ns/op
+BenchmarkUnsharePid-4              	   13172	    917304 ns/op
+BenchmarkUnshareUser-4             	   13148	    927952 ns/op
+BenchmarkUnshareUts-4              	   13170	    884606 ns/op
+BenchmarkUnshareCgroup-4           	   13650	    895186 ns/op
+BenchmarkUnshareIpc-4              	     196	  66418708 ns/op
+BenchmarkUnshareMount-4            	     243	  46957682 ns/op
+BenchmarkUnshareNet-4              	     100	 411869776 ns/op
+BenchmarkFastUnshareMountPivot-4   	     120	 107310917 ns/op
+BenchmarkUnshareAll-4              	     100	 837352275 ns/op
+BenchmarkUnshareMountPivot-4       	      12	 913099234 ns/op
 PASS
-ok  	github.com/criyle/go-sandbox/pkg/forkexec	262.112s
+ok  	github.com/criyle/go-sandbox/pkg/forkexec	300.744s
 ```
-
-## TODO

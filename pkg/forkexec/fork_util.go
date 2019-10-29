@@ -45,19 +45,3 @@ func syscallStringFromString(str string) (*byte, error) {
 	}
 	return nil, nil
 }
-
-// preparePivotRoot prepares pivot root parameters
-func preparePivotRoot(r string) (*byte, *byte, error) {
-	if r == "" {
-		return nil, nil, nil
-	}
-	root, err := syscall.BytePtrFromString(r)
-	if err != nil {
-		return nil, nil, err
-	}
-	oldRoot, err := syscall.BytePtrFromString(OldRoot)
-	if err != nil {
-		return nil, nil, err
-	}
-	return root, oldRoot, nil
-}

@@ -1,5 +1,5 @@
-// Package forkexec provides interface to run a seccomp filtered, rlimited
-// executable and ptraced
+// Package forkexec provides interface to run a subprocess with seccomp filter, rlimit and
+// containerized or ptraced
 package forkexec
 
 import (
@@ -9,8 +9,8 @@ import (
 	"github.com/criyle/go-sandbox/pkg/rlimit"
 )
 
-// Runner is the runptraceConfig including the exec path, argv
-// and resource limits. It creates tracee for ptrace-based tracer.
+// Runner is the configuration including the exec path, argv
+// and resource limits. It can creates tracee for ptrace-based tracer.
 // It can also create unshared process in another namespace
 type Runner struct {
 	// argv and env for execve syscall for the child process
