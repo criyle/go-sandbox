@@ -31,7 +31,7 @@ func BenchmarkSimpleFork(b *testing.B) {
 func BenchmarkUnsharePid(b *testing.B) {
 	r, f := getRunner(b)
 	defer f.Close()
-	r.UnshareFlags = unix.CLONE_NEWPID
+	r.CloneFlags = unix.CLONE_NEWPID
 	benchmarkRun(r, b)
 }
 
@@ -39,7 +39,7 @@ func BenchmarkUnsharePid(b *testing.B) {
 func BenchmarkUnshareUser(b *testing.B) {
 	r, f := getRunner(b)
 	defer f.Close()
-	r.UnshareFlags = unix.CLONE_NEWUSER
+	r.CloneFlags = unix.CLONE_NEWUSER
 	benchmarkRun(r, b)
 }
 
@@ -47,7 +47,7 @@ func BenchmarkUnshareUser(b *testing.B) {
 func BenchmarkUnshareUts(b *testing.B) {
 	r, f := getRunner(b)
 	defer f.Close()
-	r.UnshareFlags = unix.CLONE_NEWUTS
+	r.CloneFlags = unix.CLONE_NEWUTS
 	benchmarkRun(r, b)
 }
 
@@ -55,7 +55,7 @@ func BenchmarkUnshareUts(b *testing.B) {
 func BenchmarkUnshareCgroup(b *testing.B) {
 	r, f := getRunner(b)
 	defer f.Close()
-	r.UnshareFlags = unix.CLONE_NEWCGROUP
+	r.CloneFlags = unix.CLONE_NEWCGROUP
 	benchmarkRun(r, b)
 }
 
@@ -63,7 +63,7 @@ func BenchmarkUnshareCgroup(b *testing.B) {
 func BenchmarkUnshareIpc(b *testing.B) {
 	r, f := getRunner(b)
 	defer f.Close()
-	r.UnshareFlags = unix.CLONE_NEWIPC
+	r.CloneFlags = unix.CLONE_NEWIPC
 	benchmarkRun(r, b)
 }
 
@@ -71,7 +71,7 @@ func BenchmarkUnshareIpc(b *testing.B) {
 func BenchmarkUnshareMount(b *testing.B) {
 	r, f := getRunner(b)
 	defer f.Close()
-	r.UnshareFlags = unix.CLONE_NEWNS
+	r.CloneFlags = unix.CLONE_NEWNS
 	benchmarkRun(r, b)
 }
 
@@ -79,7 +79,7 @@ func BenchmarkUnshareMount(b *testing.B) {
 func BenchmarkUnshareNet(b *testing.B) {
 	r, f := getRunner(b)
 	defer f.Close()
-	r.UnshareFlags = unix.CLONE_NEWNET
+	r.CloneFlags = unix.CLONE_NEWNET
 	benchmarkRun(r, b)
 }
 
@@ -92,7 +92,7 @@ func BenchmarkFastUnshareMountPivot(b *testing.B) {
 	defer os.RemoveAll(root)
 	r, f := getRunner(b)
 	defer f.Close()
-	r.UnshareFlags = unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWUSER | unix.CLONE_NEWUTS | unix.CLONE_NEWCGROUP
+	r.CloneFlags = unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWUSER | unix.CLONE_NEWUTS | unix.CLONE_NEWCGROUP
 	r.PivotRoot = root
 	r.NoNewPrivs = true
 	r.DropCaps = true
@@ -104,7 +104,7 @@ func BenchmarkFastUnshareMountPivot(b *testing.B) {
 func BenchmarkUnshareAll(b *testing.B) {
 	r, f := getRunner(b)
 	defer f.Close()
-	r.UnshareFlags = UnshareFlags
+	r.CloneFlags = UnshareFlags
 	r.NoNewPrivs = true
 	r.DropCaps = true
 	benchmarkRun(r, b)
@@ -119,7 +119,7 @@ func BenchmarkUnshareMountPivot(b *testing.B) {
 	defer os.RemoveAll(root)
 	r, f := getRunner(b)
 	defer f.Close()
-	r.UnshareFlags = UnshareFlags
+	r.CloneFlags = UnshareFlags
 	r.PivotRoot = root
 	r.NoNewPrivs = true
 	r.DropCaps = true

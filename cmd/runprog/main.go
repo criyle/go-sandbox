@@ -29,11 +29,10 @@ const (
 
 var (
 	addReadable, addWritable, addRawReadable, addRawWritable       arrayFlags
-	allowProc, unsafe, showDetails, namespace, useCGroup, memfile  bool
+	allowProc, unsafe, showDetails, useCGroup, memfile             bool
 	timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint64
-	inputFileName, outputFileName, errorFileName, workPath         string
+	inputFileName, outputFileName, errorFileName, workPath, runt   string
 
-	usedaemon     bool
 	pType, result string
 	args          []string
 )
@@ -69,10 +68,9 @@ func main() {
 	flag.BoolVar(&allowProc, "allow-proc", false, "Allow fork, exec... etc.")
 	flag.Var(&addRawReadable, "add-readable-raw", "Add a readable file (don't transform to its real path)")
 	flag.Var(&addRawWritable, "add-writable-raw", "Add a writable file (don't transform to its real path)")
-	flag.BoolVar(&namespace, "ns", false, "Use namespace to restrict file accesses")
 	flag.BoolVar(&useCGroup, "cgroup", false, "Use cgroup to colloct resource usage")
 	flag.BoolVar(&memfile, "memfd", false, "Use memfd as exec file")
-	flag.BoolVar(&usedaemon, "daemon", false, "Use daemon container to execute file")
+	flag.StringVar(&runt, "runner", "ptrace", "Runner for the program (ptrace, ns, daemon)")
 	flag.Parse()
 
 	args = flag.Args()
@@ -225,7 +223,7 @@ func start() (*types.Result, error) {
 		actionDefault = seccomp.ActionTrace.WithReturnCode(seccomp.MsgDisallow)
 	}
 
-	if usedaemon {
+	if runt == "daemon" {
 		root, err := ioutil.TempDir("", "dm")
 		if err != nil {
 			return nil, fmt.Errorf("cannot make temp root for daemon namespace: %v", err)
@@ -256,7 +254,7 @@ func start() (*types.Result, error) {
 				SyncFunc: syncFunc,
 			},
 		}
-	} else if namespace {
+	} else if runt == "ns" {
 		builder := libseccomp.Builder{
 			Allow:   append(allow, trace...),
 			Default: actionDefault,
@@ -293,7 +291,7 @@ func start() (*types.Result, error) {
 			HostName:    "run_program",
 			DomainName:  "run_program",
 		}
-	} else {
+	} else if runt == "ptrace" {
 		builder := libseccomp.Builder{
 			Allow:   allow,
 			Trace:   trace,
@@ -320,6 +318,8 @@ func start() (*types.Result, error) {
 			Handler:     h,
 			SyncFunc:    syncFunc,
 		}
+	} else {
+		return nil, fmt.Errorf("invalid runner type: %s", runt)
 	}
 
 	// gracefully shutdown

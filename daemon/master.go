@@ -99,16 +99,16 @@ func (b *Builder) Build() (*Master, error) {
 
 	files = append(files, uintptr(outf.Fd()))
 	r := &forkexec.Runner{
-		Args:         []string{os.Args[0], initArg},
-		Env:          []string{DefaultPath},
-		ExecFile:     execFile.Fd(),
-		Files:        files,
-		WorkDir:      "/w",
-		UnshareFlags: forkexec.UnshareFlags,
-		Mounts:       mounts,
-		HostName:     "daemon",
-		DomainName:   "daemon",
-		PivotRoot:    root,
+		Args:       []string{os.Args[0], initArg},
+		Env:        []string{DefaultPath},
+		ExecFile:   execFile.Fd(),
+		Files:      files,
+		WorkDir:    "/w",
+		CloneFlags: forkexec.UnshareFlags,
+		Mounts:     mounts,
+		HostName:   "daemon",
+		DomainName: "daemon",
+		PivotRoot:  root,
 	}
 	pid, err := r.Start()
 	if err != nil {

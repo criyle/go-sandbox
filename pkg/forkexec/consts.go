@@ -28,6 +28,10 @@ var (
 	// tmp dir made by pivot_root
 	oldRoot = []byte("old_root\000")
 
+	// set groups for unshare user
+	setGIDAllow = []byte("allow")
+	setGIDDeny  = []byte("deny")
+
 	// go does not allow constant uintptr to be negative...
 	_AT_FDCWD = unix.AT_FDCWD
 

@@ -20,22 +20,21 @@ const (
 func (r *Runner) Start(done <-chan struct{}) (<-chan types.Result, error) {
 	var err error
 	ch := &forkexec.Runner{
-		Args:              r.Args,
-		Env:               r.Env,
-		ExecFile:          r.ExecFile,
-		RLimits:           r.RLimits,
-		Files:             r.Files,
-		WorkDir:           r.WorkDir,
-		Seccomp:           r.Seccomp.SockFprog(),
-		NoNewPrivs:        true,
-		StopBeforeSeccomp: false,
-		UnshareFlags:      UnshareFlags,
-		Mounts:            r.Mounts,
-		HostName:          r.HostName,
-		DomainName:        r.DomainName,
-		PivotRoot:         r.Root,
-		DropCaps:          true,
-		SyncFunc:          r.SyncFunc,
+		Args:       r.Args,
+		Env:        r.Env,
+		ExecFile:   r.ExecFile,
+		RLimits:    r.RLimits,
+		Files:      r.Files,
+		WorkDir:    r.WorkDir,
+		Seccomp:    r.Seccomp.SockFprog(),
+		NoNewPrivs: true,
+		CloneFlags: UnshareFlags,
+		Mounts:     r.Mounts,
+		HostName:   r.HostName,
+		DomainName: r.DomainName,
+		PivotRoot:  r.Root,
+		DropCaps:   true,
+		SyncFunc:   r.SyncFunc,
 	}
 
 	result := make(chan types.Result, 1)

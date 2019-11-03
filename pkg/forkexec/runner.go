@@ -48,9 +48,9 @@ type Runner struct {
 	// cannot stop after seccomp since kill might not be allowed by seccomp filter
 	StopBeforeSeccomp bool
 
-	// unshare flag to create linux namespace, effective when clone child
+	// clone unshare flag to create linux namespace, effective when clone child
 	// since unshare syscall does not join the new pid group
-	UnshareFlags uintptr
+	CloneFlags uintptr
 
 	// mounts defines the mount syscalls after unshare mount namespace
 	// need CAP_SYS_ADMIN inside the namespace (e.g. unshare user namespace)
@@ -78,6 +78,18 @@ type Runner struct {
 	// from effective, permitted, inheritable capability sets before execve
 	// it should avoid calls to set ambient capabilities
 	DropCaps bool
+
+	// UidMappings / GidMappings for unshared user namespaces, no-op if mapping is null
+	UIDMappings []syscall.SysProcIDMap
+	GIDMappings []syscall.SysProcIDMap
+
+	// GidMappingsEnableSetgroups allows / disallows setgroups syscall.
+	// deny if GIDMappings is nil
+	GIDMappingsEnableSetgroups bool
+
+	// Credential holds user and group identities to be assumed
+	// by a child process started by StartProcess.
+	Credential *syscall.Credential
 
 	// Parent and child process with sync sataus through a socket pair.
 	// SyncFunc will invoke with the child pid. If SyncFunc return some error,

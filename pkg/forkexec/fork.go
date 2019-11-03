@@ -73,7 +73,7 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 		r1          uintptr
 		err2        syscall.Errno
 		err         error
-		unshareUser = r.UnshareFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
+		unshareUser = r.CloneFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
 	)
 
 	// sync with child
@@ -87,7 +87,7 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 
 	// synchronize with child for uid / gid map
 	if unshareUser {
-		if err = writeIDMaps(int(pid)); err != nil {
+		if err = writeIDMaps(r, int(pid)); err != nil {
 			err2 = err.(syscall.Errno)
 		}
 		syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
@@ -109,8 +109,8 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 	// otherwise, ack child (err1 == 0)
 	syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[0]), uintptr(unsafe.Pointer(&err1)), uintptr(unsafe.Sizeof(err1)))
 
-	// if stopped before execve, then do not wait until execve
-	if r.Ptrace && r.Seccomp != nil || r.StopBeforeSeccomp {
+	// if stopped before execve by signal SIGSTOP or PTRACE_ME, then do not wait until execve
+	if r.Ptrace || r.StopBeforeSeccomp {
 		unix.Close(p[0])
 		return int(pid), nil
 	}

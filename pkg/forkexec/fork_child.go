@@ -13,7 +13,7 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	var (
 		pid         uintptr
 		err2        syscall.Errno
-		unshareUser = r.UnshareFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
+		unshareUser = r.CloneFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
 	)
 
 	// similar to exec_linux, avoid side effect by shuffling around
@@ -30,7 +30,7 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	beforeFork()
 
 	// UnshareFlags (new namespaces) is activated by clone syscall
-	r1, _, err1 = syscall.RawSyscall6(syscall.SYS_CLONE, uintptr(syscall.SIGCHLD)|(r.UnshareFlags&UnshareFlags), 0, 0, 0, 0, 0)
+	r1, _, err1 = syscall.RawSyscall6(syscall.SYS_CLONE, uintptr(syscall.SIGCHLD)|(r.CloneFlags&UnshareFlags), 0, 0, 0, 0, 0)
 	if err1 != 0 || r1 != 0 {
 		// in parent process, immediate return
 		return
@@ -40,14 +40,16 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	afterForkInChild()
 	// Notice: cannot call any GO functions beyond this point
 
+	// Close write end of pipe
+	if _, _, err1 = syscall.RawSyscall(syscall.SYS_CLOSE, uintptr(p[0]), 0, 0); err1 != 0 {
+		goto childerror
+	}
+
 	// If usernamespace is unshared, uid map and gid map is required to create folders
 	// and files
 	// We need parent to setup uid_map / gid_map for us since we do not have capabilities
 	// in the original namespace
 	// At the same time, socket pair / pipe synchronization is required as well
-	if _, _, err1 = syscall.RawSyscall(syscall.SYS_CLOSE, uintptr(p[0]), 0, 0); err1 != 0 {
-		goto childerror
-	}
 	if unshareUser {
 		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), unsafe.Sizeof(err2))
 		if err1 != 0 {
@@ -67,6 +69,29 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	pid, _, err1 = syscall.RawSyscall(syscall.SYS_GETPID, 0, 0, 0)
 	if err1 != 0 {
 		goto childerror
+	}
+
+	// set the credential for the child process(exec_linux.go)
+	if cred := r.Credential; cred != nil {
+		ngroups := uintptr(len(cred.Groups))
+		groups := uintptr(0)
+		if ngroups > 0 {
+			groups = uintptr(unsafe.Pointer(&cred.Groups[0]))
+		}
+		if !(r.GIDMappings != nil && !r.GIDMappingsEnableSetgroups && ngroups == 0) && !cred.NoSetGroups {
+			_, _, err1 = syscall.RawSyscall(unix.SYS_SETGROUPS, ngroups, groups, 0)
+			if err1 != 0 {
+				goto childerror
+			}
+		}
+		_, _, err1 = syscall.RawSyscall(unix.SYS_SETGID, uintptr(cred.Gid), 0, 0)
+		if err1 != 0 {
+			goto childerror
+		}
+		_, _, err1 = syscall.RawSyscall(unix.SYS_SETUID, uintptr(cred.Uid), 0, 0)
+		if err1 != 0 {
+			goto childerror
+		}
 	}
 
 	// Pass 1 & pass 2 assigns fds for child process
@@ -131,7 +156,7 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 
 	// If mount point is unshared, mark root as private to avoid propagate
 	// outside to the original mount namespace
-	if r.UnshareFlags&syscall.CLONE_NEWNS == syscall.CLONE_NEWNS {
+	if r.CloneFlags&syscall.CLONE_NEWNS == syscall.CLONE_NEWNS {
 		_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&none[0])),
 			uintptr(unsafe.Pointer(&slash[0])), 0, syscall.MS_REC|syscall.MS_PRIVATE, 0, 0)
 		if err1 != 0 {
