@@ -29,6 +29,21 @@ func (m *Master) Ping() error {
 	return m.recvAckReply("ping")
 }
 
+// conf send configuration to container (used by builder only)
+func (m *Master) conf(conf *containerConfig) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	cmd := Cmd{
+		Cmd:  cmdConf,
+		Conf: conf,
+	}
+	if err := m.sendCmd(&cmd, nil); err != nil {
+		return fmt.Errorf("conf: %v", err)
+	}
+	return m.recvAckReply("conf")
+}
+
 // CopyIn copies file to container
 func (m *Master) CopyIn(f *os.File, p string) error {
 	m.mu.Lock()

@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"syscall"
 
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/pkg/memfd"
 	"github.com/criyle/go-sandbox/pkg/mount"
-	"github.com/criyle/go-sandbox/pkg/pipe"
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
 	"golang.org/x/sys/unix"
 )
@@ -21,28 +21,38 @@ type Builder struct {
 	// Mounts defines container mount points, empty uses default mounts
 	Mounts []mount.SyscallParams
 
-	// Stderr defines whether to collect container stderr output for debug
+	// Stderr defines whether to dup container stderr to stderr for debug
 	Stderr bool
 
 	// ExecFile defines executable that called Init, otherwise defer current
 	// executable (/proc/self/exe)
 	ExecFile *os.File
+
+	// CredGenerator defines a credential generator used to create new container
+	CredGenerator CredGenerator
+}
+
+// CredGenerator generates uid / gid credential used by container
+// to isolate process and file system access
+type CredGenerator interface {
+	Get() syscall.Credential
 }
 
 // Master manages single pre-forked container
 type Master struct {
 	pid    int                // underlying container init pid
 	socket *unixsocket.Socket // master - container communication
-	buff   *pipe.Buffer       // collect stderr output from container
 	mu     sync.Mutex         // lock to avoid race condition
 }
 
 // Build creates new master with underlying container
 func (b *Builder) Build() (*Master, error) {
 	var (
-		err  error
-		buff *pipe.Buffer
+		err            error
+		cred           syscall.Credential
+		uidMap, gidMap []syscall.SysProcIDMap
 	)
+
 	// container mount points
 	mounts := b.Mounts
 	if len(mounts) == 0 {
@@ -66,12 +76,7 @@ func (b *Builder) Build() (*Master, error) {
 	files := make([]uintptr, 0, 4)
 	files = append(files, devNull.Fd(), devNull.Fd())
 	if b.Stderr {
-		buff, err = pipe.NewBuffer(bufferSize)
-		if err != nil {
-			return nil, fmt.Errorf("daemon: failed to open stderr pipe: %v", err)
-		}
-		defer buff.W.Close()
-		files = append(files, buff.W.Fd())
+		files = append(files, os.Stderr.Fd())
 	} else {
 		files = append(files, devNull.Fd())
 	}
@@ -98,43 +103,67 @@ func (b *Builder) Build() (*Master, error) {
 	defer outf.Close()
 
 	files = append(files, uintptr(outf.Fd()))
+
+	// prepare credential
+	if b.CredGenerator != nil {
+		cred = b.CredGenerator.Get()
+		uidMap, gidMap = getIDMapping(&cred)
+	}
+
 	r := &forkexec.Runner{
-		Args:       []string{os.Args[0], initArg},
-		Env:        []string{DefaultPath},
-		ExecFile:   execFile.Fd(),
-		Files:      files,
-		WorkDir:    "/w",
-		CloneFlags: forkexec.UnshareFlags,
-		Mounts:     mounts,
-		HostName:   "daemon",
-		DomainName: "daemon",
-		PivotRoot:  root,
+		Args:        []string{os.Args[0], initArg},
+		Env:         []string{DefaultPath},
+		ExecFile:    execFile.Fd(),
+		Files:       files,
+		WorkDir:     containerWD,
+		CloneFlags:  forkexec.UnshareFlags,
+		Mounts:      mounts,
+		HostName:    containerName,
+		DomainName:  containerName,
+		PivotRoot:   root,
+		UIDMappings: uidMap,
+		GIDMappings: gidMap,
 	}
 	pid, err := r.Start()
 	if err != nil {
 		ins.Close()
 		return nil, fmt.Errorf("daemon: failed to execve(%v)", err)
 	}
-	return &Master{
+	m := &Master{
 		pid:    pid,
 		socket: ins,
-		buff:   buff,
-	}, nil
+	}
+
+	// set configuration and check if container creation successful
+	if err = m.conf(&containerConfig{
+		Cred: b.CredGenerator != nil,
+	}); err != nil {
+		m.Destroy()
+		return nil, err
+	}
+
+	return m, nil
 }
 
 // Destroy kill the daemon process (with container)
 // if stderr enabled, collect the output as error
 func (m *Master) Destroy() error {
+	// close socket (abort any ongoing command)
+	m.socket.Close()
+
+	// wait commands terminates
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// kill process
 	var wstatus unix.WaitStatus
 	unix.Kill(m.pid, unix.SIGKILL)
-	if _, err := unix.Wait4(m.pid, &wstatus, 0, nil); err != nil {
-		return err
+	// wait for container process to exit
+	_, err := unix.Wait4(m.pid, &wstatus, 0, nil)
+	for err == unix.EINTR {
+		_, err = unix.Wait4(m.pid, &wstatus, 0, nil)
 	}
-	if m.buff != nil {
-		<-m.buff.Done
-		return fmt.Errorf("destroy: %s", m.buff.Buffer.Bytes())
-	}
-	return nil
+	return err
 }
 
 // exec prepares executable
@@ -176,4 +205,34 @@ func newPassCredSocketPair() (*unixsocket.Socket, *unixsocket.Socket, error) {
 		return nil, nil, err
 	}
 	return ins, outs, nil
+}
+
+func getIDMapping(cred *syscall.Credential) ([]syscall.SysProcIDMap, []syscall.SysProcIDMap) {
+	uidMap := []syscall.SysProcIDMap{
+		syscall.SysProcIDMap{
+			ContainerID: 0,
+			HostID:      os.Geteuid(),
+			Size:        1,
+		},
+		syscall.SysProcIDMap{
+			ContainerID: containerUID,
+			HostID:      int(cred.Uid),
+			Size:        1,
+		},
+	}
+
+	gidMap := []syscall.SysProcIDMap{
+		syscall.SysProcIDMap{
+			ContainerID: 0,
+			HostID:      os.Getegid(),
+			Size:        1,
+		},
+		syscall.SysProcIDMap{
+			ContainerID: containerGID,
+			HostID:      int(cred.Gid),
+			Size:        1,
+		},
+	}
+
+	return uidMap, gidMap
 }

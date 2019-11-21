@@ -9,8 +9,15 @@ const (
 	cmdExecve = "execve"
 	cmdOk     = "ok"
 	cmdKill   = "kill"
+	cmdConf   = "conf"
 
 	initArg = "init"
 
 	currentExec = "/proc/self/exe"
+
+	containerUID = 1000
+	containerGID = 1000
+
+	containerName = "daemon"
+	containerWD   = "/w"
 )

@@ -8,6 +8,8 @@ package daemon
 Protocol between client and daemon (not thread safe):
 - ping (alive check):
 	reply: pong
+- conf (set configuration):
+	reply pong
 - copyin (copy file into container):
   send: path, <input fd>
   reply: "finished" (after copy finished) / "error"
@@ -40,12 +42,13 @@ import (
 
 // Cmd is the control message send into daemon
 type Cmd struct {
-	Cmd     string          // type of the cmd
-	Path    string          // path (copyin / open)
-	Argv    []string        // execve argv
-	Env     []string        // execve env
-	RLimits []rlimit.RLimit // execve posix rlimit
-	FdExec  bool            // if use fexecve (fd[0] as exec)
+	Cmd     string           // type of the cmd
+	Path    string           // path (copyin / open)
+	Argv    []string         // execve argv
+	Env     []string         // execve env
+	RLimits []rlimit.RLimit  // execve posix rlimit
+	FdExec  bool             // if use fexecve (fd[0] as exec)
+	Conf    *containerConfig // to set configuration
 }
 
 // Reply is the reply message send back to controller

@@ -10,6 +10,11 @@ import (
 
 type containerServer struct {
 	socket *unixsocket.Socket
+	containerConfig
+}
+
+type containerConfig struct {
+	Cred bool
 }
 
 // Init is called for container init process
@@ -30,14 +35,14 @@ func Init() (err error) {
 	// 3. undefined cmd (possible race condition)
 	defer func() {
 		if err2 := recover(); err2 != nil {
-			fmt.Fprintf(os.Stderr, "container_panic: %v", err)
+			fmt.Fprintf(os.Stderr, "container_panic: %v\n", err)
 			os.Exit(1)
 		}
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "container_exit: %v", err)
+			fmt.Fprintf(os.Stderr, "container_exit: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Fprintf(os.Stderr, "container_exit")
+		fmt.Fprintf(os.Stderr, "container_exit\n")
 		os.Exit(0)
 	}()
 
@@ -49,7 +54,7 @@ func Init() (err error) {
 	}
 
 	// serve forever
-	cs := &containerServer{soc}
+	cs := &containerServer{socket: soc}
 	return cs.serve()
 }
 
@@ -70,6 +75,9 @@ func (c *containerServer) handleCmd(cmd *Cmd, msg *unixsocket.Msg) error {
 	case cmdPing:
 		return c.handlePing()
 
+	case cmdConf:
+		return c.handleConf(cmd)
+
 	case cmdCopyIn:
 		return c.handleCopyIn(cmd, msg)
 
@@ -89,6 +97,13 @@ func (c *containerServer) handleCmd(cmd *Cmd, msg *unixsocket.Msg) error {
 }
 
 func (c *containerServer) handlePing() error {
+	return c.sendReply(&Reply{}, nil)
+}
+
+func (c *containerServer) handleConf(cmd *Cmd) error {
+	if cmd.Conf != nil {
+		c.containerConfig = *cmd.Conf
+	}
 	return c.sendReply(&Reply{}, nil)
 }
 

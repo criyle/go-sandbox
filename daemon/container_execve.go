@@ -13,6 +13,7 @@ func (c *containerServer) handleExecve(cmd *Cmd, msg *unixsocket.Msg) error {
 	var (
 		files    []uintptr
 		execFile uintptr
+		cred     *syscall.Credential
 	)
 	if msg != nil {
 		files = intSliceToUintptr(msg.Fds)
@@ -52,6 +53,14 @@ func (c *containerServer) handleExecve(cmd *Cmd, msg *unixsocket.Msg) error {
 		return nil
 	}
 
+	if c.Cred {
+		cred = &syscall.Credential{
+			Uid:         containerUID,
+			Gid:         containerGID,
+			NoSetGroups: true,
+		}
+	}
+
 	r := forkexec.Runner{
 		Args:       cmd.Argv,
 		Env:        cmd.Env,
@@ -62,6 +71,7 @@ func (c *containerServer) handleExecve(cmd *Cmd, msg *unixsocket.Msg) error {
 		NoNewPrivs: true,
 		DropCaps:   true,
 		SyncFunc:   syncFunc,
+		Credential: cred,
 	}
 	// starts the runner, error is handled same as wait4 to make communication equal
 	pid, err := r.Start()
@@ -83,7 +93,7 @@ func (c *containerServer) handleExecve(cmd *Cmd, msg *unixsocket.Msg) error {
 		<-waitDone
 		// collect zombies
 		for {
-			if pid, err := syscall.Wait4(-1, nil, syscall.WNOHANG, nil); err != nil || pid <= 0 {
+			if pid, err := syscall.Wait4(-1, nil, syscall.WNOHANG, nil); err != syscall.EINTR || pid <= 0 {
 				break
 			}
 		}
