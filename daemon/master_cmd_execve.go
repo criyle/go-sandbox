@@ -107,6 +107,13 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 			}
 			return
 		}
+		if reply2.Error != nil {
+			result <- types.Result{
+				Status: types.StatusFatal,
+				Error:  reply2.Error.Error(),
+			}
+			return
+		}
 		if reply2.ExecReply == nil {
 			result <- types.Result{
 				Status: types.StatusFatal,
@@ -115,19 +122,11 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 			return
 		}
 		// emit result after all communication finish
-		status := reply2.ExecReply.Status
-		errMsg := ""
-		if reply2.Error != nil {
-			status = types.StatusFatal
-			errMsg = reply2.Error.Error()
-		}
-
 		result <- types.Result{
-			Status:      status,
+			Status:      reply2.ExecReply.Status,
 			ExitStatus:  reply2.ExecReply.ExitStatus,
 			UserTime:    reply2.ExecReply.UserTime,
 			UserMem:     reply2.ExecReply.UserMem,
-			Error:       errMsg,
 			SetUpTime:   mTime.Sub(sTime),
 			RunningTime: time.Since(mTime),
 		}
