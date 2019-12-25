@@ -20,4 +20,6 @@ const (
 
 	containerName = "daemon"
 	containerWD   = "/w"
+
+	containerMaxProc = 1
 )

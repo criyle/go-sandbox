@@ -35,8 +35,8 @@ func (m *Master) conf(conf *containerConfig) error {
 	defer m.mu.Unlock()
 
 	cmd := Cmd{
-		Cmd:  cmdConf,
-		Conf: conf,
+		Cmd:     cmdConf,
+		ConfCmd: &ConfCmd{Conf: *conf},
 	}
 	if err := m.sendCmd(&cmd, nil); err != nil {
 		return fmt.Errorf("conf: %v", err)
@@ -44,34 +44,15 @@ func (m *Master) conf(conf *containerConfig) error {
 	return m.recvAckReply("conf")
 }
 
-// CopyIn copies file to container
-func (m *Master) CopyIn(f *os.File, p string) error {
+// Open open files in container
+func (m *Master) Open(p []OpenCmd) ([]*os.File, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	// send copyin
 	cmd := Cmd{
-		Cmd:  cmdCopyIn,
-		Path: p,
-	}
-	msg := unixsocket.Msg{
-		Fds: []int{int(f.Fd())},
-	}
-	if err := m.sendCmd(&cmd, &msg); err != nil {
-		return fmt.Errorf("copyin: %v", err)
-	}
-	return m.recvAckReply("copyin")
-}
-
-// Open open file in container
-func (m *Master) Open(p string) (*os.File, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// send copyin
-	cmd := Cmd{
-		Cmd:  cmdOpen,
-		Path: p,
+		Cmd:     cmdOpen,
+		OpenCmd: p,
 	}
 	if err := m.sendCmd(&cmd, nil); err != nil {
 		return nil, fmt.Errorf("open: %v", err)
@@ -80,19 +61,24 @@ func (m *Master) Open(p string) (*os.File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open: %v", err)
 	}
-	if reply.Error != "" {
+	if reply.Error != nil {
 		return nil, fmt.Errorf("open: %v", reply.Error)
 	}
-	if len(msg.Fds) != 1 {
+	if len(msg.Fds) != len(p) {
 		closeFds(msg.Fds)
-		return nil, fmt.Errorf("open: unexpected number of fd %v", len(msg.Fds))
+		return nil, fmt.Errorf("open: unexpected number of fd %v / %v", len(msg.Fds), len(p))
 	}
-	f := os.NewFile(uintptr(msg.Fds[0]), p)
-	if f == nil {
-		closeFds(msg.Fds)
-		return nil, fmt.Errorf("open: failed %v", msg.Fds[0])
+
+	ret := make([]*os.File, 0, len(p))
+	for i, fd := range msg.Fds {
+		f := os.NewFile(uintptr(fd), p[i].Path)
+		if f == nil {
+			closeFds(msg.Fds)
+			return nil, fmt.Errorf("open: failed %v", msg.Fds[0])
+		}
+		ret = append(ret, f)
 	}
-	return f, nil
+	return ret, nil
 }
 
 // Delete remove file from container
@@ -101,8 +87,8 @@ func (m *Master) Delete(p string) error {
 	defer m.mu.Unlock()
 
 	cmd := Cmd{
-		Cmd:  cmdDelete,
-		Path: p,
+		Cmd:       cmdDelete,
+		DeleteCmd: &DeleteCmd{Path: p},
 	}
 	if err := m.sendCmd(&cmd, nil); err != nil {
 		return fmt.Errorf("delete: %v", err)
@@ -129,7 +115,7 @@ func (m *Master) recvAckReply(name string) error {
 	if err != nil {
 		return fmt.Errorf("%v: recvAck %v", name, err)
 	}
-	if reply.Error != "" {
+	if reply.Error != nil {
 		return fmt.Errorf("%v: container error %v", name, reply.Error)
 	}
 	return nil

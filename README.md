@@ -44,6 +44,33 @@ Default file access syscall check:
 1. Pre-fork container daemons to run programs inside
 2. Unix socket to pass fd inside / outside
 
+Container / Master Communication Protocol (single thread):
+
+- ping (alive check):
+  - reply: pong
+- conf (set configuration):
+  - reply pong
+- open (open files in given mode inside container):
+  - send: []OpenCmd
+  - reply: "success", file fds / "error"
+- delete (unlink file / rmdir dir inside container):
+  - send: path
+  - reply: "finished" / "error"
+- reset (clean up container for later use (clear workdir / tmp)):
+  - send:
+  - reply: "success"
+- execve: (execute file inside container):
+  - send: argv, env, rLimits, fds
+  - reply:
+    - success: "success", pid
+    - failed: "failed"
+  - send (success): "init_finished" (as cmd)
+    - reply: "finished" / send: "kill" (as cmd)
+    - send: "kill" (as cmd) / reply: "finished"
+  - reply:
+
+Any socket related error will cause the daemon exit (with all process inside container)
+
 ## Packages (/pkg)
 
 - seccomp: provides seccomp type definition

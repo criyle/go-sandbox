@@ -2,8 +2,9 @@ package daemon
 
 import (
 	"fmt"
-	"io"
 	"os"
+	"runtime"
+	"syscall"
 
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
 )
@@ -13,6 +14,7 @@ type containerServer struct {
 	containerConfig
 }
 
+// ContainerConfig set the container config
 type containerConfig struct {
 	Cred bool
 }
@@ -46,6 +48,9 @@ func Init() (err error) {
 		os.Exit(0)
 	}()
 
+	// limit container resource usage
+	runtime.GOMAXPROCS(containerMaxProc)
+
 	// new_master shared the socket at fd 3 (marked close_exec)
 	const defaultFd = 3
 	soc, err := unixsocket.NewSocket(defaultFd)
@@ -76,22 +81,19 @@ func (c *containerServer) handleCmd(cmd *Cmd, msg *unixsocket.Msg) error {
 		return c.handlePing()
 
 	case cmdConf:
-		return c.handleConf(cmd)
-
-	case cmdCopyIn:
-		return c.handleCopyIn(cmd, msg)
+		return c.handleConf(cmd.ConfCmd)
 
 	case cmdOpen:
-		return c.handleOpen(cmd)
+		return c.handleOpen(cmd.OpenCmd)
 
 	case cmdDelete:
-		return c.handleDelete(cmd)
+		return c.handleDelete(cmd.DeleteCmd)
 
 	case cmdReset:
 		return c.handleReset()
 
 	case cmdExecve:
-		return c.handleExecve(cmd, msg)
+		return c.handleExecve(cmd.ExecCmd, msg)
 	}
 	return fmt.Errorf("unknown command: %v", cmd.Cmd)
 }
@@ -100,51 +102,37 @@ func (c *containerServer) handlePing() error {
 	return c.sendReply(&Reply{}, nil)
 }
 
-func (c *containerServer) handleConf(cmd *Cmd) error {
-	if cmd.Conf != nil {
-		c.containerConfig = *cmd.Conf
+func (c *containerServer) handleConf(conf *ConfCmd) error {
+	if conf != nil {
+		c.containerConfig = conf.Conf
 	}
 	return c.sendReply(&Reply{}, nil)
 }
 
-func (c *containerServer) handleCopyIn(cmd *Cmd, msg *unixsocket.Msg) error {
-	if len(msg.Fds) != 1 {
-		closeFds(msg.Fds)
-		return c.sendErrorReply("copyin: unexpected number of fds(%d)", len(msg.Fds))
+func (c *containerServer) handleOpen(open []OpenCmd) error {
+	if len(open) == 0 {
+		return c.sendErrorReply("open: no open parameter received")
 	}
-	inf := os.NewFile(uintptr(msg.Fds[0]), cmd.Path)
-	if inf == nil {
-		return c.sendErrorReply("copyin: newfile failed %v", msg.Fds[0])
-	}
-	defer inf.Close()
 
-	// have 0777 permission to be able copy in executables
-	outf, err := os.OpenFile(cmd.Path, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0777)
-	if err != nil {
-		return c.sendErrorReply("copyin: open write file %v", err)
+	// open files
+	fds := make([]int, 0, len(open))
+	for _, o := range open {
+		outFile, err := os.OpenFile(o.Path, o.Flag, o.Perm)
+		if err != nil {
+			return c.sendErrorReply("open: %v", err)
+		}
+		defer outFile.Close()
+		fds = append(fds, int(outFile.Fd()))
 	}
-	defer outf.Close()
 
-	if _, err = io.Copy(outf, inf); err != nil {
-		return c.sendErrorReply("copyin: io.copy %v", err)
-	}
-	return c.sendReply(&Reply{}, nil)
+	return c.sendReply(&Reply{}, &unixsocket.Msg{Fds: fds})
 }
 
-func (c *containerServer) handleOpen(cmd *Cmd) error {
-	outf, err := os.Open(cmd.Path)
-	if err != nil {
-		return c.sendErrorReply("open: %v", err)
+func (c *containerServer) handleDelete(delete *DeleteCmd) error {
+	if delete == nil {
+		return c.sendErrorReply("delete: no parameter provided")
 	}
-	defer outf.Close()
-
-	return c.sendReply(&Reply{}, &unixsocket.Msg{
-		Fds: []int{int(outf.Fd())},
-	})
-}
-
-func (c *containerServer) handleDelete(cmd *Cmd) error {
-	if err := os.Remove(cmd.Path); err != nil {
+	if err := os.Remove(delete.Path); err != nil {
 		return c.sendErrorReply("delete: %v", err)
 	}
 	return c.sendReply(&Reply{}, nil)
@@ -175,5 +163,14 @@ func (c *containerServer) sendReply(reply *Reply, msg *unixsocket.Msg) error {
 
 // sendErrorReply sends error reply
 func (c *containerServer) sendErrorReply(ft string, v ...interface{}) error {
-	return c.sendReply(&Reply{Error: fmt.Sprintf(ft, v...)}, nil)
+	errorReply := &ErrorReply{
+		Msg: fmt.Sprintf(ft, v...),
+	}
+	// store errno
+	if len(v) == 1 {
+		if errno, ok := v[0].(syscall.Errno); ok {
+			errorReply.Errno = &errno
+		}
+	}
+	return c.sendReply(&Reply{Error: errorReply}, nil)
 }

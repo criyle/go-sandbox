@@ -41,12 +41,15 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 	msg := &unixsocket.Msg{
 		Fds: files,
 	}
-	cmd := Cmd{
-		Cmd:     cmdExecve,
+	execCmd := &ExecCmd{
 		Argv:    param.Args,
 		Env:     param.Env,
 		RLimits: param.RLimits,
 		FdExec:  param.ExecFile > 0,
+	}
+	cmd := Cmd{
+		Cmd:     cmdExecve,
+		ExecCmd: execCmd,
 	}
 	if err := m.sendCmd(&cmd, msg); err != nil {
 		m.mu.Unlock()
@@ -59,7 +62,7 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 		return nil, fmt.Errorf("execve: recvReply %v", err)
 	}
 	// if sync function did not involved
-	if reply.Error != "" || msg == nil || msg.Cred == nil {
+	if reply.Error != nil || msg == nil || msg.Cred == nil {
 		// tell kill function to exit and sync
 		m.execveSyncKill()
 		m.mu.Unlock()
@@ -95,6 +98,7 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 		m.recvReply()
 		// unlock after last read / write
 		m.mu.Unlock()
+
 		// handle potential error
 		if err != nil {
 			result <- types.Result{
@@ -103,17 +107,27 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 			}
 			return
 		}
-		// emit result after all communication finish
-		status := reply2.Status
-		if reply2.Error != "" {
-			status = types.StatusFatal
+		if reply2.ExecReply == nil {
+			result <- types.Result{
+				Status: types.StatusFatal,
+				Error:  "execve: no reply received",
+			}
+			return
 		}
+		// emit result after all communication finish
+		status := reply2.ExecReply.Status
+		errMsg := ""
+		if reply2.Error != nil {
+			status = types.StatusFatal
+			errMsg = reply2.Error.Error()
+		}
+
 		result <- types.Result{
 			Status:      status,
-			ExitStatus:  reply2.ExitStatus,
-			UserTime:    reply2.UserTime,
-			UserMem:     reply2.UserMem,
-			Error:       reply2.Error,
+			ExitStatus:  reply2.ExecReply.ExitStatus,
+			UserTime:    reply2.ExecReply.UserTime,
+			UserMem:     reply2.ExecReply.UserMem,
+			Error:       errMsg,
 			SetUpTime:   mTime.Sub(sTime),
 			RunningTime: time.Since(mTime),
 		}

@@ -9,12 +9,15 @@ import (
 	"github.com/criyle/go-sandbox/types"
 )
 
-func (c *containerServer) handleExecve(cmd *Cmd, msg *unixsocket.Msg) error {
+func (c *containerServer) handleExecve(cmd *ExecCmd, msg *unixsocket.Msg) error {
 	var (
 		files    []uintptr
 		execFile uintptr
 		cred     *syscall.Credential
 	)
+	if cmd == nil {
+		return c.sendErrorReply("execve: no parameter provided")
+	}
 	if msg != nil {
 		files = intSliceToUintptr(msg.Fds)
 		// don't leak fds to child
@@ -118,10 +121,12 @@ func (c *containerServer) handleExecve(cmd *Cmd, msg *unixsocket.Msg) error {
 		case wstatus.Exited():
 			exitStatus := wstatus.ExitStatus()
 			c.sendReply(&Reply{
-				Status:     status,
-				ExitStatus: exitStatus,
-				UserTime:   userTime,
-				UserMem:    userMem,
+				ExecReply: &ExecReply{
+					Status:     status,
+					ExitStatus: exitStatus,
+					UserTime:   userTime,
+					UserMem:    userMem,
+				},
 			}, nil)
 
 		case wstatus.Signaled():
@@ -137,14 +142,18 @@ func (c *containerServer) handleExecve(cmd *Cmd, msg *unixsocket.Msg) error {
 				status = types.StatusRE
 			}
 			c.sendReply(&Reply{
-				Status:   status,
-				UserTime: userTime,
-				UserMem:  userMem,
+				ExecReply: &ExecReply{
+					Status:   status,
+					UserTime: userTime,
+					UserMem:  userMem,
+				},
 			}, nil)
+
 		default:
 			c.sendErrorReply("execve: unknown status %v", wstatus)
 		}
 	}
+
 	// wait for kill msg and reply done for finish
 	<-killDone
 	return c.sendReply(&Reply{}, nil)
