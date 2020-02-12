@@ -2,13 +2,17 @@
 
 [![GoDoc](https://godoc.org/github.com/criyle/go-sandbox?status.svg)](https://godoc.org/github.com/criyle/go-sandbox)
 
-Original goal was to reimplement [uoj-judger/run_program](https://github.com/vfleaking/uoj) in GO language using [libseccomp](https://github.com/pkg/seccomp/libseccomp-golang). As technology grows, it also implements new technologies including Linux namespace and cgroup.
+Original goal was to replica [uoj-judger/run_program](https://github.com/vfleaking/uoj) in GO language using [libseccomp](https://github.com/pkg/seccomp/libseccomp-golang). As technology grows, it also implements new technologies including Linux namespace and cgroup.
 
-## Install
+The idea of rootfs and interval CPU usage checking comes from [syzoj/judge-v3](https://github.com/syzoj/judge-v3) and the pooled pre-forked container comes from [vijos/jd4](https://github.com/vijos/jd4).
 
-- install go compiler: `apt install golang-go`
-- install libseccomp-dev: `apt install libseccomp-dev`
-- install: `go install github.com/criyle/go-sandbox/...`
+Notice: Only works on Linux since ptrace, unshare, cgroup are available only on Linux
+
+## Build & Install
+
+- install latest go compiler from [golang/download](https://golang.org/dl/)
+- install libseccomp library: (for Ubuntu) `apt install libseccomp-dev`
+- build & install: `go install github.com/criyle/go-sandbox/...`
 
 ## Technologies
 
@@ -39,7 +43,44 @@ Default file access syscall check:
 2. Use Linux Control Groups to limit & acct CPU & memory (elimilate wait4.rusage)
 3. Container tech with execveat memfd, sethostname, setdomainname
 
-### pre-forked container
+## Design (in progress)
+
+### Result Status
+
+- Normal (no error)
+- Program Error
+  - Resource Limit Exceeded
+    - Time
+    - Memory
+    - Output
+  - Unauthorized Access
+    - Disallowed Syscall
+  - Runtime Error
+    - Signaled
+      - `SIGXCPU` / `SIGKILL` are treated as TimeLimitExceeded by rlimit or caller kill
+      - `SIGXFSZ` is treated as OutputLimitExceeded by rlimit
+      - `SIGSYS` is treaded as Disallowed Syscall by seccomp
+      - Potential Runtime error are: `SIGSEGV` (segment fault)
+    - Nonzero Exit Code
+- Program Runner Error
+
+### Result Structure
+
+``` go
+type Result struct {
+    Status            // result status
+    ExitStatus int    // exit status (signal number if signalled)
+    Error      string // potential detailed error message (for program runner error)
+
+    Time   time.Duration // used user CPU time  (underlying type int64 in ns)
+    Memory Size          // used user memory    (underlying type uint64 in bytes)
+    // metrics for the program runner
+    SetUpTime   time.Duration
+    RunningTime time.Duration
+}
+```
+
+### Pre-forked Container Protocol
 
 1. Pre-fork container daemons to run programs inside
 2. Unix socket to pass fd inside / outside
@@ -89,7 +130,7 @@ Any socket related error will cause the daemon exit (with all process inside con
 - daemon: creates pre-forked container to run programs inside
 - runner: interface to run program
   - ptrace: wrapper to call forkexec and ptracer
-    - filehandler: an implementation of UOJ file set
+    - filehandler: an example implementation of UOJ file set
   - unshare: wrapper to call forkexec and unshared namespaces
 - ptracer: ptrace tracer and provides syscall trap filter context
 - types: provides general res / result data structures
@@ -102,7 +143,7 @@ Any socket related error will cause the daemon exit (with all process inside con
 
 - config/config.go: all configs toward running specs (similar to UOJ)
 
-## Benchmarks (docker desktop amd64 / native arm64)
+## Benchmarks (MacOS docker amd64 / native arm64)
 
 - 1ms / 2ms: fork, unshare pid / user / cgroup
 - 4ms / 8ms: run inside pre-forked container
