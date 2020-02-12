@@ -1,6 +1,7 @@
 package ptracer
 
 import (
+	"context"
 	"runtime"
 	"time"
 
@@ -11,8 +12,7 @@ import (
 )
 
 // Trace starts new goroutine and trace runner with ptrace
-func (t *Tracer) Trace(done <-chan struct{}) (<-chan types.Result, error) {
-	var err error
+func (t *Tracer) Trace(c context.Context) <-chan types.Result {
 	result := make(chan types.Result, 1)
 	start := make(chan struct{})
 	finish := make(chan struct{})
@@ -20,8 +20,8 @@ func (t *Tracer) Trace(done <-chan struct{}) (<-chan types.Result, error) {
 	// run
 	go func() {
 		defer close(finish)
-		ret, err2 := t.TraceRun(done, start)
-		err = err2
+		ret, err := t.TraceRun(c.Done(), start)
+		ret.Error = err.Error()
 		result <- ret
 	}()
 
@@ -29,7 +29,7 @@ func (t *Tracer) Trace(done <-chan struct{}) (<-chan types.Result, error) {
 	case <-start:
 	case <-finish:
 	}
-	return result, err
+	return result
 }
 
 // TraceRun start and traces all child process by runner in the calling goroutine

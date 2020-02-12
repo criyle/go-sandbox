@@ -33,14 +33,6 @@ func (r *Runner) Run(c context.Context) <-chan types.Result {
 		Runner:  ch,
 		Limit:   r.Limit,
 	}
-	rt, err := tracer.Trace(c.Done())
-	if err != nil {
-		ch := make(chan types.Result, 1)
-		ch <- types.Result{
-			Status: types.StatusRunnerError,
-			Error:  err.Error(),
-		}
-		rt = ch
-	}
+	rt := tracer.Trace(c)
 	return rt
 }
