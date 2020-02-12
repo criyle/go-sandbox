@@ -3,6 +3,7 @@ package daemon
 import (
 	"fmt"
 	"syscall"
+	"time"
 
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
@@ -114,9 +115,9 @@ func (c *containerServer) handleExecve(cmd *ExecCmd, msg *unixsocket.Msg) error 
 	if err != nil {
 		c.sendErrorReply("execve: wait4 %v", err)
 	} else {
-		var status types.Status
-		userTime := uint64(rusage.Utime.Sec*1e3 + rusage.Utime.Usec/1e3) // ms
-		userMem := uint64(rusage.Maxrss)                                 // kb
+		status := types.StatusNormal
+		userTime := time.Duration(rusage.Utime.Nano()) // ns
+		userMem := types.Size(rusage.Maxrss << 10)     // bytes
 		switch {
 		case wstatus.Exited():
 			exitStatus := wstatus.ExitStatus()
@@ -124,8 +125,8 @@ func (c *containerServer) handleExecve(cmd *ExecCmd, msg *unixsocket.Msg) error 
 				ExecReply: &ExecReply{
 					Status:     status,
 					ExitStatus: exitStatus,
-					UserTime:   userTime,
-					UserMem:    userMem,
+					Time:       userTime,
+					Memory:     userMem,
 				},
 			}, nil)
 
@@ -133,19 +134,20 @@ func (c *containerServer) handleExecve(cmd *ExecCmd, msg *unixsocket.Msg) error 
 			switch wstatus.Signal() {
 			// kill signal treats as TLE
 			case syscall.SIGXCPU, syscall.SIGKILL:
-				status = types.StatusTLE
+				status = types.StatusTimeLimitExceeded
 			case syscall.SIGXFSZ:
-				status = types.StatusOLE
+				status = types.StatusOutputLimitExceeded
 			case syscall.SIGSYS:
-				status = types.StatusBan
+				status = types.StatusDisallowedSyscall
 			default:
-				status = types.StatusRE
+				status = types.StatusSignalled
 			}
 			c.sendReply(&Reply{
 				ExecReply: &ExecReply{
-					Status:   status,
-					UserTime: userTime,
-					UserMem:  userMem,
+					ExitStatus: int(wstatus.Signal()),
+					Status:     status,
+					Time:       userTime,
+					Memory:     userMem,
 				},
 			}, nil)
 

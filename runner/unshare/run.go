@@ -1,6 +1,7 @@
 package unshare
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -16,9 +17,8 @@ const (
 	UnshareFlags = unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWUSER | unix.CLONE_NEWUTS | unix.CLONE_NEWCGROUP
 )
 
-// Start starts the unshared process
-func (r *Runner) Start(done <-chan struct{}) (<-chan types.Result, error) {
-	var err error
+// Run starts the unshared process
+func (r *Runner) Run(c context.Context) <-chan types.Result {
 	ch := &forkexec.Runner{
 		Args:       r.Args,
 		Env:        r.Env,
@@ -44,8 +44,8 @@ func (r *Runner) Start(done <-chan struct{}) (<-chan types.Result, error) {
 	// run
 	go func() {
 		defer close(finish)
-		ret, err2 := r.Trace(done, start, ch)
-		err = err2
+		ret, err2 := r.Trace(c.Done(), start, ch)
+		ret.Error = err2.Error()
 		result <- ret
 	}()
 
@@ -53,7 +53,7 @@ func (r *Runner) Start(done <-chan struct{}) (<-chan types.Result, error) {
 	case <-start:
 	case <-finish:
 	}
-	return result, err
+	return result
 }
 
 // Trace tracks child processes
@@ -72,7 +72,7 @@ func (r *Runner) Trace(done <-chan struct{}, start chan<- struct{},
 	pgid, err := runner.Start()
 	r.println("Starts: ", pgid, err)
 	if err != nil {
-		result.Status = types.StatusRE
+		result.Status = types.StatusRunnerError
 		return result, err
 	}
 
@@ -92,7 +92,7 @@ func (r *Runner) Trace(done <-chan struct{}, start chan<- struct{},
 
 	defer func() {
 		if tle {
-			err = types.StatusTLE
+			err = types.StatusTimeLimitExceeded
 		}
 		// kill all tracee upon return
 		killAll(pgid)
@@ -107,24 +107,24 @@ loop:
 		_, err := unix.Wait4(pgid, &wstatus, 0, &rusage)
 		r.println("wait4: ", wstatus)
 		if err != nil {
-			return result, types.StatusFatal
+			return result, types.StatusRunnerError
 		}
 
 		// update resource usage and check against limits
-		userTime := uint64(rusage.Utime.Sec*1e3 + rusage.Utime.Usec/1e3) // ms
-		userMem := uint64(rusage.Maxrss)                                 // kb
+		userTime := time.Duration(rusage.Utime.Nano()) // ns
+		userMem := types.Size(rusage.Maxrss << 10)     // bytes                             // kb
 
 		// check tle / mle
 		if userTime > r.Limit.TimeLimit {
-			status = types.StatusTLE
+			status = types.StatusTimeLimitExceeded
 		}
 		if userMem > r.Limit.MemoryLimit {
-			status = types.StatusMLE
+			status = types.StatusMemoryLimitExceeded
 		}
 		result = types.Result{
-			Status:   status,
-			UserTime: userTime,
-			UserMem:  userMem,
+			Status: status,
+			Time:   userTime,
+			Memory: userMem,
 		}
 		if status != types.StatusNormal {
 			return result, status
@@ -138,15 +138,16 @@ loop:
 			sig := wstatus.Signal()
 			switch sig {
 			case unix.SIGXCPU, unix.SIGKILL:
-				status = types.StatusTLE
+				status = types.StatusTimeLimitExceeded
 			case unix.SIGXFSZ:
-				status = types.StatusOLE
+				status = types.StatusOutputLimitExceeded
 			case unix.SIGSYS:
-				status = types.StatusBan
+				status = types.StatusDisallowedSyscall
 			default:
-				status = types.StatusRE
+				status = types.StatusSignalled
 			}
 			result.Status = status
+			result.ExitStatus = int(sig)
 			break loop
 		}
 	}

@@ -127,7 +127,7 @@ func (h *tracerHandler) GetSyscallName(ctx *ptracer.Context) (string, error) {
 
 func (h *tracerHandler) HandlerDisallow(name string) error {
 	if !h.Unsafe {
-		return types.StatusBan
+		return types.StatusDisallowedSyscall
 	}
 	return nil
 }

@@ -36,6 +36,7 @@ Any socket related error will cause the daemon exit (with all process inside con
 import (
 	"os"
 	"syscall"
+	"time"
 
 	"github.com/criyle/go-sandbox/pkg/rlimit"
 	"github.com/criyle/go-sandbox/types"
@@ -90,10 +91,10 @@ type ErrorReply struct {
 
 // ExecReply stores execve result
 type ExecReply struct {
-	ExitStatus int          // waitpid exit status
-	Status     types.Status // return status
-	UserTime   uint64       // waitpid user CPU (ms)
-	UserMem    uint64       // waitpid user memory (kb)
+	ExitStatus int           // waitpid exit status
+	Status     types.Status  // return status
+	Time       time.Duration // waitpid user CPU (ns)
+	Memory     types.Size    // waitpid user memory (byte)
 }
 
 func (e *ErrorReply) Error() string {

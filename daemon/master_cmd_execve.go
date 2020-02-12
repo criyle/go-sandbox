@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -26,11 +27,22 @@ type ExecveParam struct {
 }
 
 // Execve runs process inside container
-// accepts done for cancelation
-func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.Result, error) {
+// accepts context for cancelation
+func (m *Master) Execve(c context.Context, param *ExecveParam) <-chan types.Result {
 	m.mu.Lock()
 
 	sTime := time.Now()
+
+	// make sure goroutine not leaked (blocked) even if result is not consumed
+	result := make(chan types.Result, 1)
+
+	errResult := func(f string, v ...interface{}) <-chan types.Result {
+		result <- types.Result{
+			Status: types.StatusRunnerError,
+			Error:  fmt.Sprintf(f, v...),
+		}
+		return result
+	}
 
 	// if execve with fd, put fd at the first parameter
 	var files []int
@@ -53,20 +65,20 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 	}
 	if err := m.sendCmd(&cmd, msg); err != nil {
 		m.mu.Unlock()
-		return nil, fmt.Errorf("execve: sendCmd %v", err)
+		return errResult("execve: sendCmd %v", err)
 	}
 	// sync function
 	reply, msg, err := m.recvReply()
 	if err != nil {
 		m.mu.Unlock()
-		return nil, fmt.Errorf("execve: recvReply %v", err)
+		return errResult("execve: recvReply %v", err)
 	}
 	// if sync function did not involved
 	if reply.Error != nil || msg == nil || msg.Cred == nil {
 		// tell kill function to exit and sync
 		m.execveSyncKill()
 		m.mu.Unlock()
-		return nil, fmt.Errorf("execve: no pid received or error %v", reply.Error)
+		return errResult("execve: no pid received or error %v", reply.Error)
 	}
 	if param.SyncFunc != nil {
 		if err := param.SyncFunc(int(msg.Cred.Pid)); err != nil {
@@ -75,19 +87,17 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 			// tell kill function to exit and sync
 			m.execveSyncKill()
 			m.mu.Unlock()
-			return nil, fmt.Errorf("execve: syncfunc failed %v", err)
+			return errResult("execve: syncfunc failed %v", err)
 		}
 	}
 	// send to syncFunc ack ok
 	if err := m.sendCmd(&Cmd{Cmd: cmdOk}, nil); err != nil {
 		m.mu.Unlock()
-		return nil, fmt.Errorf("execve: ack failed %v", err)
+		return errResult("execve: ack failed %v", err)
 	}
 
 	mTime := time.Now()
 
-	// make sure goroutine not leaked (blocked) even if result is not consumed
-	result := make(chan types.Result, 1)
 	waitDone := make(chan struct{})
 
 	// Wait
@@ -102,21 +112,21 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 		// handle potential error
 		if err != nil {
 			result <- types.Result{
-				Status: types.StatusFatal,
+				Status: types.StatusRunnerError,
 				Error:  err.Error(),
 			}
 			return
 		}
 		if reply2.Error != nil {
 			result <- types.Result{
-				Status: types.StatusFatal,
+				Status: types.StatusRunnerError,
 				Error:  reply2.Error.Error(),
 			}
 			return
 		}
 		if reply2.ExecReply == nil {
 			result <- types.Result{
-				Status: types.StatusFatal,
+				Status: types.StatusRunnerError,
 				Error:  "execve: no reply received",
 			}
 			return
@@ -125,8 +135,8 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 		result <- types.Result{
 			Status:      reply2.ExecReply.Status,
 			ExitStatus:  reply2.ExecReply.ExitStatus,
-			UserTime:    reply2.ExecReply.UserTime,
-			UserMem:     reply2.ExecReply.UserMem,
+			Time:        reply2.ExecReply.Time,
+			Memory:      reply2.ExecReply.Memory,
 			SetUpTime:   mTime.Sub(sTime),
 			RunningTime: time.Since(mTime),
 		}
@@ -135,13 +145,13 @@ func (m *Master) Execve(done <-chan struct{}, param *ExecveParam) (<-chan types.
 	// Kill (if wait is done, a kill message need to be send to collect zombies)
 	go func() {
 		select {
-		case <-done:
+		case <-c.Done():
 		case <-waitDone:
 		}
 		m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
 	}()
 
-	return result, nil
+	return result
 }
 
 // execveSyncKill will send kill and recv reply

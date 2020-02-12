@@ -55,7 +55,7 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 	t.Handler.Debug("tracer started: ", pgid, err)
 	if err != nil {
 		t.Handler.Debug("start tracee failed: ", err)
-		result.Status = types.StatusRE
+		result.Status = types.StatusRunnerError
 		return result, err
 	}
 
@@ -77,11 +77,11 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 	// also ensure processes was well terminated
 	defer func() {
 		if tle {
-			err = types.StatusTLE
+			err = types.StatusTimeLimitExceeded
 		}
 		if err2 := recover(); err2 != nil {
 			t.Handler.Debug(err2)
-			err = types.StatusFatal
+			err = types.StatusRunnerError
 		}
 		// kill all tracee upon return
 		killAll(pgid)
@@ -101,27 +101,27 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 		}
 		if err != nil {
 			t.Handler.Debug("wait4 failed: ", err)
-			return result, types.StatusFatal
+			return result, types.StatusRunnerError
 		}
 		t.Handler.Debug("------ ", pid, " ------")
 
 		status := types.StatusNormal
 		if pid == pgid {
 			// update resource usage and check against limits
-			userTime := uint64(rusage.Utime.Sec*1e3 + rusage.Utime.Usec/1e3) // ms
-			userMem := uint64(rusage.Maxrss)                                 // kb
+			userTime := time.Duration(rusage.Utime.Nano()) // ns
+			userMem := types.Size(rusage.Maxrss << 10)     // bytes
 
 			// check tle / mle
 			if userTime > t.Limit.TimeLimit {
-				status = types.StatusTLE
+				status = types.StatusTimeLimitExceeded
 			}
 			if userMem > t.Limit.MemoryLimit {
-				status = types.StatusMLE
+				status = types.StatusMemoryLimitExceeded
 			}
 			result = types.Result{
-				Status:   status,
-				UserTime: userTime,
-				UserMem:  userMem,
+				Status: status,
+				Time:   userTime,
+				Memory: userMem,
 			}
 			if status != types.StatusNormal {
 				return result, status
@@ -138,8 +138,8 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 					result.ExitStatus = wstatus.ExitStatus()
 					return result, nil
 				}
-				result.Status = types.StatusFatal
-				return result, types.StatusFatal
+				result.Status = types.StatusRunnerError
+				return result, types.StatusRunnerError
 			}
 
 		case wstatus.Signaled():
@@ -149,15 +149,16 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 				delete(traced, pid)
 				switch sig {
 				case unix.SIGXCPU, unix.SIGKILL:
-					status = types.StatusTLE
+					status = types.StatusTimeLimitExceeded
 				case unix.SIGXFSZ:
-					status = types.StatusOLE
+					status = types.StatusOutputLimitExceeded
 				case unix.SIGSYS:
-					status = types.StatusBan
+					status = types.StatusDisallowedSyscall
 				default:
-					status = types.StatusRE
+					status = types.StatusSignalled
 				}
 				result.Status = status
+				result.ExitStatus = int(sig)
 				return result, status
 			}
 			unix.PtraceCont(pid, int(sig))
@@ -170,7 +171,7 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 				// Ptrace set option valid if the tracee is stopped
 				err = setPtraceOption(pid)
 				if err != nil {
-					result.Status = types.StatusFatal
+					result.Status = types.StatusRunnerError
 					return result, err
 				}
 			}
@@ -183,7 +184,7 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 						// give the customized handle for syscall
 						err := t.handleTrap(pid)
 						if err != nil {
-							result.Status = types.StatusBan
+							result.Status = types.StatusDisallowedSyscall
 							return result, err
 						}
 					} else {
@@ -212,9 +213,9 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 				// check if cpu rlimit hit
 				switch stopSig {
 				case unix.SIGXCPU:
-					status = types.StatusTLE
+					status = types.StatusTimeLimitExceeded
 				case unix.SIGXFSZ:
-					status = types.StatusOLE
+					status = types.StatusOutputLimitExceeded
 				}
 				if status != types.StatusNormal {
 					result.Status = status
@@ -266,7 +267,7 @@ func (t *Tracer) handleTrap(pid int) error {
 				return ctx.skipSyscall()
 
 			case TraceKill:
-				return types.StatusBan
+				return types.StatusDisallowedSyscall
 			}
 		}
 

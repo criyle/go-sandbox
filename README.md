@@ -56,12 +56,12 @@ Default file access syscall check:
   - Unauthorized Access
     - Disallowed Syscall
   - Runtime Error
-    - Signaled
+    - Signalled
       - `SIGXCPU` / `SIGKILL` are treated as TimeLimitExceeded by rlimit or caller kill
       - `SIGXFSZ` is treated as OutputLimitExceeded by rlimit
       - `SIGSYS` is treaded as Disallowed Syscall by seccomp
       - Potential Runtime error are: `SIGSEGV` (segment fault)
-    - Nonzero Exit Code
+    - Nonzero Exit Status
 - Program Runner Error
 
 ### Result Structure
@@ -77,6 +77,16 @@ type Result struct {
     // metrics for the program runner
     SetUpTime   time.Duration
     RunningTime time.Duration
+}
+```
+
+### Runner Interface
+
+Configured runner to run the program. `Context` is used to cancel (control time limit exceeded event; should not be nil).
+
+``` go
+type Runner interface {
+  Run(context.Context) <-chan types.Result
 }
 ```
 

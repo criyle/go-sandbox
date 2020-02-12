@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -108,7 +109,7 @@ func main() {
 	rt, err := start()
 	if rt == nil {
 		rt = &types.Result{
-			Status: types.StatusFatal,
+			Status: types.StatusRunnerError,
 		}
 	}
 	if err == nil && rt.Status != types.StatusNormal {
@@ -120,15 +121,15 @@ func main() {
 		debug(err)
 		c, ok := err.(types.Status)
 		if !ok {
-			c = types.StatusFatal
+			c = types.StatusRunnerError
 		}
 		// Handle fatal error from trace
-		fmt.Fprintf(f, "%d %d %d %d\n", int(c), rt.UserTime, rt.UserMem, rt.ExitStatus)
-		if c == types.StatusFatal {
+		fmt.Fprintf(f, "%d %d %d %d\n", getStatus(c), int(rt.Time/time.Millisecond), uint64(rt.Memory)>>10, rt.ExitStatus)
+		if c == types.StatusRunnerError {
 			os.Exit(1)
 		}
 	} else {
-		fmt.Fprintf(f, "%d %d %d %d\n", 0, rt.UserTime, rt.UserMem, rt.ExitStatus)
+		fmt.Fprintf(f, "%d %d %d %d\n", 0, int(rt.Time/time.Millisecond), uint64(rt.Memory)>>10, rt.ExitStatus)
 	}
 }
 
@@ -137,8 +138,8 @@ type daemonRunner struct {
 	*daemon.ExecveParam
 }
 
-func (r *daemonRunner) Start(done <-chan struct{}) (<-chan types.Result, error) {
-	return r.Master.Execve(done, r.ExecveParam)
+func (r *daemonRunner) Run(c context.Context) <-chan types.Result {
+	return r.Master.Execve(c, r.ExecveParam)
 }
 
 func start() (*types.Result, error) {
@@ -223,6 +224,11 @@ func start() (*types.Result, error) {
 		actionDefault = seccomp.ActionTrace.WithReturnCode(seccomp.MsgDisallow)
 	}
 
+	limit := types.Limit{
+		TimeLimit:   time.Duration(timeLimit) * time.Second,
+		MemoryLimit: types.Size(memoryLimit << 20),
+	}
+
 	if runt == "daemon" {
 		root, err := ioutil.TempDir("", "dm")
 		if err != nil {
@@ -273,16 +279,13 @@ func start() (*types.Result, error) {
 			return nil, fmt.Errorf("cannot make rootfs mounts")
 		}
 		runner = &unshare.Runner{
-			Args:     args,
-			Env:      []string{pathEnv},
-			ExecFile: execFile,
-			WorkDir:  "/w",
-			Files:    fds,
-			RLimits:  rlims.PrepareRLimit(),
-			Limit: types.Limit{
-				TimeLimit:   timeLimit * 1e3,
-				MemoryLimit: memoryLimit << 10,
-			},
+			Args:        args,
+			Env:         []string{pathEnv},
+			ExecFile:    execFile,
+			WorkDir:     "/w",
+			Files:       fds,
+			RLimits:     rlims.PrepareRLimit(),
+			Limit:       limit,
 			Seccomp:     filter,
 			Root:        root,
 			Mounts:      mounts,
@@ -302,15 +305,12 @@ func start() (*types.Result, error) {
 			return nil, fmt.Errorf("failed to create seccomp filter %v", err)
 		}
 		runner = &ptrace.Runner{
-			Args:     args,
-			Env:      []string{pathEnv},
-			ExecFile: execFile,
-			WorkDir:  workPath,
-			RLimits:  rlims.PrepareRLimit(),
-			Limit: types.Limit{
-				TimeLimit:   timeLimit * 1e3,
-				MemoryLimit: memoryLimit << 10,
-			},
+			Args:        args,
+			Env:         []string{pathEnv},
+			ExecFile:    execFile,
+			WorkDir:     workPath,
+			RLimits:     rlims.PrepareRLimit(),
+			Limit:       limit,
 			Files:       fds,
 			Seccomp:     filter,
 			ShowDetails: showDetails,
@@ -328,22 +328,17 @@ func start() (*types.Result, error) {
 
 	// Run tracer
 	sTime := time.Now()
-	done := make(chan struct{})
-	s, err := runner.Start(done)
+	c, cancel := context.WithTimeout(context.Background(), time.Duration(int64(realTimeLimit)*int64(time.Second)))
+	defer cancel()
+
+	s := runner.Run(c)
 	rTime := time.Now()
-	if err != nil {
-		return nil, fmt.Errorf("failed to execve: %v", err)
-	}
-	tC := time.After(time.Duration(int64(realTimeLimit) * int64(time.Second)))
+
 	select {
 	case <-sig:
-		close(done)
+		cancel()
 		rt = <-s
-		rt.Status = types.StatusFatal
-
-	case <-tC:
-		close(done)
-		rt = <-s
+		rt.Status = types.StatusRunnerError
 
 	case rt = <-s:
 	}
@@ -366,8 +361,9 @@ func start() (*types.Result, error) {
 			return nil, fmt.Errorf("cgroup memory: %v", err)
 		}
 		debug("cgroup: cpu: ", cpu, " memory: ", memory)
-		rt.UserTime = cpu / uint64(time.Millisecond)
-		rt.UserMem = memory >> 10
+		rt.Time = time.Duration(cpu)
+		rt.Memory = types.Size(memory)
+		debug("cgroup:", rt)
 	}
 	return &rt, nil
 }
@@ -375,5 +371,40 @@ func start() (*types.Result, error) {
 func debug(v ...interface{}) {
 	if showDetails {
 		fmt.Fprintln(os.Stderr, v...)
+	}
+}
+
+type Status int
+
+// UOJ run_program constants
+const (
+	StatusNormal  Status = iota // 0
+	StatusInvalid               // 1
+	StatusRE                    // 2
+	StatusMLE                   // 3
+	StatusTLE                   // 4
+	StatusOLE                   // 5
+	StatusBan                   // 6
+	StatusFatal                 // 7
+)
+
+func getStatus(s types.Status) int {
+	switch s {
+	case types.StatusNormal:
+		return int(StatusNormal)
+	case types.StatusInvalid:
+		return int(StatusInvalid)
+	case types.StatusTimeLimitExceeded:
+		return int(StatusTLE)
+	case types.StatusMemoryLimitExceeded:
+		return int(StatusMLE)
+	case types.StatusOutputLimitExceeded:
+		return int(StatusOLE)
+	case types.StatusDisallowedSyscall:
+		return int(StatusBan)
+	case types.StatusSignalled, types.StatusNonzeroExitStatus:
+		return int(StatusRE)
+	default:
+		return int(StatusFatal)
 	}
 }

@@ -1,13 +1,15 @@
 package ptrace
 
 import (
+	"context"
+
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/ptracer"
 	"github.com/criyle/go-sandbox/types"
 )
 
-// Start starts the tracing process
-func (r *Runner) Start(done <-chan struct{}) (<-chan types.Result, error) {
+// Run starts the tracing process
+func (r *Runner) Run(c context.Context) <-chan types.Result {
 	ch := &forkexec.Runner{
 		Args:     r.Args,
 		Env:      r.Env,
@@ -31,5 +33,14 @@ func (r *Runner) Start(done <-chan struct{}) (<-chan types.Result, error) {
 		Runner:  ch,
 		Limit:   r.Limit,
 	}
-	return tracer.Trace(done)
+	rt, err := tracer.Trace(c.Done())
+	if err != nil {
+		ch := make(chan types.Result, 1)
+		ch <- types.Result{
+			Status: types.StatusRunnerError,
+			Error:  err.Error(),
+		}
+		rt = ch
+	}
+	return rt
 }
