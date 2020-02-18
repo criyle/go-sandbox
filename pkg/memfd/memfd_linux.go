@@ -1,6 +1,5 @@
 // +build linux
 
-// Package memfd provides a wrapper to linux memfd
 package memfd
 
 import (
@@ -18,12 +17,12 @@ const roSeal = unix.F_SEAL_SEAL | unix.F_SEAL_SHRINK | unix.F_SEAL_GROW | unix.F
 func New(name string) (*os.File, error) {
 	fd, err := unix.MemfdCreate(name, createFlag)
 	if err != nil {
-		return nil, fmt.Errorf("memfd: memfd_create failed %v", err)
+		return nil, fmt.Errorf("memfd: memfd_create failed %w", err)
 	}
 	file := os.NewFile(uintptr(fd), name)
 	if file == nil {
 		unix.Close(fd)
-		return nil, fmt.Errorf("memfd: MewFile failed")
+		return nil, fmt.Errorf("memfd: NewFile failed for %v", name)
 	}
 	return file, nil
 }
@@ -32,21 +31,21 @@ func New(name string) (*os.File, error) {
 func DupToMemfd(name string, reader io.Reader) (*os.File, error) {
 	file, err := New(name)
 	if err != nil {
-		return nil, fmt.Errorf("DupToMemfd: new memfd failed %v", err)
+		return nil, fmt.Errorf("DupToMemfd: %w", err)
 	}
 	// linux syscall sendfile might be more efficient here if reader is a file
 	if _, err = io.Copy(file, reader); err != nil {
 		file.Close()
-		return nil, fmt.Errorf("DupToMemfd: memfd io copy failed(%v)", err)
+		return nil, fmt.Errorf("DupToMemfd: io.Copy %w", err)
 	}
 	// make memfd readonly
 	if _, err = unix.FcntlInt(file.Fd(), unix.F_ADD_SEALS, roSeal); err != nil {
 		file.Close()
-		return nil, fmt.Errorf("DupToMemfd: memfd seal failed(%v)", err)
+		return nil, fmt.Errorf("DupToMemfd: memfd seal %w", err)
 	}
 	if _, err := file.Seek(0, 0); err != nil {
 		file.Close()
-		return nil, fmt.Errorf("DupToMemfd: seek failed(%v)", err)
+		return nil, fmt.Errorf("DupToMemfd: file seek %w", err)
 	}
 	return file, nil
 }
