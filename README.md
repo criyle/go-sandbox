@@ -92,7 +92,7 @@ type Runner interface {
 
 ### Pre-forked Container Protocol
 
-1. Pre-fork container daemons to run programs inside
+1. Pre-fork container to run programs inside
 2. Unix socket to pass fd inside / outside
 
 Container / Master Communication Protocol (single thread):
@@ -120,7 +120,7 @@ Container / Master Communication Protocol (single thread):
     - send: "kill" (as cmd) / reply: "finished"
   - reply:
 
-Any socket related error will cause the daemon exit (with all process inside container)
+Any socket related error will cause the container exit (with all process inside container)
 
 ## Packages (/pkg)
 
@@ -137,7 +137,7 @@ Any socket related error will cause the daemon exit (with all process inside con
 ## Packages
 
 - config: defines arch & language specified trace condition for ptrace runner from UOJ
-- daemon: creates pre-forked container to run programs inside
+- container: creates pre-forked container to run programs inside
 - runner: interface to run program
   - ptrace: wrapper to call forkexec and ptracer
     - filehandler: an example implementation of UOJ file set

@@ -1,4 +1,4 @@
-package daemon
+package container
 
 import (
 	"context"
@@ -16,20 +16,19 @@ type ExecveParam struct {
 	Env  []string
 	Fds  []uintptr
 
-	// fexecve fd
+	// fd parameter of fexecve
 	ExecFile uintptr
 
 	// POSIX Resource limit set by set rlimit
 	RLimits []rlimit.RLimit
 
-	// SyncFunc called with pid before execve (e.g. add to cgroup)
+	// SyncFunc called with pid before execve (for adding the process to cgroups)
 	SyncFunc func(pid int) error
 }
 
-// Execve runs process inside container
-// accepts context for cancelation
-func (m *Master) Execve(c context.Context, param *ExecveParam) <-chan types.Result {
-	m.mu.Lock()
+// Execve runs process inside container. It accepts context cancelation as time limit exceeded.
+func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan types.Result {
+	c.mu.Lock()
 
 	sTime := time.Now()
 
@@ -53,46 +52,46 @@ func (m *Master) Execve(c context.Context, param *ExecveParam) <-chan types.Resu
 	msg := &unixsocket.Msg{
 		Fds: files,
 	}
-	execCmd := &ExecCmd{
+	execCmd := &execCmd{
 		Argv:    param.Args,
 		Env:     param.Env,
 		RLimits: param.RLimits,
 		FdExec:  param.ExecFile > 0,
 	}
-	cmd := Cmd{
+	cm := cmd{
 		Cmd:     cmdExecve,
 		ExecCmd: execCmd,
 	}
-	if err := m.sendCmd(&cmd, msg); err != nil {
-		m.mu.Unlock()
+	if err := c.sendCmd(&cm, msg); err != nil {
+		c.mu.Unlock()
 		return errResult("execve: sendCmd %v", err)
 	}
 	// sync function
-	reply, msg, err := m.recvReply()
+	reply, msg, err := c.recvReply()
 	if err != nil {
-		m.mu.Unlock()
+		c.mu.Unlock()
 		return errResult("execve: recvReply %v", err)
 	}
 	// if sync function did not involved
 	if reply.Error != nil || msg == nil || msg.Cred == nil {
 		// tell kill function to exit and sync
-		m.execveSyncKill()
-		m.mu.Unlock()
+		c.execveSyncKill()
+		c.mu.Unlock()
 		return errResult("execve: no pid received or error %v", reply.Error)
 	}
 	if param.SyncFunc != nil {
 		if err := param.SyncFunc(int(msg.Cred.Pid)); err != nil {
 			// tell sync function to exit and recv error
-			m.execveSyncKill()
+			c.execveSyncKill()
 			// tell kill function to exit and sync
-			m.execveSyncKill()
-			m.mu.Unlock()
+			c.execveSyncKill()
+			c.mu.Unlock()
 			return errResult("execve: syncfunc failed %v", err)
 		}
 	}
 	// send to syncFunc ack ok
-	if err := m.sendCmd(&Cmd{Cmd: cmdOk}, nil); err != nil {
-		m.mu.Unlock()
+	if err := c.sendCmd(&cmd{Cmd: cmdOk}, nil); err != nil {
+		c.mu.Unlock()
 		return errResult("execve: ack failed %v", err)
 	}
 
@@ -102,12 +101,12 @@ func (m *Master) Execve(c context.Context, param *ExecveParam) <-chan types.Resu
 
 	// Wait
 	go func() {
-		reply2, _, err := m.recvReply()
+		reply2, _, err := c.recvReply()
 		close(waitDone)
 		// done signal (should recv after kill)
-		m.recvReply()
+		c.recvReply()
 		// unlock after last read / write
-		m.mu.Unlock()
+		c.mu.Unlock()
 
 		// handle potential error
 		if err != nil {
@@ -145,17 +144,17 @@ func (m *Master) Execve(c context.Context, param *ExecveParam) <-chan types.Resu
 	// Kill (if wait is done, a kill message need to be send to collect zombies)
 	go func() {
 		select {
-		case <-c.Done():
+		case <-ctx.Done():
 		case <-waitDone:
 		}
-		m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
+		c.sendCmd(&cmd{Cmd: cmdKill}, nil)
 	}()
 
 	return result
 }
 
 // execveSyncKill will send kill and recv reply
-func (m *Master) execveSyncKill() {
-	m.sendCmd(&Cmd{Cmd: cmdKill}, nil)
-	m.recvReply()
+func (c *container) execveSyncKill() {
+	c.sendCmd(&cmd{Cmd: cmdKill}, nil)
+	c.recvReply()
 }

@@ -1,4 +1,4 @@
-package daemon
+package container
 
 const (
 	cmdPing   = "ping"
@@ -18,7 +18,7 @@ const (
 	containerUID = 1000
 	containerGID = 1000
 
-	containerName = "daemon"
+	containerName = "go-sandbox"
 	containerWD   = "/w"
 
 	containerMaxProc = 1

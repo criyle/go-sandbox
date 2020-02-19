@@ -1,6 +1,7 @@
-package daemon
+package container
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sync"
@@ -10,13 +11,14 @@ import (
 	"github.com/criyle/go-sandbox/pkg/memfd"
 	"github.com/criyle/go-sandbox/pkg/mount"
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
+	"github.com/criyle/go-sandbox/types"
 	"golang.org/x/sys/unix"
 )
 
-// DefaultPath defines path evironment variable for container init process
-const DefaultPath = "PATH=/usr/local/bin:/usr/bin:/bin"
+// PathEnv defines path environment variable for the container init process
+const PathEnv = "PATH=/usr/local/bin:/usr/bin:/bin"
 
-// Builder builds instance of container masters
+// Builder builds instance of container environment
 type Builder struct {
 	// Root is container root mount path, empty uses current work path
 	Root string
@@ -41,15 +43,25 @@ type CredGenerator interface {
 	Get() syscall.Credential
 }
 
-// Master manages single pre-forked container
-type Master struct {
+// Environment holds single progrem containered environment
+type Environment interface {
+	Ping() error
+	Open([]OpenCmd) ([]*os.File, error)
+	Delete(p string) error
+	Reset() error
+	Execve(context.Context, ExecveParam) <-chan types.Result
+	Destroy() error
+}
+
+// container manages single pre-forked container environment
+type container struct {
 	pid    int                // underlying container init pid
 	socket *unixsocket.Socket // master - container communication
 	mu     sync.Mutex         // lock to avoid race condition
 }
 
-// Build creates new master with underlying container
-func (b *Builder) Build() (*Master, error) {
+// Build creates new environment with underlying container
+func (b *Builder) Build() (Environment, error) {
 	var (
 		err            error
 		cred           syscall.Credential
@@ -64,19 +76,22 @@ func (b *Builder) Build() (*Master, error) {
 			WithTmpfs("w", "").   // work dir
 			WithTmpfs("tmp", ""). // tmp
 			Build(true); err != nil {
-			return nil, fmt.Errorf("daemon: failed to build rootfs mount %v", err)
+			return nil, fmt.Errorf("container: failed to build rootfs mount %w", err)
 		}
 	}
+
+	// container root directory on the host
 	root := b.Root
 	if root == "" {
 		if root, err = os.Getwd(); err != nil {
-			return nil, fmt.Errorf("daemon: failed to get work directory %v", err)
+			return nil, fmt.Errorf("container: failed to get work directory %w", err)
 		}
 	}
+
 	// prepare stdin / stdout / stderr
 	devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, os.ModePerm)
 	if err != nil {
-		return nil, fmt.Errorf("daemon: failed to open devNull(%v)", err)
+		return nil, fmt.Errorf("container: failed to open devNull %w", err)
 	}
 	defer devNull.Close()
 
@@ -88,30 +103,30 @@ func (b *Builder) Build() (*Master, error) {
 		files = append(files, devNull.Fd())
 	}
 
-	// prepare self memfd
+	// prepare container exec file
 	execFile, err := b.exec()
 	if err != nil {
-		return nil, fmt.Errorf("deamon: %v", err)
+		return nil, fmt.Errorf("container: prepare exec %w", err)
 	}
 	defer execFile.Close()
 
-	// prepare socket
+	// prepare host <-> container unix socket
 	ins, outs, err := newPassCredSocketPair()
 	if err != nil {
-		return nil, fmt.Errorf("daemon: failed to create socket: %v", err)
+		return nil, fmt.Errorf("container: failed to create socket: %w", err)
 	}
 	defer outs.Close()
 
 	outf, err := outs.File()
 	if err != nil {
 		ins.Close()
-		return nil, fmt.Errorf("daemon: failed to dup file outs(%v)", err)
+		return nil, fmt.Errorf("container: failed to dup container socket fd %w", err)
 	}
 	defer outf.Close()
 
 	files = append(files, uintptr(outf.Fd()))
 
-	// prepare credential
+	// prepare container running credential
 	if b.CredGenerator != nil {
 		cred = b.CredGenerator.Get()
 		uidMap, gidMap = getIDMapping(&cred)
@@ -119,7 +134,7 @@ func (b *Builder) Build() (*Master, error) {
 
 	r := &forkexec.Runner{
 		Args:        []string{os.Args[0], initArg},
-		Env:         []string{DefaultPath},
+		Env:         []string{PathEnv},
 		ExecFile:    execFile.Fd(),
 		Files:       files,
 		WorkDir:     containerWD,
@@ -134,41 +149,42 @@ func (b *Builder) Build() (*Master, error) {
 	pid, err := r.Start()
 	if err != nil {
 		ins.Close()
-		return nil, fmt.Errorf("daemon: failed to execve(%v)", err)
+		return nil, fmt.Errorf("container: failed to start container %w", err)
 	}
-	m := &Master{
+
+	c := &container{
 		pid:    pid,
 		socket: ins,
 	}
 
 	// set configuration and check if container creation successful
-	if err = m.conf(&containerConfig{
+	if err = c.conf(&containerConfig{
 		Cred: b.CredGenerator != nil,
 	}); err != nil {
-		m.Destroy()
+		c.Destroy()
 		return nil, err
 	}
 
-	return m, nil
+	return c, nil
 }
 
-// Destroy kill the daemon process (with container)
+// Destroy kill the container process (with its children)
 // if stderr enabled, collect the output as error
-func (m *Master) Destroy() error {
+func (c *container) Destroy() error {
 	// close socket (abort any ongoing command)
-	m.socket.Close()
+	c.socket.Close()
 
 	// wait commands terminates
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	// kill process
 	var wstatus unix.WaitStatus
-	unix.Kill(m.pid, unix.SIGKILL)
+	unix.Kill(c.pid, unix.SIGKILL)
 	// wait for container process to exit
-	_, err := unix.Wait4(m.pid, &wstatus, 0, nil)
+	_, err := unix.Wait4(c.pid, &wstatus, 0, nil)
 	for err == unix.EINTR {
-		_, err = unix.Wait4(m.pid, &wstatus, 0, nil)
+		_, err = unix.Wait4(c.pid, &wstatus, 0, nil)
 	}
 	return err
 }
@@ -181,7 +197,7 @@ func (b *Builder) exec() (*os.File, error) {
 	return OpenCurrentExec()
 }
 
-// OpenCurrentExec opens current executable and dup it to memfd
+// OpenCurrentExec opens current executable and dup and seal it to memfd
 func OpenCurrentExec() (*os.File, error) {
 	self, err := os.Open(currentExec)
 	if err != nil {
@@ -189,7 +205,7 @@ func OpenCurrentExec() (*os.File, error) {
 	}
 	defer self.Close()
 
-	execFile, err := memfd.DupToMemfd("daemon", self)
+	execFile, err := memfd.DupToMemfd("init", self)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create memfd: %v", err)
 	}

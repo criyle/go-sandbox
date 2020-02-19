@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/criyle/go-sandbox/config"
-	"github.com/criyle/go-sandbox/daemon"
+	"github.com/criyle/go-sandbox/container"
 	"github.com/criyle/go-sandbox/pkg/cgroup"
 	"github.com/criyle/go-sandbox/pkg/memfd"
 	"github.com/criyle/go-sandbox/pkg/mount"
@@ -44,9 +44,9 @@ func printUsage() {
 	os.Exit(2)
 }
 
+// container init
 func init() {
-	// container init
-	daemon.Init()
+	container.Init()
 }
 
 func main() {
@@ -71,7 +71,7 @@ func main() {
 	flag.Var(&addRawWritable, "add-writable-raw", "Add a writable file (don't transform to its real path)")
 	flag.BoolVar(&useCGroup, "cgroup", false, "Use cgroup to colloct resource usage")
 	flag.BoolVar(&memfile, "memfd", false, "Use memfd as exec file")
-	flag.StringVar(&runt, "runner", "ptrace", "Runner for the program (ptrace, ns, daemon)")
+	flag.StringVar(&runt, "runner", "ptrace", "Runner for the program (ptrace, ns, container)")
 	flag.Parse()
 
 	args = flag.Args()
@@ -133,13 +133,13 @@ func main() {
 	}
 }
 
-type daemonRunner struct {
-	*daemon.Master
-	*daemon.ExecveParam
+type containerRunner struct {
+	container.Environment
+	container.ExecveParam
 }
 
-func (r *daemonRunner) Run(c context.Context) <-chan types.Result {
-	return r.Master.Execve(c, r.ExecveParam)
+func (r *containerRunner) Run(c context.Context) <-chan types.Result {
+	return r.Environment.Execve(c, r.ExecveParam)
 }
 
 func start() (*types.Result, error) {
@@ -231,29 +231,29 @@ func start() (*types.Result, error) {
 		MemoryLimit: types.Size(memoryLimit << 20),
 	}
 
-	if runt == "daemon" {
+	if runt == "container" {
 		root, err := ioutil.TempDir("", "dm")
 		if err != nil {
-			return nil, fmt.Errorf("cannot make temp root for daemon namespace: %v", err)
+			return nil, fmt.Errorf("cannot make temp root for container namespace: %v", err)
 		}
 		defer os.RemoveAll(root)
 
-		b := daemon.Builder{
+		b := container.Builder{
 			Root: root,
 		}
 
 		m, err := b.Build()
 		if err != nil {
-			return nil, fmt.Errorf("failed to new master: %v", err)
+			return nil, fmt.Errorf("failed to new container: %v", err)
 		}
 		defer m.Destroy()
 		err = m.Ping()
 		if err != nil {
-			return nil, fmt.Errorf("failed to ping daemon: %v", err)
+			return nil, fmt.Errorf("failed to ping container: %v", err)
 		}
-		runner = &daemonRunner{
-			Master: m,
-			ExecveParam: &daemon.ExecveParam{
+		runner = &containerRunner{
+			Environment: m,
+			ExecveParam: container.ExecveParam{
 				Args:     args,
 				Env:      []string{pathEnv},
 				Fds:      fds,

@@ -1,4 +1,4 @@
-package daemon
+package container
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"github.com/criyle/go-sandbox/types"
 )
 
-func (c *containerServer) handleExecve(cmd *ExecCmd, msg *unixsocket.Msg) error {
+func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error {
 	var (
 		files    []uintptr
 		execFile uintptr
@@ -37,21 +37,21 @@ func (c *containerServer) handleExecve(cmd *ExecCmd, msg *unixsocket.Msg) error 
 	}
 
 	syncFunc := func(pid int) error {
-		msg2 := &unixsocket.Msg{
+		msg := &unixsocket.Msg{
 			Cred: &syscall.Ucred{
 				Pid: int32(pid),
 				Uid: uint32(syscall.Getuid()),
 				Gid: uint32(syscall.Getgid()),
 			},
 		}
-		if err2 := c.sendReply(&Reply{}, msg2); err2 != nil {
-			return fmt.Errorf("syncFunc: sendReply(%v)", err2)
+		if err := c.sendReply(&reply{}, msg); err != nil {
+			return fmt.Errorf("syncFunc: sendReply %w", err)
 		}
-		cmd2, _, err2 := c.recvCmd()
-		if err2 != nil {
-			return fmt.Errorf("syncFunc: recvCmd(%v)", err2)
+		cmd, _, err := c.recvCmd()
+		if err != nil {
+			return fmt.Errorf("syncFunc: recvCmd %w", err)
 		}
-		if cmd2.Cmd == cmdKill {
+		if cmd.Cmd == cmdKill {
 			return fmt.Errorf("syncFunc: received kill")
 		}
 		return nil
@@ -121,8 +121,11 @@ func (c *containerServer) handleExecve(cmd *ExecCmd, msg *unixsocket.Msg) error 
 		switch {
 		case wstatus.Exited():
 			exitStatus := wstatus.ExitStatus()
-			c.sendReply(&Reply{
-				ExecReply: &ExecReply{
+			if exitStatus != 0 {
+				status = types.StatusNonzeroExitStatus
+			}
+			c.sendReply(&reply{
+				ExecReply: &execReply{
 					Status:     status,
 					ExitStatus: exitStatus,
 					Time:       userTime,
@@ -142,8 +145,8 @@ func (c *containerServer) handleExecve(cmd *ExecCmd, msg *unixsocket.Msg) error 
 			default:
 				status = types.StatusSignalled
 			}
-			c.sendReply(&Reply{
-				ExecReply: &ExecReply{
+			c.sendReply(&reply{
+				ExecReply: &execReply{
 					ExitStatus: int(wstatus.Signal()),
 					Status:     status,
 					Time:       userTime,
@@ -158,5 +161,5 @@ func (c *containerServer) handleExecve(cmd *ExecCmd, msg *unixsocket.Msg) error 
 
 	// wait for kill msg and reply done for finish
 	<-killDone
-	return c.sendReply(&Reply{}, nil)
+	return c.sendReply(&reply{}, nil)
 }

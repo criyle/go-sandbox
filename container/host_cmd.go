@@ -1,4 +1,4 @@
-package daemon
+package container
 
 import (
 	"fmt"
@@ -9,55 +9,55 @@ import (
 )
 
 // Ping send ping message to container
-func (m *Master) Ping() error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (c *container) Ping() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	// avoid infinite wait (max 3s)
 	const pingWait = 3 * time.Second
-	m.socket.SetDeadline(time.Now().Add(pingWait))
-	defer m.socket.SetDeadline(time.Time{})
+	c.socket.SetDeadline(time.Now().Add(pingWait))
+	defer c.socket.SetDeadline(time.Time{})
 
 	// send ping
-	cmd := Cmd{
+	cmd := cmd{
 		Cmd: cmdPing,
 	}
-	if err := m.sendCmd(&cmd, nil); err != nil {
+	if err := c.sendCmd(&cmd, nil); err != nil {
 		return fmt.Errorf("ping: %v", err)
 	}
 	// receive no error
-	return m.recvAckReply("ping")
+	return c.recvAckReply("ping")
 }
 
 // conf send configuration to container (used by builder only)
-func (m *Master) conf(conf *containerConfig) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (c *container) conf(conf *containerConfig) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	cmd := Cmd{
+	cmd := cmd{
 		Cmd:     cmdConf,
-		ConfCmd: &ConfCmd{Conf: *conf},
+		ConfCmd: &confCmd{Conf: *conf},
 	}
-	if err := m.sendCmd(&cmd, nil); err != nil {
+	if err := c.sendCmd(&cmd, nil); err != nil {
 		return fmt.Errorf("conf: %v", err)
 	}
-	return m.recvAckReply("conf")
+	return c.recvAckReply("conf")
 }
 
 // Open open files in container
-func (m *Master) Open(p []OpenCmd) ([]*os.File, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (c *container) Open(p []OpenCmd) ([]*os.File, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	// send copyin
-	cmd := Cmd{
+	cmd := cmd{
 		Cmd:     cmdOpen,
 		OpenCmd: p,
 	}
-	if err := m.sendCmd(&cmd, nil); err != nil {
+	if err := c.sendCmd(&cmd, nil); err != nil {
 		return nil, fmt.Errorf("open: %v", err)
 	}
-	reply, msg, err := m.recvReply()
+	reply, msg, err := c.recvReply()
 	if err != nil {
 		return nil, fmt.Errorf("open: %v", err)
 	}
@@ -82,36 +82,36 @@ func (m *Master) Open(p []OpenCmd) ([]*os.File, error) {
 }
 
 // Delete remove file from container
-func (m *Master) Delete(p string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (c *container) Delete(p string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	cmd := Cmd{
+	cmd := cmd{
 		Cmd:       cmdDelete,
-		DeleteCmd: &DeleteCmd{Path: p},
+		DeleteCmd: &deleteCmd{Path: p},
 	}
-	if err := m.sendCmd(&cmd, nil); err != nil {
+	if err := c.sendCmd(&cmd, nil); err != nil {
 		return fmt.Errorf("delete: %v", err)
 	}
-	return m.recvAckReply("delete")
+	return c.recvAckReply("delete")
 }
 
 // Reset remove all from /tmp and /w
-func (m *Master) Reset() error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+func (c *container) Reset() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	cmd := Cmd{
+	cmd := cmd{
 		Cmd: cmdReset,
 	}
-	if err := m.sendCmd(&cmd, nil); err != nil {
+	if err := c.sendCmd(&cmd, nil); err != nil {
 		return fmt.Errorf("reset: %v", err)
 	}
-	return m.recvAckReply("reset")
+	return c.recvAckReply("reset")
 }
 
-func (m *Master) recvAckReply(name string) error {
-	reply, _, err := m.recvReply()
+func (c *container) recvAckReply(name string) error {
+	reply, _, err := c.recvReply()
 	if err != nil {
 		return fmt.Errorf("%v: recvAck %v", name, err)
 	}
@@ -121,15 +121,15 @@ func (m *Master) recvAckReply(name string) error {
 	return nil
 }
 
-func (m *Master) recvReply() (*Reply, *unixsocket.Msg, error) {
-	reply := new(Reply)
-	msg, err := (*socket)(m.socket).RecvMsg(reply)
+func (c *container) recvReply() (*reply, *unixsocket.Msg, error) {
+	reply := new(reply)
+	msg, err := (*socket)(c.socket).RecvMsg(reply)
 	if err != nil {
 		return nil, nil, err
 	}
 	return reply, msg, nil
 }
 
-func (m *Master) sendCmd(cmd *Cmd, msg *unixsocket.Msg) error {
-	return (*socket)(m.socket).SendMsg(cmd, msg)
+func (c *container) sendCmd(cmd *cmd, msg *unixsocket.Msg) error {
+	return (*socket)(c.socket).SendMsg(cmd, msg)
 }
