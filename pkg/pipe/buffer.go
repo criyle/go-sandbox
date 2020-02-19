@@ -1,9 +1,10 @@
 // Package pipe provides a wrapper to create a pipe and
-// read at most max content from the reader side
+// collect at most max bytes from the reader side
 package pipe
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 )
@@ -49,4 +50,8 @@ func NewBuffer(max int64) (*Buffer, error) {
 		Buffer: buffer,
 		Done:   done,
 	}, nil
+}
+
+func (b Buffer) String() string {
+	return fmt.Sprintf("Buffer[%d/%d]", b.Buffer.Len(), b.Max)
 }

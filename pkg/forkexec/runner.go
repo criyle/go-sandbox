@@ -1,5 +1,5 @@
-// Package forkexec provides interface to run a subprocess with seccomp filter, rlimit and
-// containerized or ptraced
+// +build linux
+
 package forkexec
 
 import (

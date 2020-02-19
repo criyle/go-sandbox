@@ -1,7 +1,12 @@
+// Package rlimit provides data structure for resource limits by setrlimit syscall on linux.
 package rlimit
 
 import (
+	"fmt"
+	"strings"
 	"syscall"
+
+	"github.com/criyle/go-sandbox/types"
 )
 
 // RLimits defines the rlimit applied by setrlimit syscall to traced process
@@ -66,4 +71,35 @@ func (r *RLimits) PrepareRLimit() []RLimit {
 		})
 	}
 	return ret
+}
+
+func (r RLimit) String() string {
+	if r.Res == syscall.RLIMIT_CPU {
+		return fmt.Sprintf("CPU[%d s:%d s]", r.Rlim.Cur, r.Rlim.Max)
+	}
+	t := ""
+	switch r.Res {
+	case syscall.RLIMIT_DATA:
+		t = "Data"
+	case syscall.RLIMIT_FSIZE:
+		t = "File"
+	case syscall.RLIMIT_STACK:
+		t = "Stack"
+	case syscall.RLIMIT_AS:
+		t = "AddressSpace"
+	}
+	return fmt.Sprintf("%s[%v:%v]", t, types.Size(r.Rlim.Cur), types.Size(r.Rlim.Max))
+}
+
+func (r RLimits) String() string {
+	var sb strings.Builder
+	sb.WriteString("RLimits[")
+	for i, rl := range r.PrepareRLimit() {
+		if i > 0 {
+			sb.WriteByte(',')
+		}
+		sb.WriteString(rl.String())
+	}
+	sb.WriteString("]")
+	return sb.String()
 }

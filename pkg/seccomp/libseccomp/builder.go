@@ -1,4 +1,5 @@
-// Package libseccomp provides wrapper to "github.com/seccomp/libseccomp-golang"
+// +build linux
+
 package libseccomp
 
 import (
