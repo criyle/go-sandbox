@@ -218,6 +218,8 @@ func start() (*types.Result, error) {
 		FileSize: outputLimit << 20,
 		Stack:    stackLimit << 20,
 	}
+	debug("rlimit: ", rlims)
+	debug("defaultMount: ", mount.DefaultMounts)
 
 	actionDefault := seccomp.ActionKill
 	if showDetails {
@@ -274,7 +276,7 @@ func start() (*types.Result, error) {
 			return nil, fmt.Errorf("cannot make temp root for new namespace")
 		}
 		defer os.RemoveAll(root)
-		mounts, err := mount.NewBuilder().WithMounts(unshare.DefaultMounts).WithBind(root, "w", true).Build(true)
+		mounts, err := mount.NewBuilder().WithMounts(mount.DefaultMounts).WithBind(root, "w", true).Build(true)
 		if err != nil {
 			return nil, fmt.Errorf("cannot make rootfs mounts")
 		}
@@ -374,6 +376,7 @@ func debug(v ...interface{}) {
 	}
 }
 
+// Status defines uoj/run_program constants
 type Status int
 
 // UOJ run_program constants

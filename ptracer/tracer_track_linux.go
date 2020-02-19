@@ -2,6 +2,7 @@ package ptracer
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"time"
 
@@ -14,31 +15,19 @@ import (
 // Trace starts new goroutine and trace runner with ptrace
 func (t *Tracer) Trace(c context.Context) <-chan types.Result {
 	result := make(chan types.Result, 1)
-	start := make(chan struct{})
-	finish := make(chan struct{})
-
-	// run
 	go func() {
-		defer close(finish)
-		ret, err := t.TraceRun(c.Done(), start)
-		ret.Error = err.Error()
-		result <- ret
+		result <- t.TraceRun(c)
 	}()
-
-	select {
-	case <-start:
-	case <-finish:
-	}
 	return result
 }
 
 // TraceRun start and traces all child process by runner in the calling goroutine
 // parameter done used to cancel work, start is used notify child starts
-func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result types.Result, err error) {
+func (t *Tracer) TraceRun(c context.Context) (result types.Result) {
 	var (
+		status  = types.StatusNormal
 		wstatus unix.WaitStatus      // wait4 wait status
 		rusage  unix.Rusage          // wait4 rusage
-		tle     bool                 // whether the timmer triggered due to timeout
 		traced  = make(map[int]bool) // store all process that have set ptrace options
 		execved = false              // store whether the runner process have successfully execvd
 		pid     int                  // store pid of wait4 result
@@ -56,32 +45,26 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 	if err != nil {
 		t.Handler.Debug("start tracee failed: ", err)
 		result.Status = types.StatusRunnerError
-		return result, err
+		result.Error = err.Error()
+		return
 	}
 
-	close(start)
-	finish := make(chan struct{})
-	defer close(finish)
+	cc, cancel := context.WithCancel(c)
+	defer cancel()
 
 	// handle cancelation
 	go func() {
-		select {
-		case <-done:
-			tle = true
-			killAll(pgid)
-		case <-finish:
-		}
+		<-cc.Done()
+		killAll(pgid)
 	}()
 
 	// handler potential panic and tle
 	// also ensure processes was well terminated
 	defer func() {
-		if tle {
-			err = types.StatusTimeLimitExceeded
-		}
-		if err2 := recover(); err2 != nil {
-			t.Handler.Debug(err2)
-			err = types.StatusRunnerError
+		if err := recover(); err != nil {
+			t.Handler.Debug("panic: ", err)
+			result.Status = types.StatusRunnerError
+			result.Error = fmt.Sprintf("%v", err)
 		}
 		// kill all tracee upon return
 		killAll(pgid)
@@ -90,7 +73,7 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 		result.RunningTime = time.Since(fTime)
 	}()
 
-	// trace unixs
+	// ptrace pool loop
 	for {
 		if execved {
 			// Wait for all child in the process group
@@ -101,11 +84,12 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 		}
 		if err != nil {
 			t.Handler.Debug("wait4 failed: ", err)
-			return result, types.StatusRunnerError
+			result.Status = types.StatusRunnerError
+			result.Error = err.Error()
+			return
 		}
 		t.Handler.Debug("------ ", pid, " ------")
 
-		status := types.StatusNormal
 		if pid == pgid {
 			// update resource usage and check against limits
 			userTime := time.Duration(rusage.Utime.Nano()) // ns
@@ -124,7 +108,7 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 				Memory: userMem,
 			}
 			if status != types.StatusNormal {
-				return result, status
+				return
 			}
 		}
 
@@ -136,10 +120,16 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 			if pid == pgid {
 				if execved {
 					result.ExitStatus = wstatus.ExitStatus()
-					return result, nil
+					if result.ExitStatus == 0 {
+						result.Status = types.StatusNormal
+					} else {
+						result.Status = types.StatusNonzeroExitStatus
+					}
+					return
 				}
 				result.Status = types.StatusRunnerError
-				return result, types.StatusRunnerError
+				result.Error = "child process exit before execve"
+				return
 			}
 
 		case wstatus.Signaled():
@@ -159,20 +149,21 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 				}
 				result.Status = status
 				result.ExitStatus = int(sig)
-				return result, status
+				return
 			}
 			unix.PtraceCont(pid, int(sig))
 
 		case wstatus.Stopped():
 			// Set option if the process is newly forked
 			if !traced[pid] {
-				t.Handler.Debug("set ptrace option")
+				t.Handler.Debug("set ptrace option for", pid)
 				traced[pid] = true
 				// Ptrace set option valid if the tracee is stopped
 				err = setPtraceOption(pid)
 				if err != nil {
 					result.Status = types.StatusRunnerError
-					return result, err
+					result.Error = err.Error()
+					return
 				}
 			}
 
@@ -185,7 +176,8 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 						err := t.handleTrap(pid)
 						if err != nil {
 							result.Status = types.StatusDisallowedSyscall
-							return result, err
+							result.Error = err.Error()
+							return
 						}
 					} else {
 						t.Handler.Debug("ptrace seccomp before execve (should be the execve syscall)")
@@ -219,7 +211,7 @@ func (t *Tracer) TraceRun(done <-chan struct{}, start chan<- struct{}) (result t
 				}
 				if status != types.StatusNormal {
 					result.Status = status
-					return result, status
+					return
 				}
 				// Likely encountered SIGSEGV (segment violation)
 				// Or compiler child exited

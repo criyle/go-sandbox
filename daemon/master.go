@@ -13,6 +13,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// DefaultPath defines path evironment variable for container init process
+const DefaultPath = "PATH=/usr/local/bin:/usr/bin:/bin"
+
 // Builder builds instance of container masters
 type Builder struct {
 	// Root is container root mount path, empty uses current work path
@@ -56,7 +59,11 @@ func (b *Builder) Build() (*Master, error) {
 	// container mount points
 	mounts := b.Mounts
 	if len(mounts) == 0 {
-		if mounts, err = mount.NewBuilder().WithMounts(DefaultMounts).Build(true); err != nil {
+		if mounts, err = mount.NewBuilder().
+			WithMounts(mount.DefaultMounts).
+			WithTmpfs("w", "").   // work dir
+			WithTmpfs("tmp", ""). // tmp
+			Build(true); err != nil {
 			return nil, fmt.Errorf("daemon: failed to build rootfs mount %v", err)
 		}
 	}

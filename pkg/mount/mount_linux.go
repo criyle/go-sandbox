@@ -26,9 +26,9 @@ func (m *Mount) Mount() error {
 
 func (m Mount) String() string {
 	switch {
-	case m.Flags|syscall.MS_BIND == syscall.MS_BIND:
+	case m.Flags&syscall.MS_BIND == syscall.MS_BIND:
 		flag := "rw"
-		if m.Flags|syscall.MS_RDONLY == syscall.MS_RDONLY {
+		if m.Flags&syscall.MS_RDONLY == syscall.MS_RDONLY {
 			flag = "ro"
 		}
 		return fmt.Sprintf("bind[%s:%s:%s]", m.Source, m.Target, flag)

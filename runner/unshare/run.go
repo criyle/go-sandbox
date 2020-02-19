@@ -40,31 +40,18 @@ func (r *Runner) Run(c context.Context) <-chan types.Result {
 	}
 
 	result := make(chan types.Result, 1)
-	start := make(chan struct{})
-	finish := make(chan struct{})
-
-	// run
 	go func() {
-		defer close(finish)
-		ret, err2 := r.Trace(c.Done(), start, ch)
-		ret.Error = err2.Error()
-		result <- ret
+		result <- r.trace(c, ch)
 	}()
 
-	select {
-	case <-start:
-	case <-finish:
-	}
 	return result
 }
 
 // Trace tracks child processes
-func (r *Runner) Trace(done <-chan struct{}, start chan<- struct{},
-	runner *forkexec.Runner) (result types.Result, err error) {
+func (r *Runner) trace(c context.Context, runner *forkexec.Runner) (result types.Result) {
 	var (
 		wstatus unix.WaitStatus // wait4 wait status
 		rusage  unix.Rusage     // wait4 rusage
-		tle     = false
 		status  = types.StatusNormal
 		sTime   = time.Now() // start time
 		fTime   time.Time    // finish time for setup
@@ -75,28 +62,21 @@ func (r *Runner) Trace(done <-chan struct{}, start chan<- struct{},
 	r.println("Starts: ", pgid, err)
 	if err != nil {
 		result.Status = types.StatusRunnerError
-		return result, err
+		result.Error = err.Error()
+		return
 	}
 
-	close(start)
-	finish := make(chan struct{})
-	defer close(finish)
+	cc, cancel := context.WithCancel(c)
+	defer cancel()
 
 	// handle cancel
 	go func() {
-		select {
-		case <-done:
-			tle = true
-			killAll(pgid)
-		case <-finish:
-		}
+		<-cc.Done()
+		killAll(pgid)
 	}()
 
+	// kill all tracee upon return
 	defer func() {
-		if tle {
-			err = types.StatusTimeLimitExceeded
-		}
-		// kill all tracee upon return
 		killAll(pgid)
 		collectZombie(pgid)
 		result.SetUpTime = fTime.Sub(sTime)
@@ -104,17 +84,18 @@ func (r *Runner) Trace(done <-chan struct{}, start chan<- struct{},
 	}()
 
 	fTime = time.Now()
-loop:
 	for {
 		_, err := unix.Wait4(pgid, &wstatus, 0, &rusage)
 		r.println("wait4: ", wstatus)
 		if err != nil {
-			return result, types.StatusRunnerError
+			result.Status = types.StatusRunnerError
+			result.Error = err.Error()
+			return
 		}
 
 		// update resource usage and check against limits
 		userTime := time.Duration(rusage.Utime.Nano()) // ns
-		userMem := types.Size(rusage.Maxrss << 10)     // bytes                             // kb
+		userMem := types.Size(rusage.Maxrss << 10)     // bytes
 
 		// check tle / mle
 		if userTime > r.Limit.TimeLimit {
@@ -129,13 +110,15 @@ loop:
 			Memory: userMem,
 		}
 		if status != types.StatusNormal {
-			return result, status
+			return
 		}
 
 		switch {
 		case wstatus.Exited():
+			result.Status = types.StatusNormal
 			result.ExitStatus = wstatus.ExitStatus()
-			return result, nil
+			return
+
 		case wstatus.Signaled():
 			sig := wstatus.Signal()
 			switch sig {
@@ -150,10 +133,9 @@ loop:
 			}
 			result.Status = status
 			result.ExitStatus = int(sig)
-			break loop
+			return
 		}
 	}
-	return result, status
 }
 
 // kill all tracee according to pids
@@ -164,7 +146,6 @@ func killAll(pgid int) {
 // collect died child processes
 func collectZombie(pgid int) {
 	var wstatus unix.WaitStatus
-	// collect zombies
 	for {
 		if _, err := unix.Wait4(-pgid, &wstatus, unix.WALL|unix.WNOHANG, nil); err != nil {
 			break
