@@ -49,7 +49,7 @@ func Init() (err error) {
 	const defaultFd = 3
 	soc, err := unixsocket.NewSocket(defaultFd)
 	if err != nil {
-		return fmt.Errorf("container_init: failed to new socket %w", err)
+		return fmt.Errorf("container_init: failed to new socket %v", err)
 	}
 
 	// serve forever
@@ -61,10 +61,10 @@ func (c *containerServer) serve() error {
 	for {
 		cmd, msg, err := c.recvCmd()
 		if err != nil {
-			return fmt.Errorf("serve: recvCmd %w", err)
+			return fmt.Errorf("serve: recvCmd %v", err)
 		}
 		if err := c.handleCmd(cmd, msg); err != nil {
-			return fmt.Errorf("serve: failed to execute cmd %w", err)
+			return fmt.Errorf("serve: failed to execute cmd %v", err)
 		}
 	}
 }

@@ -95,7 +95,7 @@ type Runner interface {
 1. Pre-fork container to run programs inside
 2. Unix socket to pass fd inside / outside
 
-Container / Master Communication Protocol (single thread):
+Container / Host Communication Protocol (single thread):
 
 - ping (alive check):
   - reply: pong

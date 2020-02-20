@@ -60,21 +60,21 @@ func NewSocket(fd int) (*Socket, error) {
 func NewSocketPair() (*Socket, *Socket, error) {
 	fd, err := syscall.Socketpair(syscall.AF_LOCAL, syscall.SOCK_SEQPACKET|syscall.SOCK_CLOEXEC, 0)
 	if err != nil {
-		return nil, nil, fmt.Errorf("NewSocketPair: failed to call socketpair %w", err)
+		return nil, nil, fmt.Errorf("NewSocketPair: failed to call socketpair %v", err)
 	}
 
 	ins, err := NewSocket(fd[0])
 	if err != nil {
 		syscall.Close(fd[0])
 		syscall.Close(fd[1])
-		return nil, nil, fmt.Errorf("NewSocketPair: failed to call NewSocket on sender %w", err)
+		return nil, nil, fmt.Errorf("NewSocketPair: failed to call NewSocket on sender %v", err)
 	}
 
 	outs, err := NewSocket(fd[1])
 	if err != nil {
 		ins.Close()
 		syscall.Close(fd[1])
-		return nil, nil, fmt.Errorf("NewSocketPair: failed to call NewSocket receiver %w", err)
+		return nil, nil, fmt.Errorf("NewSocketPair: failed to call NewSocket receiver %v", err)
 	}
 
 	return ins, outs, nil

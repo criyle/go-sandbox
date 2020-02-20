@@ -1,10 +1,3 @@
-// Package cgroup provices basic resource control over cgroups
-// it measure
-//   cpu: cpuacct.usage (ns)
-//   memory: memory.max_usage_in_bytes
-// it limits:
-//   memory: memory.limit_in_bytes
-//   # of tasks: pids.max
 package cgroup
 
 import "os"

@@ -76,7 +76,7 @@ func (b *Builder) Build() (Environment, error) {
 			WithTmpfs("w", "").   // work dir
 			WithTmpfs("tmp", ""). // tmp
 			Build(true); err != nil {
-			return nil, fmt.Errorf("container: failed to build rootfs mount %w", err)
+			return nil, fmt.Errorf("container: failed to build rootfs mount %v", err)
 		}
 	}
 
@@ -84,14 +84,14 @@ func (b *Builder) Build() (Environment, error) {
 	root := b.Root
 	if root == "" {
 		if root, err = os.Getwd(); err != nil {
-			return nil, fmt.Errorf("container: failed to get work directory %w", err)
+			return nil, fmt.Errorf("container: failed to get work directory %v", err)
 		}
 	}
 
 	// prepare stdin / stdout / stderr
 	devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, os.ModePerm)
 	if err != nil {
-		return nil, fmt.Errorf("container: failed to open devNull %w", err)
+		return nil, fmt.Errorf("container: failed to open devNull %v", err)
 	}
 	defer devNull.Close()
 
@@ -106,21 +106,21 @@ func (b *Builder) Build() (Environment, error) {
 	// prepare container exec file
 	execFile, err := b.exec()
 	if err != nil {
-		return nil, fmt.Errorf("container: prepare exec %w", err)
+		return nil, fmt.Errorf("container: prepare exec %v", err)
 	}
 	defer execFile.Close()
 
 	// prepare host <-> container unix socket
 	ins, outs, err := newPassCredSocketPair()
 	if err != nil {
-		return nil, fmt.Errorf("container: failed to create socket: %w", err)
+		return nil, fmt.Errorf("container: failed to create socket: %v", err)
 	}
 	defer outs.Close()
 
 	outf, err := outs.File()
 	if err != nil {
 		ins.Close()
-		return nil, fmt.Errorf("container: failed to dup container socket fd %w", err)
+		return nil, fmt.Errorf("container: failed to dup container socket fd %v", err)
 	}
 	defer outf.Close()
 
@@ -149,7 +149,7 @@ func (b *Builder) Build() (Environment, error) {
 	pid, err := r.Start()
 	if err != nil {
 		ins.Close()
-		return nil, fmt.Errorf("container: failed to start container %w", err)
+		return nil, fmt.Errorf("container: failed to start container %v", err)
 	}
 
 	c := &container{

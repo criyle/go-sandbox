@@ -45,11 +45,11 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 			},
 		}
 		if err := c.sendReply(&reply{}, msg); err != nil {
-			return fmt.Errorf("syncFunc: sendReply %w", err)
+			return fmt.Errorf("syncFunc: sendReply %v", err)
 		}
 		cmd, _, err := c.recvCmd()
 		if err != nil {
-			return fmt.Errorf("syncFunc: recvCmd %w", err)
+			return fmt.Errorf("syncFunc: recvCmd %v", err)
 		}
 		if cmd.Cmd == cmdKill {
 			return fmt.Errorf("syncFunc: received kill")
