@@ -122,6 +122,33 @@ Container / Host Communication Protocol (single thread):
 
 Any socket related error will cause the container exit (with all process inside container)
 
+### Pre-forked Container Environment
+
+Container restricted environment is accessed though RPC interface defined by above protocol
+
+Provides:
+
+- File access
+  - Open: create / access files
+  - Delete: remove file
+- Management
+  - Ping: alive check
+  - Reset: remove temporary files
+  - Destroy: destroy the container environment
+- Run program
+  - Execve: execute program with given parameters
+
+``` go
+type Environment interface {
+    Ping() error
+    Open([]OpenCmd) ([]*os.File, error)
+    Delete(p string) error
+    Reset() error
+    Execve(context.Context, ExecveParam) <-chan types.Result
+    Destroy() error
+}
+```
+
 ## Packages (/pkg)
 
 - seccomp: provides seccomp type definition

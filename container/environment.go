@@ -56,7 +56,7 @@ type Environment interface {
 // container manages single pre-forked container environment
 type container struct {
 	pid    int                // underlying container init pid
-	socket *unixsocket.Socket // master - container communication
+	socket *unixsocket.Socket // host - container communication
 	mu     sync.Mutex         // lock to avoid race condition
 }
 

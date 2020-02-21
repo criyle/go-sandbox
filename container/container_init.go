@@ -45,7 +45,7 @@ func Init() (err error) {
 	// limit container resource usage
 	runtime.GOMAXPROCS(containerMaxProc)
 
-	// new_master shared the socket at fd 3 (marked close_exec)
+	// new_container environment shared the socket at fd 3 (marked close_exec)
 	const defaultFd = 3
 	soc, err := unixsocket.NewSocket(defaultFd)
 	if err != nil {
