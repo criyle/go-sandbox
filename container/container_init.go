@@ -9,7 +9,7 @@ import (
 )
 
 type containerServer struct {
-	socket *unixsocket.Socket
+	socket *socket
 	containerConfig
 }
 
@@ -53,7 +53,7 @@ func Init() (err error) {
 	}
 
 	// serve forever
-	cs := &containerServer{socket: soc}
+	cs := &containerServer{socket: newSocket(soc)}
 	return cs.serve()
 }
 

@@ -12,6 +12,15 @@ const (
 	mFlag = unix.MS_NOSUID | unix.MS_NOATIME | unix.MS_NODEV
 )
 
+// NewDefaultBuilder creates default builder for minimal rootfs
+func NewDefaultBuilder() *Builder {
+	return NewBuilder().
+		WithBind("/usr", "usr", true).
+		WithBind("/lib", "lib", true).
+		WithBind("/lib64", "lib64", true).
+		WithBind("/bin", "bin", true)
+}
+
 // Build creates sequence of syscalls for fork_exec
 // skipNotExists skips bind mounts that source not exists
 func (b *Builder) Build(skipNotExists bool) ([]SyscallParams, error) {

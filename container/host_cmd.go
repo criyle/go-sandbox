@@ -123,7 +123,7 @@ func (c *container) recvAckReply(name string) error {
 
 func (c *container) recvReply() (*reply, *unixsocket.Msg, error) {
 	reply := new(reply)
-	msg, err := (*socket)(c.socket).RecvMsg(reply)
+	msg, err := c.socket.RecvMsg(reply)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -131,5 +131,5 @@ func (c *container) recvReply() (*reply, *unixsocket.Msg, error) {
 }
 
 func (c *container) sendCmd(cmd *cmd, msg *unixsocket.Msg) error {
-	return (*socket)(c.socket).SendMsg(cmd, msg)
+	return c.socket.SendMsg(cmd, msg)
 }

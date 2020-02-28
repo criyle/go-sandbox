@@ -60,7 +60,7 @@ func (c *containerServer) handleReset() error {
 
 func (c *containerServer) recvCmd() (*cmd, *unixsocket.Msg, error) {
 	cm := new(cmd)
-	msg, err := (*socket)(c.socket).RecvMsg(cm)
+	msg, err := c.socket.RecvMsg(cm)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -68,7 +68,7 @@ func (c *containerServer) recvCmd() (*cmd, *unixsocket.Msg, error) {
 }
 
 func (c *containerServer) sendReply(rep *reply, msg *unixsocket.Msg) error {
-	return (*socket)(c.socket).SendMsg(rep, msg)
+	return c.socket.SendMsg(rep, msg)
 }
 
 // sendErrorReply sends error reply

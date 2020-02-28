@@ -219,7 +219,6 @@ func start() (*types.Result, error) {
 		Stack:    stackLimit << 20,
 	}
 	debug("rlimit: ", rlims)
-	debug("defaultMount: ", mount.DefaultMounts)
 
 	actionDefault := seccomp.ActionKill
 	if showDetails {
@@ -276,7 +275,7 @@ func start() (*types.Result, error) {
 			return nil, fmt.Errorf("cannot make temp root for new namespace")
 		}
 		defer os.RemoveAll(root)
-		mounts, err := mount.NewBuilder().WithMounts(mount.DefaultMounts).WithBind(root, "w", true).Build(true)
+		mounts, err := mount.NewDefaultBuilder().WithBind(root, "w", true).Build(true)
 		if err != nil {
 			return nil, fmt.Errorf("cannot make rootfs mounts")
 		}

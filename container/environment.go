@@ -55,9 +55,9 @@ type Environment interface {
 
 // container manages single pre-forked container environment
 type container struct {
-	pid    int                // underlying container init pid
-	socket *unixsocket.Socket // host - container communication
-	mu     sync.Mutex         // lock to avoid race condition
+	pid    int        // underlying container init pid
+	socket *socket    // host - container communication
+	mu     sync.Mutex // lock to avoid race condition
 }
 
 // Build creates new environment with underlying container
@@ -71,8 +71,7 @@ func (b *Builder) Build() (Environment, error) {
 	// container mount points
 	mounts := b.Mounts
 	if len(mounts) == 0 {
-		if mounts, err = mount.NewBuilder().
-			WithMounts(mount.DefaultMounts).
+		if mounts, err = mount.NewDefaultBuilder().
 			WithTmpfs("w", "").   // work dir
 			WithTmpfs("tmp", ""). // tmp
 			Build(true); err != nil {
@@ -154,7 +153,7 @@ func (b *Builder) Build() (Environment, error) {
 
 	c := &container{
 		pid:    pid,
-		socket: ins,
+		socket: newSocket(ins),
 	}
 
 	// set configuration and check if container creation successful

@@ -117,6 +117,9 @@ func (r *Runner) trace(c context.Context, runner *forkexec.Runner) (result types
 		case wstatus.Exited():
 			result.Status = types.StatusNormal
 			result.ExitStatus = wstatus.ExitStatus()
+			if result.ExitStatus != 0 {
+				result.Status = types.StatusNonzeroExitStatus
+			}
 			return
 
 		case wstatus.Signaled():
