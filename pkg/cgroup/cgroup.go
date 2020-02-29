@@ -100,6 +100,16 @@ func (c *CGroup) SetPidsMax(i uint64) error {
 	return c.pids.WriteUint("pids.max", i)
 }
 
+// SetCpuacctUsage write cpuacct.usage in ns
+func (c *CGroup) SetCpuacctUsage(i uint64) error {
+	return c.cpuacct.WriteUint("cpuacct.usage", i)
+}
+
+// SetMemoryMaxUsageInBytes write cpuacct.usage in ns
+func (c *CGroup) SetMemoryMaxUsageInBytes(i uint64) error {
+	return c.memory.WriteUint("memory.max_usage_in_bytes", i)
+}
+
 func remove(name string) error {
 	if name != "" {
 		return os.Remove(name)
