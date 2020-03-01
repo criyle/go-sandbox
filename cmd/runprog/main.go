@@ -361,9 +361,13 @@ func start() (*types.Result, error) {
 		if err != nil {
 			return nil, fmt.Errorf("cgroup memory: %v", err)
 		}
-		debug("cgroup: cpu: ", cpu, " memory: ", memory)
+		cache, err := cg.FindMemoryStatProperty("cache")
+		if err != nil {
+			return nil, fmt.Errorf("cgroup cache %v", err)
+		}
+		debug("cgroup: cpu: ", cpu, " memory: ", memory, "cache: ", cache)
 		rt.Time = time.Duration(cpu)
-		rt.Memory = types.Size(memory)
+		rt.Memory = types.Size(memory - cache)
 		debug("cgroup:", rt)
 	}
 	return &rt, nil

@@ -97,7 +97,7 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 		<-waitDone
 		// collect zombies
 		for {
-			if pid, err := syscall.Wait4(-1, nil, syscall.WNOHANG, nil); err != syscall.EINTR || pid <= 0 {
+			if _, err := syscall.Wait4(-1, nil, syscall.WNOHANG, nil); err != nil && err != syscall.EINTR {
 				break
 			}
 		}
@@ -108,6 +108,9 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 	var rusage syscall.Rusage
 	if err == nil {
 		_, err = syscall.Wait4(pid, &wstatus, 0, &rusage)
+		for err == syscall.EINTR {
+			_, err = syscall.Wait4(pid, &wstatus, 0, &rusage)
+		}
 	}
 	// sync with kill goroutine
 	close(waitDone)

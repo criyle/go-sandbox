@@ -86,6 +86,9 @@ func (r *Runner) trace(c context.Context, runner *forkexec.Runner) (result types
 	fTime = time.Now()
 	for {
 		_, err := unix.Wait4(pgid, &wstatus, 0, &rusage)
+		if err == unix.EINTR {
+			continue
+		}
 		r.println("wait4: ", wstatus)
 		if err != nil {
 			result.Status = types.StatusRunnerError
@@ -150,7 +153,7 @@ func killAll(pgid int) {
 func collectZombie(pgid int) {
 	var wstatus unix.WaitStatus
 	for {
-		if _, err := unix.Wait4(-pgid, &wstatus, unix.WALL|unix.WNOHANG, nil); err != nil {
+		if _, err := unix.Wait4(-pgid, &wstatus, unix.WALL|unix.WNOHANG, nil); err != unix.EINTR && err != nil {
 			break
 		}
 	}

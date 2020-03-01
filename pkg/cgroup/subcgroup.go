@@ -2,6 +2,7 @@ package cgroup
 
 import (
 	"errors"
+	"io/ioutil"
 	"path"
 	"strconv"
 	"strings"
@@ -28,7 +29,7 @@ func (c *SubCGroup) WriteUint(filename string, i uint64) error {
 	if c.path == "" {
 		return nil
 	}
-	return writeFileNoInterrupt(path.Join(c.path, filename), []byte(strconv.FormatUint(i, 10)))
+	return c.WriteFile(filename, []byte(strconv.FormatUint(i, 10)))
 }
 
 // ReadUint read uint64 into given file
@@ -36,7 +37,7 @@ func (c *SubCGroup) ReadUint(filename string) (uint64, error) {
 	if c.path == "" {
 		return 0, ErrNotInitialized
 	}
-	b, err := readFileNoInterrupt(path.Join(c.path, filename))
+	b, err := c.ReadFile(filename)
 	if err != nil {
 		return 0, err
 	}
@@ -47,37 +48,24 @@ func (c *SubCGroup) ReadUint(filename string) (uint64, error) {
 	return s, nil
 }
 
-// writeFileNoInterrupt handles potential EINTR error while writes to
+// WriteFile writes cgroup file and handles potential EINTR error while writes to
 // the slow device (cgroup)
-func writeFileNoInterrupt(path string, content []byte) error {
-	fd, err := syscall.Open(path, syscall.O_WRONLY|syscall.O_TRUNC|syscall.O_CLOEXEC, 0664)
-	if err != nil {
-		return err
+func (c *SubCGroup) WriteFile(name string, content []byte) error {
+	p := path.Join(c.path, name)
+	err := ioutil.WriteFile(p, content, 0664)
+	for err != nil && errors.Is(err, syscall.EINTR) {
+		err = ioutil.WriteFile(p, content, 0664)
 	}
-	defer syscall.Close(fd)
-
-	_, err = syscall.Write(fd, content)
-	for err == syscall.EINTR {
-		_, err = syscall.Write(fd, content)
-	}
-	return nil
+	return err
 }
 
-const maxUintFile = 64 // max file size 64 bytes (enough for uint)
-
-// readFileNoInterrupt handles potential EINTR error while read to
+// ReadFile reads cgroup file and handles potential EINTR error while read to
 // the slow device (cgroup)
-func readFileNoInterrupt(path string) ([]byte, error) {
-	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_CLOEXEC, 0664)
-	if err != nil {
-		return nil, err
+func (c *SubCGroup) ReadFile(name string) ([]byte, error) {
+	p := path.Join(c.path, name)
+	data, err := ioutil.ReadFile(p)
+	for err != nil && errors.Is(err, syscall.EINTR) {
+		data, err = ioutil.ReadFile(p)
 	}
-	defer syscall.Close(fd)
-
-	buff := make([]byte, maxUintFile)
-	n, err := syscall.Read(fd, buff)
-	for err == syscall.EINTR {
-		n, err = syscall.Read(fd, buff)
-	}
-	return buff[:n], nil
+	return data, err
 }

@@ -1,6 +1,10 @@
 package cgroup
 
-import "os"
+import (
+	"bytes"
+	"fmt"
+	"os"
+)
 
 // additional ideas:
 //   cpu share(not used): cpu.share
@@ -108,6 +112,26 @@ func (c *CGroup) SetCpuacctUsage(i uint64) error {
 // SetMemoryMaxUsageInBytes write cpuacct.usage in ns
 func (c *CGroup) SetMemoryMaxUsageInBytes(i uint64) error {
 	return c.memory.WriteUint("memory.max_usage_in_bytes", i)
+}
+
+// FindMemoryStatProperty find certain property from memory.stat
+func (c *CGroup) FindMemoryStatProperty(prop string) (uint64, error) {
+	content, err := c.memory.ReadFile("memory.stat")
+	if err != nil {
+		return 0, err
+	}
+	r := bytes.NewReader(content)
+	for {
+		var p string
+		var i uint64
+		_, err = fmt.Fscanln(r, &p, &i)
+		if err != nil {
+			return 0, err
+		}
+		if p == prop {
+			return i, nil
+		}
+	}
 }
 
 func remove(name string) error {

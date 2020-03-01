@@ -82,6 +82,10 @@ func (t *Tracer) TraceRun(c context.Context) (result types.Result) {
 			// Ensure the process have called setpgid
 			pid, err = unix.Wait4(pgid, &wstatus, unix.WALL, &rusage)
 		}
+		if err == unix.EINTR {
+			t.Handler.Debug("wait4 EINTR")
+			continue
+		}
 		if err != nil {
 			t.Handler.Debug("wait4 failed: ", err)
 			result.Status = types.StatusRunnerError
@@ -288,7 +292,7 @@ func collectZombie(pgid int) {
 	var wstatus unix.WaitStatus
 	// collect zombies
 	for {
-		if _, err := unix.Wait4(-pgid, &wstatus, unix.WALL|unix.WNOHANG, nil); err != nil {
+		if _, err := unix.Wait4(-pgid, &wstatus, unix.WALL|unix.WNOHANG, nil); err != unix.EINTR && err != nil {
 			break
 		}
 	}
