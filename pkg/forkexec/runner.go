@@ -43,7 +43,7 @@ type Runner struct {
 
 	// stop before seccomp calls kill(getpid(), SIGSTOP) to wait for tracer to continue
 	// right before the calls to seccomp. It is automatically enabled when seccomp
-	// filter and ptrace are provided since kill might not be avaliable after
+	// filter and ptrace are provided since kill might not be available after
 	// seccomp and execve might be traced by ptrace
 	// cannot stop after seccomp since kill might not be allowed by seccomp filter
 	StopBeforeSeccomp bool

@@ -27,7 +27,7 @@ func (b *Builder) Build(skipNotExists bool) ([]SyscallParams, error) {
 	var err error
 	ret := make([]SyscallParams, 0, len(b.Mounts))
 	for _, m := range b.Mounts {
-		mknod := false
+		var mknod bool
 		if mknod, err = isBindMountFileOrNotExists(m); err != nil {
 			if skipNotExists {
 				continue

@@ -5,6 +5,7 @@ import (
 	"unsafe"
 )
 
+// ptrace constants
 const (
 	NT_PRSTATUS        = 1
 	NT_ARM_SYSTEM_CALL = 0x404

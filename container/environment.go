@@ -43,7 +43,7 @@ type CredGenerator interface {
 	Get() syscall.Credential
 }
 
-// Environment holds single progrem containered environment
+// Environment holds single progrem containerized environment
 type Environment interface {
 	Ping() error
 	Open([]OpenCmd) ([]*os.File, error)
@@ -231,12 +231,12 @@ func newPassCredSocketPair() (*unixsocket.Socket, *unixsocket.Socket, error) {
 
 func getIDMapping(cred *syscall.Credential) ([]syscall.SysProcIDMap, []syscall.SysProcIDMap) {
 	uidMap := []syscall.SysProcIDMap{
-		syscall.SysProcIDMap{
+		{
 			ContainerID: 0,
 			HostID:      os.Geteuid(),
 			Size:        1,
 		},
-		syscall.SysProcIDMap{
+		{
 			ContainerID: containerUID,
 			HostID:      int(cred.Uid),
 			Size:        1,
@@ -244,12 +244,12 @@ func getIDMapping(cred *syscall.Credential) ([]syscall.SysProcIDMap, []syscall.S
 	}
 
 	gidMap := []syscall.SysProcIDMap{
-		syscall.SysProcIDMap{
+		{
 			ContainerID: 0,
 			HostID:      os.Getegid(),
 			Size:        1,
 		},
-		syscall.SysProcIDMap{
+		{
 			ContainerID: containerGID,
 			HostID:      int(cred.Gid),
 			Size:        1,

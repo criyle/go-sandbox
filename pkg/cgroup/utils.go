@@ -23,7 +23,7 @@ func CreateSubCGroupPath(group, prefix string) (string, error) {
 	return ioutil.TempDir(base, "")
 }
 
-// GetAllSubCgroup reads /proc/cgroups and get all avaliable sub-cgroup as set
+// GetAllSubCgroup reads /proc/cgroups and get all available sub-cgroup as set
 func GetAllSubCgroup() (map[string]bool, error) {
 	f, err := os.Open(procCgroupsPath)
 	if err != nil {

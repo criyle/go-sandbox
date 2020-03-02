@@ -6,7 +6,7 @@ import (
 )
 
 // Builder builds cgroup directories
-// avaliable: cpuacct, memory, pids
+// available: cpuacct, memory, pids
 type Builder struct {
 	Prefix                string
 	CPUAcct, Memory, Pids bool

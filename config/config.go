@@ -106,7 +106,7 @@ var (
 	// config for different type of program
 	// workpath and arg0 have additional read / stat permission
 	runptraceConfig = map[string]ProgramConfig{
-		"python2.7": ProgramConfig{
+		"python2.7": {
 			Syscall: SyscallConfig{
 				ExtraAllow: []string{
 					"futex", "getdents", "getdents64", "prlimit64", "getpid", "sysinfo",
@@ -134,7 +134,7 @@ var (
 			},
 			RunCommand: []string{"/usr/bin/python2.7", "-E", "-s", "-B"},
 		},
-		"python3": ProgramConfig{
+		"python3": {
 			Syscall: SyscallConfig{
 				ExtraAllow: []string{
 					"futex", "getdents", "getdents64", "prlimit64", "getpid", "sysinfo", "getrandom",
@@ -166,7 +166,7 @@ var (
 			},
 			RunCommand: []string{"/usr/bin/python3", "-I", "-B"},
 		},
-		"compiler": ProgramConfig{
+		"compiler": {
 			Syscall: SyscallConfig{
 				ExtraAllow: []string{
 					"gettid", "set_tid_address", "set_robust_list", "futex",
