@@ -1,7 +1,6 @@
 # go-sandbox
 
-[![GoDoc](https://godoc.org/github.com/criyle/go-sandbox?status.svg)](https://godoc.org/github.com/criyle/go-sandbox) [![Go Report Card](https://goreportcard.com/badge/github.com/criyle/go-sandbox)](https://goreportcard.com/report/github.com/criyle/go-sandbox) [![Release](https://img.shields.io/github/release/criyle/go-sandbox.svg?style=flat-square)](https://github.com/criyle/go-sandbox/releases/latest)
-
+[![GoDoc](https://godoc.org/github.com/criyle/go-sandbox?status.svg)](https://godoc.org/github.com/criyle/go-sandbox) [![Go Report Card](https://goreportcard.com/badge/github.com/criyle/go-sandbox)](https://goreportcard.com/report/github.com/criyle/go-sandbox) [![Release](https://img.shields.io/github/v/tag/criyle/go-sandbox)](https://github.com/criyle/go-sandbox/releases/latest)
 
 Original goal was to replica [uoj-judger/run_program](https://github.com/vfleaking/uoj) in GO language using [libseccomp](https://github.com/pkg/seccomp/libseccomp-golang). As technology grows, it also implements new technologies including Linux namespace and cgroup.
 
