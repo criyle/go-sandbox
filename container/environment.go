@@ -8,10 +8,9 @@ import (
 	"syscall"
 
 	"github.com/criyle/go-sandbox/pkg/forkexec"
-	"github.com/criyle/go-sandbox/pkg/memfd"
 	"github.com/criyle/go-sandbox/pkg/mount"
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
-	"github.com/criyle/go-sandbox/types"
+	"github.com/criyle/go-sandbox/runner"
 	"golang.org/x/sys/unix"
 )
 
@@ -49,7 +48,7 @@ type Environment interface {
 	Open([]OpenCmd) ([]*os.File, error)
 	Delete(p string) error
 	Reset() error
-	Execve(context.Context, ExecveParam) <-chan types.Result
+	Execve(context.Context, ExecveParam) <-chan runner.Result
 	Destroy() error
 }
 
@@ -196,32 +195,18 @@ func (b *Builder) exec() (*os.File, error) {
 	return OpenCurrentExec()
 }
 
-// OpenCurrentExec opens current executable and dup and seal it to memfd
+// OpenCurrentExec opens current executable (/proc/self/exe)
 func OpenCurrentExec() (*os.File, error) {
-	self, err := os.Open(currentExec)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open %v: %v", currentExec, err)
-	}
-	defer self.Close()
-
-	execFile, err := memfd.DupToMemfd("init", self)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create memfd: %v", err)
-	}
-	return execFile, nil
+	return os.Open(currentExec)
 }
 
+// newPassCredSocketPair creates socket pair and let the first socket to receive credential information
 func newPassCredSocketPair() (*unixsocket.Socket, *unixsocket.Socket, error) {
 	ins, outs, err := unixsocket.NewSocketPair()
 	if err != nil {
 		return nil, nil, err
 	}
 	if err = ins.SetPassCred(1); err != nil {
-		ins.Close()
-		outs.Close()
-		return nil, nil, err
-	}
-	if err = outs.SetPassCred(1); err != nil {
 		ins.Close()
 		outs.Close()
 		return nil, nil, err

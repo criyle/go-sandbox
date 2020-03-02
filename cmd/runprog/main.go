@@ -1,3 +1,4 @@
+// Command runprog executes program defined restricted environment including seccomp-ptraced, namespaced and containerized.
 package main
 
 import (
@@ -21,7 +22,6 @@ import (
 	"github.com/criyle/go-sandbox/runner/ptrace"
 	"github.com/criyle/go-sandbox/runner/ptrace/filehandler"
 	"github.com/criyle/go-sandbox/runner/unshare"
-	"github.com/criyle/go-sandbox/types"
 )
 
 const (
@@ -108,24 +108,24 @@ func main() {
 
 	rt, err := start()
 	if rt == nil {
-		rt = &types.Result{
-			Status: types.StatusRunnerError,
+		rt = &runner.Result{
+			Status: runner.StatusRunnerError,
 		}
 	}
-	if err == nil && rt.Status != types.StatusNormal {
+	if err == nil && rt.Status != runner.StatusNormal {
 		err = rt.Status
 	}
 	debug("setupTime: ", rt.SetUpTime)
 	debug("runningTime: ", rt.RunningTime)
 	if err != nil {
 		debug(err)
-		c, ok := err.(types.Status)
+		c, ok := err.(runner.Status)
 		if !ok {
-			c = types.StatusRunnerError
+			c = runner.StatusRunnerError
 		}
 		// Handle fatal error from trace
 		fmt.Fprintf(f, "%d %d %d %d\n", getStatus(c), int(rt.Time/time.Millisecond), uint64(rt.Memory)>>10, rt.ExitStatus)
-		if c == types.StatusRunnerError {
+		if c == runner.StatusRunnerError {
 			os.Exit(1)
 		}
 	} else {
@@ -138,17 +138,17 @@ type containerRunner struct {
 	container.ExecveParam
 }
 
-func (r *containerRunner) Run(c context.Context) <-chan types.Result {
+func (r *containerRunner) Run(c context.Context) <-chan runner.Result {
 	return r.Environment.Execve(c, r.ExecveParam)
 }
 
-func start() (*types.Result, error) {
+func start() (*runner.Result, error) {
 	var (
-		runner   runner.Runner
-		cg       *cgroup.CGroup
+		r        runner.Runner
+		cg       *cgroup.Cgroup
 		err      error
 		execFile uintptr
-		rt       types.Result
+		rt       runner.Result
 	)
 
 	addRead := filehandler.GetExtraSet(addReadable, addRawReadable)
@@ -225,9 +225,9 @@ func start() (*types.Result, error) {
 		actionDefault = seccomp.ActionTrace.WithReturnCode(seccomp.MsgDisallow)
 	}
 
-	limit := types.Limit{
+	limit := runner.Limit{
 		TimeLimit:   time.Duration(timeLimit) * time.Second,
-		MemoryLimit: types.Size(memoryLimit << 20),
+		MemoryLimit: runner.Size(memoryLimit << 20),
 	}
 
 	if runt == "container" {
@@ -250,12 +250,12 @@ func start() (*types.Result, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to ping container: %v", err)
 		}
-		runner = &containerRunner{
+		r = &containerRunner{
 			Environment: m,
 			ExecveParam: container.ExecveParam{
 				Args:     args,
 				Env:      []string{pathEnv},
-				Fds:      fds,
+				Files:    fds,
 				ExecFile: execFile,
 				RLimits:  rlims.PrepareRLimit(),
 				SyncFunc: syncFunc,
@@ -279,7 +279,7 @@ func start() (*types.Result, error) {
 		if err != nil {
 			return nil, fmt.Errorf("cannot make rootfs mounts")
 		}
-		runner = &unshare.Runner{
+		r = &unshare.Runner{
 			Args:        args,
 			Env:         []string{pathEnv},
 			ExecFile:    execFile,
@@ -305,7 +305,7 @@ func start() (*types.Result, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create seccomp filter %v", err)
 		}
-		runner = &ptrace.Runner{
+		r = &ptrace.Runner{
 			Args:        args,
 			Env:         []string{pathEnv},
 			ExecFile:    execFile,
@@ -332,14 +332,14 @@ func start() (*types.Result, error) {
 	c, cancel := context.WithTimeout(context.Background(), time.Duration(int64(realTimeLimit)*int64(time.Second)))
 	defer cancel()
 
-	s := runner.Run(c)
+	s := r.Run(c)
 	rTime := time.Now()
 
 	select {
 	case <-sig:
 		cancel()
 		rt = <-s
-		rt.Status = types.StatusRunnerError
+		rt.Status = runner.StatusRunnerError
 
 	case rt = <-s:
 	}
@@ -367,7 +367,7 @@ func start() (*types.Result, error) {
 		}
 		debug("cgroup: cpu: ", cpu, " memory: ", memory, "cache: ", cache)
 		rt.Time = time.Duration(cpu)
-		rt.Memory = types.Size(memory - cache)
+		rt.Memory = runner.Size(memory - cache)
 		debug("cgroup:", rt)
 	}
 	return &rt, nil
@@ -394,21 +394,21 @@ const (
 	StatusFatal                 // 7
 )
 
-func getStatus(s types.Status) int {
+func getStatus(s runner.Status) int {
 	switch s {
-	case types.StatusNormal:
+	case runner.StatusNormal:
 		return int(StatusNormal)
-	case types.StatusInvalid:
+	case runner.StatusInvalid:
 		return int(StatusInvalid)
-	case types.StatusTimeLimitExceeded:
+	case runner.StatusTimeLimitExceeded:
 		return int(StatusTLE)
-	case types.StatusMemoryLimitExceeded:
+	case runner.StatusMemoryLimitExceeded:
 		return int(StatusMLE)
-	case types.StatusOutputLimitExceeded:
+	case runner.StatusOutputLimitExceeded:
 		return int(StatusOLE)
-	case types.StatusDisallowedSyscall:
+	case runner.StatusDisallowedSyscall:
 		return int(StatusBan)
-	case types.StatusSignalled, types.StatusNonzeroExitStatus:
+	case runner.StatusSignalled, runner.StatusNonzeroExitStatus:
 		return int(StatusRE)
 	default:
 		return int(StatusFatal)

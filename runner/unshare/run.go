@@ -11,7 +11,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/criyle/go-sandbox/pkg/forkexec"
-	"github.com/criyle/go-sandbox/types"
+	"github.com/criyle/go-sandbox/runner"
 )
 
 const (
@@ -20,7 +20,16 @@ const (
 )
 
 // Run starts the unshared process
-func (r *Runner) Run(c context.Context) <-chan types.Result {
+func (r *Runner) Run(c context.Context) <-chan runner.Result {
+	result := make(chan runner.Result, 1)
+	go func() {
+		result <- r.trace(c)
+	}()
+	return result
+}
+
+// Trace tracks child processes
+func (r *Runner) trace(c context.Context) (result runner.Result) {
 	ch := &forkexec.Runner{
 		Args:       r.Args,
 		Env:        r.Env,
@@ -39,39 +48,29 @@ func (r *Runner) Run(c context.Context) <-chan types.Result {
 		SyncFunc:   r.SyncFunc,
 	}
 
-	result := make(chan types.Result, 1)
-	go func() {
-		result <- r.trace(c, ch)
-	}()
-
-	return result
-}
-
-// Trace tracks child processes
-func (r *Runner) trace(c context.Context, runner *forkexec.Runner) (result types.Result) {
 	var (
 		wstatus unix.WaitStatus // wait4 wait status
 		rusage  unix.Rusage     // wait4 rusage
-		status  = types.StatusNormal
+		status  = runner.StatusNormal
 		sTime   = time.Now() // start time
 		fTime   time.Time    // finish time for setup
 	)
 
 	// Start the runner
-	pgid, err := runner.Start()
+	pgid, err := ch.Start()
 	r.println("Starts: ", pgid, err)
 	if err != nil {
-		result.Status = types.StatusRunnerError
+		result.Status = runner.StatusRunnerError
 		result.Error = err.Error()
 		return
 	}
 
-	cc, cancel := context.WithCancel(c)
+	ctx, cancel := context.WithCancel(c)
 	defer cancel()
 
 	// handle cancel
 	go func() {
-		<-cc.Done()
+		<-ctx.Done()
 		killAll(pgid)
 	}()
 
@@ -91,37 +90,37 @@ func (r *Runner) trace(c context.Context, runner *forkexec.Runner) (result types
 		}
 		r.println("wait4: ", wstatus)
 		if err != nil {
-			result.Status = types.StatusRunnerError
+			result.Status = runner.StatusRunnerError
 			result.Error = err.Error()
 			return
 		}
 
 		// update resource usage and check against limits
 		userTime := time.Duration(rusage.Utime.Nano()) // ns
-		userMem := types.Size(rusage.Maxrss << 10)     // bytes
+		userMem := runner.Size(rusage.Maxrss << 10)    // bytes
 
 		// check tle / mle
 		if userTime > r.Limit.TimeLimit {
-			status = types.StatusTimeLimitExceeded
+			status = runner.StatusTimeLimitExceeded
 		}
 		if userMem > r.Limit.MemoryLimit {
-			status = types.StatusMemoryLimitExceeded
+			status = runner.StatusMemoryLimitExceeded
 		}
-		result = types.Result{
+		result = runner.Result{
 			Status: status,
 			Time:   userTime,
 			Memory: userMem,
 		}
-		if status != types.StatusNormal {
+		if status != runner.StatusNormal {
 			return
 		}
 
 		switch {
 		case wstatus.Exited():
-			result.Status = types.StatusNormal
+			result.Status = runner.StatusNormal
 			result.ExitStatus = wstatus.ExitStatus()
 			if result.ExitStatus != 0 {
-				result.Status = types.StatusNonzeroExitStatus
+				result.Status = runner.StatusNonzeroExitStatus
 			}
 			return
 
@@ -129,13 +128,13 @@ func (r *Runner) trace(c context.Context, runner *forkexec.Runner) (result types
 			sig := wstatus.Signal()
 			switch sig {
 			case unix.SIGXCPU, unix.SIGKILL:
-				status = types.StatusTimeLimitExceeded
+				status = runner.StatusTimeLimitExceeded
 			case unix.SIGXFSZ:
-				status = types.StatusOutputLimitExceeded
+				status = runner.StatusOutputLimitExceeded
 			case unix.SIGSYS:
-				status = types.StatusDisallowedSyscall
+				status = runner.StatusDisallowedSyscall
 			default:
-				status = types.StatusSignalled
+				status = runner.StatusSignalled
 			}
 			result.Status = status
 			result.ExitStatus = int(sig)

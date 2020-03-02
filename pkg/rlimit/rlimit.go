@@ -6,7 +6,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/criyle/go-sandbox/types"
+	"github.com/criyle/go-sandbox/runner"
 )
 
 // RLimits defines the rlimit applied by setrlimit syscall to traced process
@@ -88,7 +88,7 @@ func (r RLimit) String() string {
 	case syscall.RLIMIT_AS:
 		t = "AddressSpace"
 	}
-	return fmt.Sprintf("%s[%v:%v]", t, types.Size(r.Rlim.Cur), types.Size(r.Rlim.Max))
+	return fmt.Sprintf("%s[%v:%v]", t, runner.Size(r.Rlim.Cur), runner.Size(r.Rlim.Max))
 }
 
 func (r RLimits) String() string {

@@ -6,7 +6,7 @@ import (
 	"github.com/criyle/go-sandbox/pkg/rlimit"
 	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/ptracer"
-	"github.com/criyle/go-sandbox/types"
+	"github.com/criyle/go-sandbox/runner"
 )
 
 // Runner defines the spec to run a program safely by ptracer
@@ -27,7 +27,7 @@ type Runner struct {
 	RLimits []rlimit.RLimit
 
 	// Res limit enforced by tracer
-	Limit types.Limit
+	Limit runner.Limit
 
 	// Defines seccomp filter for the ptrace runner
 	// file access syscalls need to set as ActionTrace

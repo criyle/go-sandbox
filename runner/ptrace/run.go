@@ -5,11 +5,11 @@ import (
 
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/ptracer"
-	"github.com/criyle/go-sandbox/types"
+	"github.com/criyle/go-sandbox/runner"
 )
 
 // Run starts the tracing process
-func (r *Runner) Run(c context.Context) <-chan types.Result {
+func (r *Runner) Run(c context.Context) <-chan runner.Result {
 	ch := &forkexec.Runner{
 		Args:     r.Args,
 		Env:      r.Env,
@@ -33,6 +33,5 @@ func (r *Runner) Run(c context.Context) <-chan types.Result {
 		Runner:  ch,
 		Limit:   r.Limit,
 	}
-	rt := tracer.Trace(c)
-	return rt
+	return tracer.Trace(c)
 }

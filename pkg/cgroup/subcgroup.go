@@ -9,31 +9,29 @@ import (
 	"syscall"
 )
 
-// SubCGroup is the sub-cgroup
-type SubCGroup struct {
+// SubCgroup is the accessor for single cgroup resource with given path
+type SubCgroup struct {
 	path string
 }
 
 // ErrNotInitialized returned when trying to read from not initialized cgroup
 var ErrNotInitialized = errors.New("cgroup was not initialized")
 
-// NewSubCGroup creates a sug CGroup
-func NewSubCGroup(p string) *SubCGroup {
-	return &SubCGroup{
-		path: p,
-	}
+// NewSubCgroup creates a cgroup accessor with given path (path needs to be created in advance)
+func NewSubCgroup(p string) *SubCgroup {
+	return &SubCgroup{path: p}
 }
 
 // WriteUint writes uint64 into given file
-func (c *SubCGroup) WriteUint(filename string, i uint64) error {
+func (c *SubCgroup) WriteUint(filename string, i uint64) error {
 	if c.path == "" {
 		return nil
 	}
 	return c.WriteFile(filename, []byte(strconv.FormatUint(i, 10)))
 }
 
-// ReadUint read uint64 into given file
-func (c *SubCGroup) ReadUint(filename string) (uint64, error) {
+// ReadUint read uint64 from given file
+func (c *SubCgroup) ReadUint(filename string) (uint64, error) {
 	if c.path == "" {
 		return 0, ErrNotInitialized
 	}
@@ -50,7 +48,7 @@ func (c *SubCGroup) ReadUint(filename string) (uint64, error) {
 
 // WriteFile writes cgroup file and handles potential EINTR error while writes to
 // the slow device (cgroup)
-func (c *SubCGroup) WriteFile(name string, content []byte) error {
+func (c *SubCgroup) WriteFile(name string, content []byte) error {
 	p := path.Join(c.path, name)
 	err := ioutil.WriteFile(p, content, 0664)
 	for err != nil && errors.Is(err, syscall.EINTR) {
@@ -61,7 +59,7 @@ func (c *SubCGroup) WriteFile(name string, content []byte) error {
 
 // ReadFile reads cgroup file and handles potential EINTR error while read to
 // the slow device (cgroup)
-func (c *SubCGroup) ReadFile(name string) ([]byte, error) {
+func (c *SubCgroup) ReadFile(name string) ([]byte, error) {
 	p := path.Join(c.path, name)
 	data, err := ioutil.ReadFile(p)
 	for err != nil && errors.Is(err, syscall.EINTR) {

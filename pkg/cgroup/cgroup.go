@@ -6,20 +6,14 @@ import (
 	"os"
 )
 
-// additional ideas:
-//   cpu share(not used): cpu.share
-//   reclaim pages from old process: memory.force_empty
-//   (tasks kill are managed out of cgroup as freeze takes some time)
-//   freeze: freezer.state
-
-// CGroup is the combination of sub-cgroups
-type CGroup struct {
+// Cgroup is the combination of sub-cgroups
+type Cgroup struct {
 	prefix                string
-	cpuacct, memory, pids *SubCGroup
+	cpuacct, memory, pids *SubCgroup
 }
 
 // Build creates new cgrouup directories
-func (b *Builder) Build() (cg *CGroup, err error) {
+func (b *Builder) Build() (cg *Cgroup, err error) {
 	var (
 		cpuacctPath, memoryPath, pidsPath string
 	)
@@ -32,31 +26,31 @@ func (b *Builder) Build() (cg *CGroup, err error) {
 		}
 	}()
 	if b.CPUAcct {
-		if cpuacctPath, err = CreateSubCGroupPath("cpuacct", b.Prefix); err != nil {
+		if cpuacctPath, err = CreateSubCgroupPath("cpuacct", b.Prefix); err != nil {
 			return
 		}
 	}
 	if b.Memory {
-		if memoryPath, err = CreateSubCGroupPath("memory", b.Prefix); err != nil {
+		if memoryPath, err = CreateSubCgroupPath("memory", b.Prefix); err != nil {
 			return
 		}
 	}
 	if b.Pids {
-		if pidsPath, err = CreateSubCGroupPath("pids", b.Prefix); err != nil {
+		if pidsPath, err = CreateSubCgroupPath("pids", b.Prefix); err != nil {
 			return
 		}
 	}
 
-	return &CGroup{
+	return &Cgroup{
 		prefix:  b.Prefix,
-		cpuacct: NewSubCGroup(cpuacctPath),
-		memory:  NewSubCGroup(memoryPath),
-		pids:    NewSubCGroup(pidsPath),
+		cpuacct: NewSubCgroup(cpuacctPath),
+		memory:  NewSubCgroup(memoryPath),
+		pids:    NewSubCgroup(pidsPath),
 	}, nil
 }
 
 // AddProc writes cgroup.procs to all sub-cgroup
-func (c *CGroup) AddProc(pid int) error {
+func (c *Cgroup) AddProc(pid int) error {
 	if err := c.cpuacct.WriteUint(cgroupProcs, uint64(pid)); err != nil {
 		return err
 	}
@@ -69,8 +63,8 @@ func (c *CGroup) AddProc(pid int) error {
 	return nil
 }
 
-// Destroy removes dir for sub-cggroup, errors are ignored if remove one failed
-func (c *CGroup) Destroy() error {
+// Destroy removes dir for sub-cgroup, errors are ignored if remove one failed
+func (c *Cgroup) Destroy() error {
 	var err1 error
 	if err := remove(c.cpuacct.path); err != nil {
 		err1 = err
@@ -85,37 +79,37 @@ func (c *CGroup) Destroy() error {
 }
 
 // CpuacctUsage read cpuacct.usage in ns
-func (c *CGroup) CpuacctUsage() (uint64, error) {
+func (c *Cgroup) CpuacctUsage() (uint64, error) {
 	return c.cpuacct.ReadUint("cpuacct.usage")
 }
 
 // MemoryMaxUsageInBytes read memory.max_usage_in_bytes
-func (c *CGroup) MemoryMaxUsageInBytes() (uint64, error) {
+func (c *Cgroup) MemoryMaxUsageInBytes() (uint64, error) {
 	return c.memory.ReadUint("memory.max_usage_in_bytes")
 }
 
 // SetMemoryLimitInBytes write memory.limit_in_bytes
-func (c *CGroup) SetMemoryLimitInBytes(i uint64) error {
+func (c *Cgroup) SetMemoryLimitInBytes(i uint64) error {
 	return c.memory.WriteUint("memory.limit_in_bytes", i)
 }
 
 // SetPidsMax write pids.max
-func (c *CGroup) SetPidsMax(i uint64) error {
+func (c *Cgroup) SetPidsMax(i uint64) error {
 	return c.pids.WriteUint("pids.max", i)
 }
 
 // SetCpuacctUsage write cpuacct.usage in ns
-func (c *CGroup) SetCpuacctUsage(i uint64) error {
+func (c *Cgroup) SetCpuacctUsage(i uint64) error {
 	return c.cpuacct.WriteUint("cpuacct.usage", i)
 }
 
 // SetMemoryMaxUsageInBytes write cpuacct.usage in ns
-func (c *CGroup) SetMemoryMaxUsageInBytes(i uint64) error {
+func (c *Cgroup) SetMemoryMaxUsageInBytes(i uint64) error {
 	return c.memory.WriteUint("memory.max_usage_in_bytes", i)
 }
 
 // FindMemoryStatProperty find certain property from memory.stat
-func (c *CGroup) FindMemoryStatProperty(prop string) (uint64, error) {
+func (c *Cgroup) FindMemoryStatProperty(prop string) (uint64, error) {
 	content, err := c.memory.ReadFile("memory.stat")
 	if err != nil {
 		return 0, err

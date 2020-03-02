@@ -1,4 +1,4 @@
-package types
+package runner
 
 // Status is the result Status
 type Status int

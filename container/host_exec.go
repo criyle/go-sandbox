@@ -7,37 +7,42 @@ import (
 
 	"github.com/criyle/go-sandbox/pkg/rlimit"
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
-	"github.com/criyle/go-sandbox/types"
+	"github.com/criyle/go-sandbox/runner"
 )
 
 // ExecveParam is parameters to run process inside container
 type ExecveParam struct {
+	// Args holds command line arguments
 	Args []string
-	Env  []string
-	Fds  []uintptr
 
-	// fd parameter of fexecve
+	// Env specifies the environment of the process
+	Env []string
+
+	// Files specifies file descriptors for the child process
+	Files []uintptr
+
+	// ExecFile specifies file descriptor for executable file using fexecve
 	ExecFile uintptr
 
-	// POSIX Resource limit set by set rlimit
+	// RLimits specifies POSIX Resource limit through setrlimit
 	RLimits []rlimit.RLimit
 
-	// SyncFunc called with pid before execve (for adding the process to cgroups)
+	// SyncFunc calls with pid just before execve (for attach the process to cgroups)
 	SyncFunc func(pid int) error
 }
 
 // Execve runs process inside container. It accepts context cancelation as time limit exceeded.
-func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan types.Result {
+func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan runner.Result {
 	c.mu.Lock()
 
 	sTime := time.Now()
 
 	// make sure goroutine not leaked (blocked) even if result is not consumed
-	result := make(chan types.Result, 1)
+	result := make(chan runner.Result, 1)
 
-	errResult := func(f string, v ...interface{}) <-chan types.Result {
-		result <- types.Result{
-			Status: types.StatusRunnerError,
+	errResult := func(f string, v ...interface{}) <-chan runner.Result {
+		result <- runner.Result{
+			Status: runner.StatusRunnerError,
 			Error:  fmt.Sprintf(f, v...),
 		}
 		return result
@@ -48,7 +53,7 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan types.
 	if param.ExecFile > 0 {
 		files = append(files, int(param.ExecFile))
 	}
-	files = append(files, uintptrSliceToInt(param.Fds)...)
+	files = append(files, uintptrSliceToInt(param.Files)...)
 	msg := &unixsocket.Msg{
 		Fds: files,
 	}
@@ -110,28 +115,28 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan types.
 
 		// handle potential error
 		if err != nil {
-			result <- types.Result{
-				Status: types.StatusRunnerError,
+			result <- runner.Result{
+				Status: runner.StatusRunnerError,
 				Error:  err.Error(),
 			}
 			return
 		}
 		if reply2.Error != nil {
-			result <- types.Result{
-				Status: types.StatusRunnerError,
+			result <- runner.Result{
+				Status: runner.StatusRunnerError,
 				Error:  reply2.Error.Error(),
 			}
 			return
 		}
 		if reply2.ExecReply == nil {
-			result <- types.Result{
-				Status: types.StatusRunnerError,
+			result <- runner.Result{
+				Status: runner.StatusRunnerError,
 				Error:  "execve: no reply received",
 			}
 			return
 		}
 		// emit result after all communication finish
-		result <- types.Result{
+		result <- runner.Result{
 			Status:      reply2.ExecReply.Status,
 			ExitStatus:  reply2.ExecReply.ExitStatus,
 			Time:        reply2.ExecReply.Time,

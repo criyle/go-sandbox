@@ -7,7 +7,7 @@ import (
 
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
-	"github.com/criyle/go-sandbox/types"
+	"github.com/criyle/go-sandbox/runner"
 )
 
 func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error {
@@ -118,14 +118,14 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 	if err != nil {
 		c.sendErrorReply("execve: wait4 %v", err)
 	} else {
-		status := types.StatusNormal
+		status := runner.StatusNormal
 		userTime := time.Duration(rusage.Utime.Nano()) // ns
-		userMem := types.Size(rusage.Maxrss << 10)     // bytes
+		userMem := runner.Size(rusage.Maxrss << 10)    // bytes
 		switch {
 		case wstatus.Exited():
 			exitStatus := wstatus.ExitStatus()
 			if exitStatus != 0 {
-				status = types.StatusNonzeroExitStatus
+				status = runner.StatusNonzeroExitStatus
 			}
 			c.sendReply(&reply{
 				ExecReply: &execReply{
@@ -140,13 +140,13 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 			switch wstatus.Signal() {
 			// kill signal treats as TLE
 			case syscall.SIGXCPU, syscall.SIGKILL:
-				status = types.StatusTimeLimitExceeded
+				status = runner.StatusTimeLimitExceeded
 			case syscall.SIGXFSZ:
-				status = types.StatusOutputLimitExceeded
+				status = runner.StatusOutputLimitExceeded
 			case syscall.SIGSYS:
-				status = types.StatusDisallowedSyscall
+				status = runner.StatusDisallowedSyscall
 			default:
-				status = types.StatusSignalled
+				status = runner.StatusSignalled
 			}
 			c.sendReply(&reply{
 				ExecReply: &execReply{

@@ -8,7 +8,7 @@ import (
 
 	"github.com/criyle/go-sandbox/pkg/seccomp/libseccomp"
 	"github.com/criyle/go-sandbox/ptracer"
-	"github.com/criyle/go-sandbox/types"
+	"github.com/criyle/go-sandbox/runner"
 )
 
 type tracerHandler struct {
@@ -127,7 +127,7 @@ func (h *tracerHandler) GetSyscallName(ctx *ptracer.Context) (string, error) {
 
 func (h *tracerHandler) HandlerDisallow(name string) error {
 	if !h.Unsafe {
-		return types.StatusDisallowedSyscall
+		return runner.StatusDisallowedSyscall
 	}
 	return nil
 }

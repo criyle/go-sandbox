@@ -1,6 +1,6 @@
 package ptracer
 
-import "github.com/criyle/go-sandbox/types"
+import "github.com/criyle/go-sandbox/runner"
 
 // TraceAction defines the action returned by TraceHandle
 type TraceAction int
@@ -18,7 +18,7 @@ const (
 type Tracer struct {
 	Handler
 	Runner
-	types.Limit
+	runner.Limit
 }
 
 // Runner represents the process runner

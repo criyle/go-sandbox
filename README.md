@@ -43,7 +43,7 @@ Default file access syscall check:
 2. Use Linux Control Groups to limit & acct CPU & memory (elimilate wait4.rusage)
 3. Container tech with execveat memfd, sethostname, setdomainname
 
-## Design (in progress)
+## Design
 
 ### Result Status
 
@@ -86,7 +86,7 @@ Configured runner to run the program. `Context` is used to cancel (control time 
 
 ``` go
 type Runner interface {
-  Run(context.Context) <-chan types.Result
+    Run(context.Context) <-chan runner.Result
 }
 ```
 
@@ -144,7 +144,7 @@ type Environment interface {
     Open([]OpenCmd) ([]*os.File, error)
     Delete(p string) error
     Reset() error
-    Execve(context.Context, ExecveParam) <-chan types.Result
+    Execve(context.Context, ExecveParam) <-chan runner.Result
     Destroy() error
 }
 ```
@@ -170,7 +170,6 @@ type Environment interface {
     - filehandler: an example implementation of UOJ file set
   - unshare: wrapper to call forkexec and unshared namespaces
 - ptracer: ptrace tracer and provides syscall trap filter context
-- types: provides general res / result data structures
 
 ## Executable
 
@@ -180,35 +179,50 @@ type Environment interface {
 
 - config/config.go: all configs toward running specs (similar to UOJ)
 
-## Benchmarks (MacOS docker amd64 / native arm64)
+## Benchmarks
 
-- 1ms / 2ms: fork, unshare pid / user / cgroup
-- 4ms / 8ms: run inside pre-forked container
-- 50ms / 25ms: unshare ipc / mount
-- 100ms / 44ms: unshare pid & user & cgroup & mount & pivot root
-- 400ms / 63ms: unshare net
-- 800ms / 170ms: unshare all
-- 880ms / 170ms: unshare all & pivot root
-
-It seems unshare net or ipc takes time, maybe limits action by seccomp instead.
-Pre-forked container also saves time for container creation / cleanup.
+### ForkExec
 
 ```bash
 $ go test -bench . -benchtime 10s
 goos: linux
 goarch: amd64
 pkg: github.com/criyle/go-sandbox/pkg/forkexec
-BenchmarkSimpleFork-4              	   12789	    870486 ns/op
-BenchmarkUnsharePid-4              	   13172	    917304 ns/op
-BenchmarkUnshareUser-4             	   13148	    927952 ns/op
-BenchmarkUnshareUts-4              	   13170	    884606 ns/op
-BenchmarkUnshareCgroup-4           	   13650	    895186 ns/op
-BenchmarkUnshareIpc-4              	     196	  66418708 ns/op
-BenchmarkUnshareMount-4            	     243	  46957682 ns/op
-BenchmarkUnshareNet-4              	     100	 411869776 ns/op
-BenchmarkFastUnshareMountPivot-4   	     120	 107310917 ns/op
-BenchmarkUnshareAll-4              	     100	 837352275 ns/op
-BenchmarkUnshareMountPivot-4       	      12	 913099234 ns/op
+BenchmarkSimpleFork-4              	   12409	    996096 ns/op
+BenchmarkUnsharePid-4              	   10000	   1065168 ns/op
+BenchmarkUnshareUser-4             	   10000	   1061770 ns/op
+BenchmarkUnshareUts-4              	   10000	   1056558 ns/op
+BenchmarkUnshareCgroup-4           	   10000	   1049446 ns/op
+BenchmarkUnshareIpc-4              	     709	  16114052 ns/op
+BenchmarkUnshareMount-4            	     745	  16207754 ns/op
+BenchmarkUnshareNet-4              	    3643	   3492924 ns/op
+BenchmarkFastUnshareMountPivot-4   	     612	  20967318 ns/op
+BenchmarkUnshareAll-4              	     837	  14047995 ns/op
+BenchmarkUnshareMountPivot-4       	     488	  24198331 ns/op
 PASS
-ok  	github.com/criyle/go-sandbox/pkg/forkexec	300.744s
+ok  	github.com/criyle/go-sandbox/pkg/forkexec	147.186s
+```
+
+### Container
+
+```bash
+$ go test -bench . -benchtime 10s
+goos: linux
+goarch: amd64
+pkg: github.com/criyle/go-sandbox/container
+BenchmarkContainer-4   	    5907	   2062070 ns/op
+PASS
+ok  	github.com/criyle/go-sandbox/container	21.763s
+```
+
+### Cgroup
+
+```bash
+$ go test -bench . -benchtime 10s
+goos: linux
+goarch: amd64
+pkg: github.com/criyle/go-sandbox/pkg/cgroup
+BenchmarkCgroup-4   	   50283	    245094 ns/op
+PASS
+ok  	github.com/criyle/go-sandbox/pkg/cgroup	14.744s
 ```

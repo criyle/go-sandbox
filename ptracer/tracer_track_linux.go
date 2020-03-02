@@ -9,12 +9,12 @@ import (
 	unix "golang.org/x/sys/unix"
 
 	"github.com/criyle/go-sandbox/pkg/seccomp"
-	"github.com/criyle/go-sandbox/types"
+	"github.com/criyle/go-sandbox/runner"
 )
 
 // Trace starts new goroutine and trace runner with ptrace
-func (t *Tracer) Trace(c context.Context) <-chan types.Result {
-	result := make(chan types.Result, 1)
+func (t *Tracer) Trace(c context.Context) <-chan runner.Result {
+	result := make(chan runner.Result, 1)
 	go func() {
 		result <- t.TraceRun(c)
 	}()
@@ -23,9 +23,9 @@ func (t *Tracer) Trace(c context.Context) <-chan types.Result {
 
 // TraceRun start and traces all child process by runner in the calling goroutine
 // parameter done used to cancel work, start is used notify child starts
-func (t *Tracer) TraceRun(c context.Context) (result types.Result) {
+func (t *Tracer) TraceRun(c context.Context) (result runner.Result) {
 	var (
-		status  = types.StatusNormal
+		status  = runner.StatusNormal
 		wstatus unix.WaitStatus      // wait4 wait status
 		rusage  unix.Rusage          // wait4 rusage
 		traced  = make(map[int]bool) // store all process that have set ptrace options
@@ -44,7 +44,7 @@ func (t *Tracer) TraceRun(c context.Context) (result types.Result) {
 	t.Handler.Debug("tracer started: ", pgid, err)
 	if err != nil {
 		t.Handler.Debug("start tracee failed: ", err)
-		result.Status = types.StatusRunnerError
+		result.Status = runner.StatusRunnerError
 		result.Error = err.Error()
 		return
 	}
@@ -63,7 +63,7 @@ func (t *Tracer) TraceRun(c context.Context) (result types.Result) {
 	defer func() {
 		if err := recover(); err != nil {
 			t.Handler.Debug("panic: ", err)
-			result.Status = types.StatusRunnerError
+			result.Status = runner.StatusRunnerError
 			result.Error = fmt.Sprintf("%v", err)
 		}
 		// kill all tracee upon return
@@ -88,7 +88,7 @@ func (t *Tracer) TraceRun(c context.Context) (result types.Result) {
 		}
 		if err != nil {
 			t.Handler.Debug("wait4 failed: ", err)
-			result.Status = types.StatusRunnerError
+			result.Status = runner.StatusRunnerError
 			result.Error = err.Error()
 			return
 		}
@@ -97,21 +97,21 @@ func (t *Tracer) TraceRun(c context.Context) (result types.Result) {
 		if pid == pgid {
 			// update resource usage and check against limits
 			userTime := time.Duration(rusage.Utime.Nano()) // ns
-			userMem := types.Size(rusage.Maxrss << 10)     // bytes
+			userMem := runner.Size(rusage.Maxrss << 10)    // bytes
 
 			// check tle / mle
 			if userTime > t.Limit.TimeLimit {
-				status = types.StatusTimeLimitExceeded
+				status = runner.StatusTimeLimitExceeded
 			}
 			if userMem > t.Limit.MemoryLimit {
-				status = types.StatusMemoryLimitExceeded
+				status = runner.StatusMemoryLimitExceeded
 			}
-			result = types.Result{
+			result = runner.Result{
 				Status: status,
 				Time:   userTime,
 				Memory: userMem,
 			}
-			if status != types.StatusNormal {
+			if status != runner.StatusNormal {
 				return
 			}
 		}
@@ -125,13 +125,13 @@ func (t *Tracer) TraceRun(c context.Context) (result types.Result) {
 				if execved {
 					result.ExitStatus = wstatus.ExitStatus()
 					if result.ExitStatus == 0 {
-						result.Status = types.StatusNormal
+						result.Status = runner.StatusNormal
 					} else {
-						result.Status = types.StatusNonzeroExitStatus
+						result.Status = runner.StatusNonzeroExitStatus
 					}
 					return
 				}
-				result.Status = types.StatusRunnerError
+				result.Status = runner.StatusRunnerError
 				result.Error = "child process exit before execve"
 				return
 			}
@@ -143,13 +143,13 @@ func (t *Tracer) TraceRun(c context.Context) (result types.Result) {
 				delete(traced, pid)
 				switch sig {
 				case unix.SIGXCPU, unix.SIGKILL:
-					status = types.StatusTimeLimitExceeded
+					status = runner.StatusTimeLimitExceeded
 				case unix.SIGXFSZ:
-					status = types.StatusOutputLimitExceeded
+					status = runner.StatusOutputLimitExceeded
 				case unix.SIGSYS:
-					status = types.StatusDisallowedSyscall
+					status = runner.StatusDisallowedSyscall
 				default:
-					status = types.StatusSignalled
+					status = runner.StatusSignalled
 				}
 				result.Status = status
 				result.ExitStatus = int(sig)
@@ -165,7 +165,7 @@ func (t *Tracer) TraceRun(c context.Context) (result types.Result) {
 				// Ptrace set option valid if the tracee is stopped
 				err = setPtraceOption(pid)
 				if err != nil {
-					result.Status = types.StatusRunnerError
+					result.Status = runner.StatusRunnerError
 					result.Error = err.Error()
 					return
 				}
@@ -179,7 +179,7 @@ func (t *Tracer) TraceRun(c context.Context) (result types.Result) {
 						// give the customized handle for syscall
 						err := t.handleTrap(pid)
 						if err != nil {
-							result.Status = types.StatusDisallowedSyscall
+							result.Status = runner.StatusDisallowedSyscall
 							result.Error = err.Error()
 							return
 						}
@@ -209,11 +209,11 @@ func (t *Tracer) TraceRun(c context.Context) (result types.Result) {
 				// check if cpu rlimit hit
 				switch stopSig {
 				case unix.SIGXCPU:
-					status = types.StatusTimeLimitExceeded
+					status = runner.StatusTimeLimitExceeded
 				case unix.SIGXFSZ:
-					status = types.StatusOutputLimitExceeded
+					status = runner.StatusOutputLimitExceeded
 				}
-				if status != types.StatusNormal {
+				if status != runner.StatusNormal {
 					result.Status = status
 					return
 				}
@@ -263,7 +263,7 @@ func (t *Tracer) handleTrap(pid int) error {
 				return ctx.skipSyscall()
 
 			case TraceKill:
-				return types.StatusDisallowedSyscall
+				return runner.StatusDisallowedSyscall
 			}
 		}
 

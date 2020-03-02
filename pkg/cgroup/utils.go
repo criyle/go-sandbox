@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// EnsureDirExists creates dir if not exists
+// EnsureDirExists creates directories if the path not exists
 func EnsureDirExists(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return os.Mkdir(path, os.ModePerm)
@@ -16,8 +16,8 @@ func EnsureDirExists(path string) error {
 	return nil
 }
 
-// CreateSubCGroupPath creates path for sub-cgroup
-func CreateSubCGroupPath(group, prefix string) (string, error) {
+// CreateSubCgroupPath creates path for sub-cgroup with given group and prefix
+func CreateSubCgroupPath(group, prefix string) (string, error) {
 	base := path.Join(basePath, group, prefix)
 	EnsureDirExists(base)
 	return ioutil.TempDir(base, "")

@@ -4,7 +4,7 @@ import (
 	"github.com/criyle/go-sandbox/pkg/mount"
 	"github.com/criyle/go-sandbox/pkg/rlimit"
 	"github.com/criyle/go-sandbox/pkg/seccomp"
-	"github.com/criyle/go-sandbox/types"
+	"github.com/criyle/go-sandbox/runner"
 )
 
 // Runner runs program in unshared namespaces
@@ -26,7 +26,7 @@ type Runner struct {
 	RLimits []rlimit.RLimit
 
 	// Resource limit enforced by tracer
-	Limit types.Limit
+	Limit runner.Limit
 
 	// Seccomp defines the seccomp filter attach to the process (should be whitelist only)
 	Seccomp seccomp.Filter

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/criyle/go-sandbox/pkg/rlimit"
-	"github.com/criyle/go-sandbox/types"
+	"github.com/criyle/go-sandbox/runner"
 )
 
 // cmd is the control message send into container
@@ -64,9 +64,9 @@ type errorReply struct {
 // execReply stores execve result
 type execReply struct {
 	ExitStatus int           // waitpid exit status
-	Status     types.Status  // return status
+	Status     runner.Status // return status
 	Time       time.Duration // waitpid user CPU (ns)
-	Memory     types.Size    // waitpid user memory (byte)
+	Memory     runner.Size   // waitpid user memory (byte)
 }
 
 func (e *errorReply) Error() string {
