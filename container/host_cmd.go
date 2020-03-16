@@ -74,7 +74,7 @@ func (c *container) Open(p []OpenCmd) ([]*os.File, error) {
 		f := os.NewFile(uintptr(fd), p[i].Path)
 		if f == nil {
 			closeFds(msg.Fds)
-			return nil, fmt.Errorf("open: failed %v", msg.Fds[0])
+			return nil, fmt.Errorf("open: failed NewFile %v", fd)
 		}
 		ret = append(ret, f)
 	}

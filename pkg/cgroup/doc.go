@@ -6,7 +6,7 @@
 //  memory
 //  pids
 //
-// Current not avaliable: cpu, cpuset, devices, freezer, net_cls, blkio, perf_event, net_prio, huge_tlb, rdma
+// Current not available: cpu, cpuset, devices, freezer, net_cls, blkio, perf_event, net_prio, huge_tlb, rdma
 //
 // Additional ideas:
 //

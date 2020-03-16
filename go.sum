@@ -1,4 +1,4 @@
 github.com/seccomp/libseccomp-golang v0.9.1 h1:NJjM5DNFOs0s3kYE1WUOr6G8V97sdt46rlXTMfXGWBo=
 github.com/seccomp/libseccomp-golang v0.9.1/go.mod h1:GbW5+tmTXfcxTToHLXlScSlAvWlF4P2Ca7zGrPiEpWo=
-golang.org/x/sys v0.0.0-20200301040627-c5d0d7b4ec88 h1:LNVdAhESTW4gWDhYvciNcGoS9CEcxRiUKE9kSgw+X3s=
-golang.org/x/sys v0.0.0-20200301040627-c5d0d7b4ec88/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
+golang.org/x/sys v0.0.0-20200316214734-08c61614bede h1:+jwX0O5IlL7Cj6iam25CdV2pKzCV737/4ewDRGFvwFQ=
+golang.org/x/sys v0.0.0-20200316214734-08c61614bede/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=
