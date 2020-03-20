@@ -76,6 +76,8 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 		DropCaps:   true,
 		SyncFunc:   syncFunc,
 		Credential: cred,
+
+		UnshareCgroupAfterSync: true,
 	}
 	// starts the runner, error is handled same as wait4 to make communication equal
 	pid, err := r.Start()

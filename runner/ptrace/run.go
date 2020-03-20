@@ -20,6 +20,8 @@ func (r *Runner) Run(c context.Context) <-chan runner.Result {
 		Seccomp:  r.Seccomp.SockFprog(),
 		Ptrace:   true,
 		SyncFunc: r.SyncFunc,
+
+		UnshareCgroupAfterSync: true,
 	}
 
 	th := &tracerHandler{

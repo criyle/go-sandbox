@@ -34,6 +34,9 @@ type Builder struct {
 
 	// CredGenerator defines a credential generator used to create new container
 	CredGenerator CredGenerator
+
+	// Clone flags defines unshare clone flag to create container
+	CloneFlags uintptr
 }
 
 // CredGenerator generates uid / gid credential used by container
@@ -130,13 +133,20 @@ func (b *Builder) Build() (Environment, error) {
 		uidMap, gidMap = getIDMapping(&cred)
 	}
 
+	var cloneFlag uintptr
+	if b.CloneFlags == 0 {
+		cloneFlag = forkexec.UnshareFlags
+	} else {
+		cloneFlag = b.CloneFlags & forkexec.UnshareFlags
+	}
+
 	r := &forkexec.Runner{
 		Args:        []string{os.Args[0], initArg},
 		Env:         []string{PathEnv},
 		ExecFile:    execFile.Fd(),
 		Files:       files,
 		WorkDir:     containerWD,
-		CloneFlags:  forkexec.UnshareFlags,
+		CloneFlags:  cloneFlag,
 		Mounts:      mounts,
 		HostName:    containerName,
 		DomainName:  containerName,

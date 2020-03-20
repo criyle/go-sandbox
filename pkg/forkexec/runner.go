@@ -96,4 +96,8 @@ type Runner struct {
 	// parent will signal child to stop and report the error
 	// SyncFunc is called right before execve, thus it could track cpu more accurately
 	SyncFunc func(int) error
+
+	// UnshareCgroupAfterSync specifies whether to unshare cgroup namespace after
+	// sync (the syncFunc might be add the child to the cgroup)
+	UnshareCgroupAfterSync bool
 }

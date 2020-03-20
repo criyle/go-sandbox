@@ -8,11 +8,14 @@ import (
 	"io/ioutil"
 	"os"
 	"os/signal"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/criyle/go-sandbox/config"
 	"github.com/criyle/go-sandbox/container"
 	"github.com/criyle/go-sandbox/pkg/cgroup"
+	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/pkg/memfd"
 	"github.com/criyle/go-sandbox/pkg/mount"
 	"github.com/criyle/go-sandbox/pkg/rlimit"
@@ -30,7 +33,7 @@ const (
 
 var (
 	addReadable, addWritable, addRawReadable, addRawWritable       arrayFlags
-	allowProc, unsafe, showDetails, useCGroup, memfile             bool
+	allowProc, unsafe, showDetails, useCGroup, memfile, cred       bool
 	timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint64
 	inputFileName, outputFileName, errorFileName, workPath, runt   string
 
@@ -72,6 +75,7 @@ func main() {
 	flag.BoolVar(&useCGroup, "cgroup", false, "Use cgroup to colloct resource usage")
 	flag.BoolVar(&memfile, "memfd", false, "Use memfd as exec file")
 	flag.StringVar(&runt, "runner", "ptrace", "Runner for the program (ptrace, ns, container)")
+	flag.BoolVar(&cred, "cred", false, "Generate credential for containers (uid=10000)")
 	flag.Parse()
 
 	args = flag.Args()
@@ -155,6 +159,35 @@ func start() (*runner.Result, error) {
 	addWrite := filehandler.GetExtraSet(addWritable, addRawWritable)
 	args, allow, trace, h := config.GetConf(pType, workPath, args, addRead, addWrite, allowProc)
 
+	mb := mount.NewBuilder().
+		// basic exec and lib
+		WithBind("/bin", "bin", true).
+		WithBind("/lib", "lib", true).
+		WithBind("/lib64", "lib64", true).
+		WithBind("/usr", "usr", true).
+		// java wants /proc/self/exe as it need relative path for lib
+		// however, /proc gives interface like /proc/1/fd/3 ..
+		// it is fine since open that file will be a EPERM
+		// changing the fs uid and gid would be a good idea
+		WithProc().
+		// some compiler have multiple version
+		WithBind("/etc/alternatives", "etc/alternatives", true).
+		// fpc wants /etc/fpc.cfg
+		WithBind("/etc/fpc.cfg", "etc/fpc.cfg", true).
+		// go wants /dev/null
+		WithBind("/dev/null", "dev/null", false).
+		// ghc wants /var/lib/ghc
+		WithBind("/var/lib/ghc", "var/lib/ghc", true).
+		// work dir
+		WithTmpfs("w", "size=8m,nr_inodes=4k").
+		// tmp dir
+		WithTmpfs("tmp", "size=8m,nr_inodes=4k")
+
+	mt, err := mb.Build(true)
+	if err != nil {
+		return nil, err
+	}
+
 	if useCGroup {
 		b, err := cgroup.NewBuilder("runprog").WithCPUAcct().WithMemory().WithPids().FilterByEnv()
 		if err != nil {
@@ -237,8 +270,16 @@ func start() (*runner.Result, error) {
 		}
 		defer os.RemoveAll(root)
 
+		var credG container.CredGenerator
+		if cred {
+			credG = newCredGen()
+		}
+
 		b := container.Builder{
-			Root: root,
+			Root:          root,
+			Mounts:        mt,
+			CredGenerator: credG,
+			CloneFlags:    forkexec.UnshareFlags,
 		}
 
 		m, err := b.Build()
@@ -275,10 +316,6 @@ func start() (*runner.Result, error) {
 			return nil, fmt.Errorf("cannot make temp root for new namespace")
 		}
 		defer os.RemoveAll(root)
-		mounts, err := mount.NewDefaultBuilder().WithBind(root, "w", true).Build(true)
-		if err != nil {
-			return nil, fmt.Errorf("cannot make rootfs mounts")
-		}
 		r = &unshare.Runner{
 			Args:        args,
 			Env:         []string{pathEnv},
@@ -289,7 +326,7 @@ func start() (*runner.Result, error) {
 			Limit:       limit,
 			Seccomp:     filter,
 			Root:        root,
-			Mounts:      mounts,
+			Mounts:      mt,
 			ShowDetails: showDetails,
 			SyncFunc:    syncFunc,
 			HostName:    "run_program",
@@ -412,5 +449,21 @@ func getStatus(s runner.Status) int {
 		return int(StatusRE)
 	default:
 		return int(StatusFatal)
+	}
+}
+
+type credGen struct {
+	cur uint32
+}
+
+func newCredGen() *credGen {
+	return &credGen{cur: 10000}
+}
+
+func (c *credGen) Get() syscall.Credential {
+	n := atomic.AddUint32(&c.cur, 1)
+	return syscall.Credential{
+		Uid: n,
+		Gid: n,
 	}
 }

@@ -99,7 +99,7 @@ func (b *Builder) WithProc() *Builder {
 		Source: "proc",
 		Target: "proc",
 		FsType: "proc",
-		Flags:  unix.MS_NOSUID,
+		Flags:  unix.MS_NOSUID | unix.MS_RDONLY,
 	})
 	return b
 }

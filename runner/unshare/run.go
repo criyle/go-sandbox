@@ -46,6 +46,8 @@ func (r *Runner) trace(c context.Context) (result runner.Result) {
 		PivotRoot:  r.Root,
 		DropCaps:   true,
 		SyncFunc:   r.SyncFunc,
+
+		UnshareCgroupAfterSync: true,
 	}
 
 	var (

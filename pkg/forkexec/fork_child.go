@@ -73,6 +73,13 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 		goto childerror
 	}
 
+	// keep capabilities through set_uid / set_gid calls (make sure we can use unshare cgroup), later dropped
+	_, _, err1 = syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_SECUREBITS,
+		_SECURE_KEEP_CAPS_LOCKED|_SECURE_NO_SETUID_FIXUP|_SECURE_NO_SETUID_FIXUP_LOCKED, 0)
+	if err1 != 0 {
+		goto childerror
+	}
+
 	// set the credential for the child process(exec_linux.go)
 	if cred := r.Credential; cred != nil {
 		ngroups := uintptr(len(cred.Groups))
@@ -291,7 +298,13 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	}
 
 	// Drop all capabilities
-	if r.DropCaps {
+	if (r.Credential != nil || r.DropCaps) && !r.UnshareCgroupAfterSync {
+		// make sure the children have no privilege at all
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_SECUREBITS,
+			_SECURE_KEEP_CAPS_LOCKED|_SECURE_NO_SETUID_FIXUP|_SECURE_NO_SETUID_FIXUP_LOCKED|_SECURE_NOROOT|_SECURE_NOROOT_LOCKED, 0)
+		if err1 != 0 {
+			goto childerror
+		}
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_CAPSET, uintptr(unsafe.Pointer(&dropCapHeader)), uintptr(unsafe.Pointer(&dropCapData)), 0)
 		if err1 != 0 {
 			goto childerror
@@ -309,6 +322,26 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 		if r1 == 0 || err1 != 0 {
 			goto childerror
+		}
+
+		// unshare cgroup namespace
+		if r.UnshareCgroupAfterSync {
+			r1, _, err1 = syscall.RawSyscall(syscall.SYS_UNSHARE, uintptr(unix.CLONE_NEWCGROUP), 0, 0)
+			if err1 != 0 {
+				goto childerror
+			}
+			if r.DropCaps || r.Credential != nil {
+				// make sure the children have no privilege at all
+				_, _, err1 = syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_SECUREBITS,
+					_SECURE_KEEP_CAPS_LOCKED|_SECURE_NO_SETUID_FIXUP|_SECURE_NO_SETUID_FIXUP_LOCKED|_SECURE_NOROOT|_SECURE_NOROOT_LOCKED, 0)
+				if err1 != 0 {
+					goto childerror
+				}
+				_, _, err1 = syscall.RawSyscall(syscall.SYS_CAPSET, uintptr(unsafe.Pointer(&dropCapHeader)), uintptr(unsafe.Pointer(&dropCapData)), 0)
+				if err1 != 0 {
+					goto childerror
+				}
+			}
 		}
 
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_PTRACE, uintptr(syscall.PTRACE_TRACEME), 0, 0)
@@ -329,7 +362,7 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	}
 
 	// Load seccomp, stop and wait for tracer
-	if r.Seccomp != nil {
+	if r.Seccomp != nil && (!r.UnshareCgroupAfterSync || r.Ptrace) {
 		// If execve is seccomp trapped, then tracee stop is necessary
 		// otherwise execve will fail due to ENOSYS
 		// Do getpid and kill to send SYS_KILL to self
@@ -353,6 +386,33 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 		if r1 == 0 || err1 != 0 {
 			goto childerror
+		}
+
+		// unshare cgroup namespace
+		if r.UnshareCgroupAfterSync {
+			r1, _, err1 = syscall.RawSyscall(syscall.SYS_UNSHARE, uintptr(unix.CLONE_NEWCGROUP), 0, 0)
+			if err1 != 0 {
+				goto childerror
+			}
+			if r.DropCaps || r.Credential != nil {
+				// make sure the children have no privilege at all
+				_, _, err1 = syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_SECUREBITS,
+					_SECURE_KEEP_CAPS_LOCKED|_SECURE_NO_SETUID_FIXUP|_SECURE_NO_SETUID_FIXUP_LOCKED|_SECURE_NOROOT|_SECURE_NOROOT_LOCKED, 0)
+				if err1 != 0 {
+					goto childerror
+				}
+				_, _, err1 = syscall.RawSyscall(syscall.SYS_CAPSET, uintptr(unsafe.Pointer(&dropCapHeader)), uintptr(unsafe.Pointer(&dropCapData)), 0)
+				if err1 != 0 {
+					goto childerror
+				}
+			}
+			if r.Seccomp != nil {
+				// Load seccomp filter
+				_, _, err1 = syscall.RawSyscall(unix.SYS_SECCOMP, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, uintptr(unsafe.Pointer(r.Seccomp)))
+				if err1 != 0 {
+					goto childerror
+				}
+			}
 		}
 	}
 
