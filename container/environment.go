@@ -30,7 +30,7 @@ type Builder struct {
 
 	// ExecFile defines executable that called Init, otherwise defer current
 	// executable (/proc/self/exe)
-	ExecFile *os.File
+	ExecFile string
 
 	// CredGenerator defines a credential generator used to create new container
 	CredGenerator CredGenerator
@@ -199,8 +199,8 @@ func (c *container) Destroy() error {
 
 // exec prepares executable
 func (b *Builder) exec() (*os.File, error) {
-	if b.ExecFile != nil {
-		return b.ExecFile, nil
+	if b.ExecFile != "" {
+		return os.Open(b.ExecFile)
 	}
 	return OpenCurrentExec()
 }
