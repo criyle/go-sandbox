@@ -438,6 +438,21 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 			uintptr(unsafe.Pointer(&env[0])), 0, 0)
 	}
 
+	// for slow devices, the file close is not as quickly as enough and it is causing ETXTBSY, retrying on this error
+	for err1 == syscall.ETXTBSY {
+		if r.ExecFile > 0 {
+			_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, r.ExecFile,
+				uintptr(unsafe.Pointer(&empty[0])),
+				uintptr(unsafe.Pointer(&argv[0])),
+				uintptr(unsafe.Pointer(&env[0])), unix.AT_EMPTY_PATH, 0)
+		} else {
+			_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, uintptr(_AT_FDCWD),
+				uintptr(unsafe.Pointer(argv0)),
+				uintptr(unsafe.Pointer(&argv[0])),
+				uintptr(unsafe.Pointer(&env[0])), 0, 0)
+		}
+	}
+
 childerror:
 	// send error code on pipe
 	syscall.RawSyscall(unix.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err1)), unsafe.Sizeof(err1))
