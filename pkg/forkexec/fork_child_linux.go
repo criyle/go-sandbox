@@ -120,11 +120,11 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 		nextfd++
 	}
 	for i := 0; i < len(fd); i++ {
-		// Avoid fd rewrite
-		for nextfd == i || (r.ExecFile > 0 && nextfd == int(r.ExecFile)) {
-			nextfd++
-		}
 		if fd[i] >= 0 && fd[i] < int(i) {
+			// Avoid fd rewrite
+			for nextfd == pipe || (r.ExecFile > 0 && nextfd == int(r.ExecFile)) {
+				nextfd++
+			}
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(fd[i]), uintptr(nextfd), syscall.O_CLOEXEC)
 			if err1 != 0 {
 				goto childerror

@@ -5,15 +5,11 @@ import (
 )
 
 // Runner is the configuration including the exec path, argv
-// and resource limits. It can creates tracee for ptrace-based tracer.
-// It can also create unshared process in another namespace
+// and resource limits.
 type Runner struct {
 	// argv and env for execve syscall for the child process
 	Args []string
 	Env  []string
-
-	// if exec_fd is defined, then at the end, fd_execve is called
-	ExecFile uintptr
 
 	// POSIX Resource limit set by set rlimit
 	RLimits []rlimit.RLimit

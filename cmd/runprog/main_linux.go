@@ -27,10 +27,6 @@ import (
 	"github.com/criyle/go-sandbox/runner/unshare"
 )
 
-const (
-	pathEnv = "PATH=/usr/local/bin:/usr/bin:/bin"
-)
-
 var (
 	addReadable, addWritable, addRawReadable, addRawWritable       arrayFlags
 	allowProc, unsafe, showDetails, useCGroup, memfile, cred       bool
@@ -40,12 +36,6 @@ var (
 	pType, result string
 	args          []string
 )
-
-func printUsage() {
-	fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [options] <args>\n", os.Args[0])
-	flag.PrintDefaults()
-	os.Exit(2)
-}
 
 // container init
 func init() {

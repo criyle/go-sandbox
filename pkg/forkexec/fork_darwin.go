@@ -1,8 +1,9 @@
 package forkexec
 
 import (
+	"log"
 	"syscall"
-	"unsafe" // required for go:linkname.
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 )
@@ -23,48 +24,56 @@ func (r *Runner) Start() (int, error) {
 		return 0, err
 	}
 
-	// prepare hostname
-	hostname, err := syscallStringFromString(r.HostName)
+	// prepare sandbox profile
+	profile, err := syscallStringFromString(r.SandboxProfile)
 	if err != nil {
 		return 0, err
 	}
 
-	// prepare domainname
-	domainname, err := syscallStringFromString(r.DomainName)
-	if err != nil {
-		return 0, err
-	}
+	// ensure the socketpair created did not leak to child
+	syscall.ForkLock.Lock()
 
-	// prepare pivot_root param
-	pivotRoot, err := syscallStringFromString(r.PivotRoot)
-	if err != nil {
-		return 0, err
-	}
-
-	// socketpair p used to notify child the uid / gid mapping have been setup
 	// socketpair p is also used to sync with parent before final execve
 	// p[0] is used by parent and p[1] is used by child
-	p, err := syscall.Socketpair(syscall.AF_LOCAL, syscall.SOCK_STREAM|syscall.SOCK_CLOEXEC, 0)
-	if err != nil {
+	var p [2]int
+	if err := forkExecSocketPair(&p); err != nil {
+		syscall.ForkLock.Unlock()
 		return 0, err
 	}
 
 	// fork in child
-	pid, err1 := forkAndExecInChild(r, argv0, argv, env, workdir, hostname, domainname, pivotRoot, p)
+	pid, err1 := forkAndExecInChild(r, argv0, argv, env, workdir, profile, p)
 
 	// restore all signals
 	afterFork()
+
 	syscall.ForkLock.Unlock()
 
 	return syncWithChild(r, p, int(pid), err1)
 }
 
+func forkExecSocketPair(p *[2]int) error {
+	var err error
+	*p, err = syscall.Socketpair(syscall.AF_LOCAL, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		return err
+	}
+	_, err = fcntl(p[0], syscall.F_SETFD, syscall.FD_CLOEXEC)
+	if err != nil {
+		return err
+	}
+	_, err = fcntl(p[1], syscall.F_SETFD, syscall.FD_CLOEXEC)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error) {
 	var (
-		r1          uintptr
-		err2        syscall.Errno
-		err         error
-		unshareUser = r.CloneFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
+		r1   uintptr
+		err2 syscall.Errno
+		err  error
 	)
 
 	// sync with child
@@ -75,16 +84,7 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 		unix.Close(p[0])
 		return 0, syscall.Errno(err1)
 	}
-
-	// synchronize with child for uid / gid map
-	if unshareUser {
-		if err = writeIDMaps(r, int(pid)); err != nil {
-			err2 = err.(syscall.Errno)
-		}
-		syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
-	}
-
-	r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+	r1, _, err1 = syscall3(funcPC(libc_read_trampoline), uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 	// child returned error code
 	if r1 != unsafe.Sizeof(err2) || err2 != 0 || err1 != 0 {
 		err = handlePipeError(r1, err2)
@@ -98,16 +98,13 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 		}
 	}
 	// otherwise, ack child (err1 == 0)
-	syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[0]), uintptr(unsafe.Pointer(&err1)), uintptr(unsafe.Sizeof(err1)))
-
-	// if stopped before execve by signal SIGSTOP or PTRACE_ME, then do not wait until execve
-	if r.Ptrace || r.StopBeforeSeccomp {
-		unix.Close(p[0])
-		return int(pid), nil
+	r1, _, err1 = syscall3(funcPC(libc_write_trampoline), uintptr(p[0]), uintptr(unsafe.Pointer(&err1)), uintptr(unsafe.Sizeof(err1)))
+	if err1 != 0 {
+		goto fail
 	}
 
 	// if read anything mean child failed after sync (close_on_exec so it should not block)
-	r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+	r1, _, err1 = syscall3(funcPC(libc_read_trampoline), uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 	unix.Close(p[0])
 	if r1 != 0 || err1 != 0 {
 		err = handlePipeError(r1, err2)
@@ -125,6 +122,7 @@ failAfterClose:
 
 // check pipe error
 func handlePipeError(r1 uintptr, errno syscall.Errno) error {
+	log.Println(r1, errno, int(errno))
 	if r1 == unsafe.Sizeof(errno) {
 		return syscall.Errno(errno)
 	}

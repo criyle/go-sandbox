@@ -4,3 +4,7 @@
 # Test Env
 test*/
 env*.sh
+
+# Test Files
+/runprog
+/test
