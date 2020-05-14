@@ -1,0 +1,21 @@
+; Test Sandbox Profile
+; No network / socket
+; No system / sysctl 
+(version 1)
+
+(deny default)
+
+; allow posix ipc
+(allow ipc-posix*)
+
+; allow file access /
+(allow file-read* (subpath "/usr/lib"))
+
+; allow execve 
+(allow process-exec)
+
+; allow fork
+(allow process-fork)
+
+; allow signal to self
+(allow signal (target self))
