@@ -3,6 +3,8 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"syscall"
@@ -16,6 +18,8 @@ import (
 var (
 	timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint64
 	inputFileName, outputFileName, errorFileName, workPath         string
+
+	profilePath string
 
 	args []string
 )
@@ -31,6 +35,7 @@ func main() {
 	flag.StringVar(&outputFileName, "out", "", "Set output file name")
 	flag.StringVar(&errorFileName, "err", "", "Set error file name")
 	flag.StringVar(&workPath, "work-path", "", "Set the work path of the program")
+	flag.StringVar(&profilePath, "p", "", "sandbox profile")
 	flag.Parse()
 
 	args = flag.Args()
@@ -61,6 +66,15 @@ func start() (*runner.Result, error) {
 	}
 	defer closeFiles(files)
 
+	var profile string
+	if profilePath != "" {
+		c, err := ioutil.ReadFile(profilePath)
+		if err != nil {
+			return nil, fmt.Errorf("profile: %v", err)
+		}
+		profile = string(c)
+	}
+
 	// if not defined, then use the original value
 	fds := make([]uintptr, len(files))
 	for i, f := range files {
@@ -89,7 +103,7 @@ func start() (*runner.Result, error) {
 		RLimits:        rlims.PrepareRLimit(),
 		Files:          fds,
 		WorkDir:        workPath,
-		SandboxProfile: "",
+		SandboxProfile: profile,
 		SyncFunc: func(pid int) error {
 			mTime = time.Now()
 			return nil

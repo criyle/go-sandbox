@@ -9,7 +9,8 @@ import (
 //go:norace
 func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, profile *byte, p [2]int) (r1 uintptr, err1 syscall.Errno) {
 	var (
-		err2 syscall.Errno
+		err2   syscall.Errno
+		errBuf *byte
 	)
 
 	// similar to exec_linux, avoid side effect by shuffling around
@@ -93,10 +94,23 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, prof
 
 	// Set limit
 	for _, rlim := range r.RLimits {
-		_, _, err1 := rawSyscall(funcPC(libc_setrlimit_trampoline), uintptr(rlim.Res), uintptr(unsafe.Pointer(&rlim.Rlim)), 0)
+		_, _, err1 = rawSyscall(funcPC(libc_setrlimit_trampoline), uintptr(rlim.Res), uintptr(unsafe.Pointer(&rlim.Rlim)), 0)
 		if err1 != 0 {
 			goto childerror
 		}
+	}
+
+	// Load sandbox profile
+	if profile != nil {
+		r1, _, err1 = rawSyscall(funcPC(libc_sandbox_init_trampoline), uintptr(unsafe.Pointer(profile)), 0, uintptr(unsafe.Pointer(&errBuf)))
+		if err1 != 0 {
+			goto childerror
+		}
+		if r1 != 0 {
+			err1 = 253
+			goto childerror
+		}
+		rawSyscall(funcPC(libc_sandbox_free_error_trampoline), uintptr(unsafe.Pointer(errBuf)), 0, 0)
 	}
 
 	// Sync before exec

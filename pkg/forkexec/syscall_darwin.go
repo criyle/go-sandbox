@@ -3,7 +3,11 @@ package forkexec
 import (
 	"syscall"
 	_ "unsafe" // use go:linkname
+
+	"github.com/criyle/go-sandbox/pkg/darwin" // use sandbox_init
 )
+
+var _ = darwin.SandboxInit
 
 //go:linkname funcPC syscall.funcPC
 func funcPC(f func()) uintptr
@@ -46,6 +50,12 @@ func libc_execve_trampoline()
 
 //go:linkname libc_exit_trampoline syscall.libc_exit_trampoline
 func libc_exit_trampoline()
+
+//go:linkname libc_sandbox_init_trampoline github.com/criyle/go-sandbox/pkg/darwin.libc_sandbox_init_trampoline
+func libc_sandbox_init_trampoline()
+
+//go:linkname libc_sandbox_free_error_trampoline github.com/criyle/go-sandbox/pkg/darwin.libc_sandbox_free_error_trampoline
+func libc_sandbox_free_error_trampoline()
 
 //go:linkname fcntl syscall.fcntl
 func fcntl(fd int, cmd int, arg int) (val int, err error)
