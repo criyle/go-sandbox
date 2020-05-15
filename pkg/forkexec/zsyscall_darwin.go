@@ -1,4 +1,4 @@
-package darwin
+package forkexec
 
 import (
 	"syscall"
@@ -31,9 +31,3 @@ func libc_sandbox_free_error_trampoline()
 
 //go:linkname libc_sandbox_free_error libc_sandbox_free_error
 //go:cgo_import_dynamic libc_sandbox_free_error sandbox_free_error "/usr/lib/libSystem.B.dylib"
-
-//go:linkname syscall3 syscall.syscall
-func syscall3(fn, a1, a2, a3 uintptr) (r1, r2 uintptr, err syscall.Errno)
-
-//go:linkname funcPC syscall.funcPC
-func funcPC(f func()) uintptr

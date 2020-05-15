@@ -1,4 +1,4 @@
-package darwin
+package forkexec
 
 import (
 	"io/ioutil"

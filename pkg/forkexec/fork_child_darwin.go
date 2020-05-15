@@ -37,6 +37,12 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, prof
 		goto childerror
 	}
 
+	// Set pg id
+	_, _, err1 = rawSyscall(funcPC(libc_setpgid_trampoline), 0, 0, 0)
+	if err1 != 0 {
+		goto childerror
+	}
+
 	// Pass 1 & pass 2 assigns fds for child process
 	// Pass 1: fd[i] < i => nextfd
 	if pipe < nextfd {

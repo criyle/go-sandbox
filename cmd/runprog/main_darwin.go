@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"syscall"
 	"time"
@@ -13,13 +12,15 @@ import (
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/pkg/rlimit"
 	"github.com/criyle/go-sandbox/runner"
+	"golang.org/x/sys/unix"
 )
 
 var (
 	timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint64
 	inputFileName, outputFileName, errorFileName, workPath         string
 
-	profilePath string
+	profilePath, result string
+	showDetails         bool
 
 	args []string
 )
@@ -36,6 +37,8 @@ func main() {
 	flag.StringVar(&errorFileName, "err", "", "Set error file name")
 	flag.StringVar(&workPath, "work-path", "", "Set the work path of the program")
 	flag.StringVar(&profilePath, "p", "", "sandbox profile")
+	flag.BoolVar(&showDetails, "show-trace-details", false, "Show trace details")
+	flag.StringVar(&result, "res", "stdout", "Set the file name for output the result")
 	flag.Parse()
 
 	args = flag.Args()
@@ -53,8 +56,50 @@ func main() {
 		workPath, _ = os.Getwd()
 	}
 
-	ret, err := start()
-	log.Println(ret, err)
+	var (
+		f   *os.File
+		err error
+	)
+	if result == "stdout" {
+		f = os.Stdout
+	} else if result == "stderr" {
+		f = os.Stderr
+	} else {
+		f, err = os.Create(result)
+		if err != nil {
+			debug("Failed to open result file:", err)
+			return
+		}
+		defer f.Close()
+	}
+
+	rt, err := start()
+	debug(rt, err)
+
+	if rt == nil {
+		rt = &runner.Result{
+			Status: runner.StatusRunnerError,
+		}
+	}
+	if err == nil && rt.Status != runner.StatusNormal {
+		err = rt.Status
+	}
+	debug("setupTime: ", rt.SetUpTime)
+	debug("runningTime: ", rt.RunningTime)
+	if err != nil {
+		debug(err)
+		c, ok := err.(runner.Status)
+		if !ok {
+			c = runner.StatusRunnerError
+		}
+		// Handle fatal error from trace
+		fmt.Fprintf(f, "%d %d %d %d\n", getStatus(c), int(rt.Time/time.Millisecond), uint64(rt.Memory)>>10, rt.ExitStatus)
+		if c == runner.StatusRunnerError {
+			os.Exit(1)
+		}
+	} else {
+		fmt.Fprintf(f, "%d %d %d %d\n", 0, int(rt.Time/time.Millisecond), uint64(rt.Memory)>>10, rt.ExitStatus)
+	}
 }
 
 func start() (*runner.Result, error) {
@@ -94,8 +139,8 @@ func start() (*runner.Result, error) {
 		Stack:        stackLimit << 20,
 	}
 
-	log.Println(rlims)
-	log.Println(args)
+	debug(rlims)
+	debug(args)
 
 	r := forkexec.Runner{
 		Args:           args,
@@ -113,46 +158,75 @@ func start() (*runner.Result, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	defer func() {
+		killAll(pid)
+		collectZombie(pid)
+	}()
+
 	var (
 		wstatus syscall.WaitStatus
 		rusage  syscall.Rusage
 	)
-	_, err = syscall.Wait4(pid, &wstatus, 0, &rusage)
-	for err == syscall.EINTR {
+	for {
 		_, err = syscall.Wait4(pid, &wstatus, 0, &rusage)
-	}
-	fTime = time.Now()
-	if err != nil {
-		return nil, err
-	}
-	result := runner.Result{
-		Status:      runner.StatusNormal,
-		Time:        time.Duration(rusage.Utime.Nano()),
-		Memory:      runner.Size(rusage.Maxrss),
-		SetUpTime:   mTime.Sub(sTime),
-		RunningTime: fTime.Sub(mTime),
-	}
-	switch {
-	case wstatus.Exited():
-		if status := wstatus.ExitStatus(); status != 0 {
-			result.Status = runner.StatusNonzeroExitStatus
-			return &result, nil
+		if err == syscall.EINTR {
+			continue
+		}
+		fTime = time.Now()
+		if err != nil {
+			return nil, err
+		}
+		result := runner.Result{
+			Status:      runner.StatusNormal,
+			Time:        time.Duration(rusage.Utime.Nano()),
+			Memory:      runner.Size(rusage.Maxrss), // seems MacOS uses bytes instead of kb
+			SetUpTime:   mTime.Sub(sTime),
+			RunningTime: fTime.Sub(mTime),
+		}
+		if uint64(result.Time) > timeLimit*1e9 {
+			result.Status = runner.StatusTimeLimitExceeded
+		}
+		if uint64(result.Memory) > memoryLimit<<20 {
+			result.Status = runner.StatusMemoryLimitExceeded
 		}
 
-	case wstatus.Signaled():
-		result.Status = runner.StatusSignalled
-		result.ExitStatus = int(wstatus.Signal())
-		return &result, nil
+		switch {
+		case wstatus.Exited():
+			if status := wstatus.ExitStatus(); status != 0 {
+				result.Status = runner.StatusNonzeroExitStatus
+				return &result, nil
+			}
 
-	default:
+		case wstatus.Signaled():
+			sig := wstatus.Signal()
+			switch sig {
+			case unix.SIGXCPU, unix.SIGKILL:
+				result.Status = runner.StatusTimeLimitExceeded
+			case unix.SIGXFSZ:
+				result.Status = runner.StatusOutputLimitExceeded
+			case unix.SIGSYS:
+				result.Status = runner.StatusDisallowedSyscall
+			default:
+				result.Status = runner.StatusSignalled
+			}
+			result.ExitStatus = int(sig)
+			return &result, nil
+		}
 	}
+}
 
-	if uint64(result.Time) > timeLimit*1e9 {
-		result.Status = runner.StatusTimeLimitExceeded
-	}
-	if uint64(result.Memory) > memoryLimit<<20 {
-		result.Status = runner.StatusMemoryLimitExceeded
-	}
+// kill all tracee according to pids
+func killAll(pgid int) {
+	unix.Kill(-pgid, unix.SIGKILL)
+}
 
-	return &result, nil
+// collect died child processes
+func collectZombie(pgid int) {
+	var wstatus unix.WaitStatus
+	for {
+		if _, err := unix.Wait4(-pgid, &wstatus, unix.WNOHANG, nil); err != unix.EINTR && err != nil {
+			break
+		}
+	}
 }
