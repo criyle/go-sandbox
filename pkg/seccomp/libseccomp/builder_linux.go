@@ -1,11 +1,11 @@
 package libseccomp
 
 import (
-	"io/ioutil"
-	"os"
+	"syscall"
 
 	"github.com/criyle/go-sandbox/pkg/seccomp"
-	libseccomp "github.com/seccomp/libseccomp-golang"
+	libseccomp "github.com/elastic/go-seccomp-bpf"
+	"golang.org/x/net/bpf"
 )
 
 // Builder is used to build the filter
@@ -14,62 +14,48 @@ type Builder struct {
 	Default      seccomp.Action
 }
 
-var actTrace = libseccomp.ActTrace.SetReturnCode(seccomp.MsgHandle)
+var actTrace = libseccomp.ActionTrace | libseccomp.Action(seccomp.MsgHandle)
 
 // Build builds the filter
 func (b *Builder) Build() (seccomp.Filter, error) {
-	filter, err := libseccomp.NewFilter(ToSeccompAction(b.Default))
+	policy := libseccomp.Policy{
+		DefaultAction: ToSeccompAction(b.Default),
+		Syscalls: []libseccomp.SyscallGroup{
+			{
+				Action: libseccomp.ActionAllow,
+				Names:  b.Allow,
+			},
+			{
+				Action: actTrace,
+				Names:  b.Trace,
+			},
+		},
+	}
+	program, err := policy.Assemble()
 	if err != nil {
 		return nil, err
 	}
-	defer filter.Release()
-
-	if err = addFilterActions(filter, b.Allow, libseccomp.ActAllow); err != nil {
-		return nil, err
-	}
-	if err = addFilterActions(filter, b.Trace, actTrace); err != nil {
-		return nil, err
-	}
-	return ExportBPF(filter)
+	return ExportBPF(program)
 }
 
 // ExportBPF convert libseccomp filter to kernel readable BPF content
-func ExportBPF(filter *libseccomp.ScmpFilter) (seccomp.Filter, error) {
-	r, w, err := os.Pipe()
+func ExportBPF(filter []bpf.Instruction) (seccomp.Filter, error) {
+	raw, err := bpf.Assemble(filter)
 	if err != nil {
 		return nil, err
 	}
-	defer r.Close()
-	// export BPF to pipe
-	go func() {
-		filter.ExportBPF(w)
-		w.Close()
-	}()
-
-	// get BPF binary
-	bin, err := ioutil.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-	return seccomp.Filter(bin), nil
+	return sockFilter(raw), nil
 }
 
-func addFilterActions(filter *libseccomp.ScmpFilter, names []string, action libseccomp.ScmpAction) error {
-	for _, s := range names {
-		if err := addFilterAction(filter, s, action); err != nil {
-			return err
-		}
+func sockFilter(raw []bpf.RawInstruction) []syscall.SockFilter {
+	filter := make([]syscall.SockFilter, 0, len(raw))
+	for _, instruction := range raw {
+		filter = append(filter, syscall.SockFilter{
+			Code: instruction.Op,
+			Jt:   instruction.Jt,
+			Jf:   instruction.Jf,
+			K:    instruction.K,
+		})
 	}
-	return nil
-}
-
-func addFilterAction(filter *libseccomp.ScmpFilter, name string, action libseccomp.ScmpAction) error {
-	syscallID, err := libseccomp.GetSyscallFromName(name)
-	if err != nil {
-		return err
-	}
-	if err = filter.AddRule(syscallID, action); err != nil {
-		return err
-	}
-	return nil
+	return filter
 }

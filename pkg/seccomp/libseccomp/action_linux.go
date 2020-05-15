@@ -2,22 +2,24 @@ package libseccomp
 
 import (
 	"github.com/criyle/go-sandbox/pkg/seccomp"
-	libseccomp "github.com/seccomp/libseccomp-golang"
+	libseccomp "github.com/elastic/go-seccomp-bpf"
 )
 
 // ToSeccompAction convert action to libseccomp compatible action
-func ToSeccompAction(a seccomp.Action) libseccomp.ScmpAction {
-	var action libseccomp.ScmpAction
+func ToSeccompAction(a seccomp.Action) libseccomp.Action {
+	var action libseccomp.Action
 	switch a.Action() {
 	case seccomp.ActionAllow:
-		action = libseccomp.ActAllow
+		action = libseccomp.ActionAllow
 	case seccomp.ActionErrno:
-		action = libseccomp.ActErrno
+		action = libseccomp.ActionErrno
 	case seccomp.ActionTrace:
-		action = libseccomp.ActTrace
+		action = libseccomp.ActionTrace
 	default:
-		action = libseccomp.ActKill
+		action = libseccomp.ActionKillProcess
 	}
-	action = action.SetReturnCode(a.ReturnCode())
+	// the least 16 bit of ret value is SECCOMP_RET_DATA
+	// although it might not officially supported by go-seccomp-bpf
+	action = action.WithReturnData(int(a.ReturnCode()))
 	return action
 }

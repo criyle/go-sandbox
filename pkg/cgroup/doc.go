@@ -1,7 +1,7 @@
 // Package cgroup provices builder to create multiple different cgroup-v1 sub groups
 // under systemd defined mount path (i.e.,sys/fs/cgroup).
 //
-// Current available:
+// Current avaliable:
 //  cpuacct
 //  memory
 //  pids

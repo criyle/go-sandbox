@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/criyle/go-sandbox/pkg/seccomp"
-	libseccomp "github.com/seccomp/libseccomp-golang"
 )
 
 var (
@@ -22,8 +21,7 @@ var (
 )
 
 func TestBuildFilter(t *testing.T) {
-	defaultAction := libseccomp.ActKill
-	_, err := buildFilterMock(defaultAction)
+	_, err := buildFilterMock()
 	if err != nil {
 		t.Error("BuildFilter failed")
 	}
@@ -41,7 +39,7 @@ func BenchmarkBuildDefaultFilter(b *testing.B) {
 	}
 }
 
-func buildFilterMock(d libseccomp.ScmpAction) (seccomp.Filter, error) {
+func buildFilterMock() (seccomp.Filter, error) {
 	b := Builder{
 		Allow:   []string{"fork"},
 		Trace:   []string{"execve"},
