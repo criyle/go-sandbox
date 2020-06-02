@@ -154,12 +154,21 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 		}
 	}
 
-	// Set the pgid, so that the wait operation can apply to only certain
-	// subgroup of processes
-	_, _, err1 = syscall.RawSyscall(syscall.SYS_SETPGID, 0, 0, 0)
+	// Set the session ID
+	_, _, err1 = syscall.RawSyscall(syscall.SYS_SETSID, 0, 0, 0)
 	if err1 != 0 {
 		goto childerror
 	}
+
+	// Set the pgid, so that the wait operation can apply to only certain
+	// subgroup of processes
+	// _, _, err1 = syscall.RawSyscall(syscall.SYS_SETPGID, 0, 0, 0)
+	// if err1 != 0 {
+	// 	goto childerror
+	// }
+
+	// Set the controlling TTY..
+	_, _, _ = syscall.RawSyscall(syscall.SYS_IOCTL, uintptr(0), uintptr(syscall.TIOCSCTTY), 1)
 
 	// If mount point is unshared, mark root as private to avoid propagate
 	// outside to the original mount namespace
