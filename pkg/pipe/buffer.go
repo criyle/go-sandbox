@@ -28,9 +28,11 @@ func NewPipe(writer io.Writer, n int64) (<-chan struct{}, *os.File, error) {
 	}
 	done := make(chan struct{})
 	go func() {
-		defer close(done)
-		defer r.Close()
 		io.CopyN(writer, r, int64(n))
+		close(done)
+		// ensure no blocking / SIGPIPE on the other end
+		discardRead(r)
+		r.Close()
 	}()
 	return done, w, nil
 }
