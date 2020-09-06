@@ -6,8 +6,8 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/elastic/go-seccomp-bpf v1.1.0
 	github.com/pkg/errors v0.9.1 // indirect
-	golang.org/x/net v0.0.0-20200602114024-627f9648deb9
-	golang.org/x/sys v0.0.0-20200602100848-8d3cce7afc34
+	golang.org/x/net v0.0.0-20200904194848-62affa334b73
+	golang.org/x/sys v0.0.0-20200905004654-be1d3432aa8f
 )
 
 replace github.com/elastic/go-seccomp-bpf => ../go-seccomp-bpf

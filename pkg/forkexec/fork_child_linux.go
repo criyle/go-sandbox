@@ -72,10 +72,12 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	}
 
 	// keep capabilities through set_uid / set_gid calls (make sure we can use unshare cgroup), later dropped
-	_, _, err1 = syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_SECUREBITS,
-		_SECURE_KEEP_CAPS_LOCKED|_SECURE_NO_SETUID_FIXUP|_SECURE_NO_SETUID_FIXUP_LOCKED, 0)
-	if err1 != 0 {
-		goto childerror
+	if r.Credential != nil || r.UnshareCgroupAfterSync {
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_SECUREBITS,
+			_SECURE_KEEP_CAPS_LOCKED|_SECURE_NO_SETUID_FIXUP|_SECURE_NO_SETUID_FIXUP_LOCKED, 0)
+		if err1 != 0 {
+			goto childerror
+		}
 	}
 
 	// set the credential for the child process(exec_linux.go)
@@ -160,111 +162,16 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 		goto childerror
 	}
 
-	// Set the pgid, so that the wait operation can apply to only certain
-	// subgroup of processes
-	// _, _, err1 = syscall.RawSyscall(syscall.SYS_SETPGID, 0, 0, 0)
-	// if err1 != 0 {
-	// 	goto childerror
-	// }
-
-	// Set the controlling TTY..
-	_, _, _ = syscall.RawSyscall(syscall.SYS_IOCTL, uintptr(0), uintptr(syscall.TIOCSCTTY), 1)
-
-	// If mount point is unshared, mark root as private to avoid propagate
-	// outside to the original mount namespace
-	if r.CloneFlags&syscall.CLONE_NEWNS == syscall.CLONE_NEWNS {
-		_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&none[0])),
-			uintptr(unsafe.Pointer(&slash[0])), 0, syscall.MS_REC|syscall.MS_PRIVATE, 0, 0)
+	// Set the controlling TTY
+	if r.CTTY {
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_IOCTL, uintptr(0), uintptr(syscall.TIOCSCTTY), 1)
 		if err1 != 0 {
 			goto childerror
 		}
 	}
 
-	// mount tmpfs & chdir to new root before performing mounts
-	if pivotRoot != nil {
-		// mount("tmpfs", root, "tmpfs", 0, "")
-		_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&tmpfs[0])),
-			uintptr(unsafe.Pointer(pivotRoot)), uintptr(unsafe.Pointer(&tmpfs[0])), 0,
-			uintptr(unsafe.Pointer(&empty[0])), 0)
-		if err1 != 0 {
-			goto childerror
-		}
-
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_CHDIR, uintptr(unsafe.Pointer(pivotRoot)), 0, 0)
-		if err1 != 0 {
-			goto childerror
-		}
-	}
-
-	// performing mounts
-	for _, m := range r.Mounts {
-		// mkdirs(target)
-		for i, p := range m.Prefixes {
-			// if target mount point is a file, mknod(target)
-			if i == len(m.Prefixes)-1 && m.MakeNod {
-				_, _, err1 = syscall.RawSyscall(syscall.SYS_MKNODAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(p)), 0755)
-				if err1 != 0 && err1 != syscall.EEXIST {
-					goto childerror
-				}
-				break
-			}
-			_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIRAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(p)), 0755)
-			if err1 != 0 && err1 != syscall.EEXIST {
-				goto childerror
-			}
-		}
-		// mount(source, target, fsType, flags, data)
-		_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(m.Source)),
-			uintptr(unsafe.Pointer(m.Target)), uintptr(unsafe.Pointer(m.FsType)), uintptr(m.Flags),
-			uintptr(unsafe.Pointer(m.Data)), 0)
-		if err1 != 0 {
-			goto childerror
-		}
-		// bind mount is not respect ro flag so that read-only bind mount needs remount
-		if m.Flags&bindRo == bindRo {
-			_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&empty[0])),
-				uintptr(unsafe.Pointer(m.Target)), uintptr(unsafe.Pointer(m.FsType)),
-				uintptr(m.Flags|syscall.MS_REMOUNT), uintptr(unsafe.Pointer(m.Data)), 0)
-			if err1 != 0 {
-				goto childerror
-			}
-		}
-	}
-
-	// pivit_root
-	if pivotRoot != nil {
-		// mkdir("old_root")
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIRAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(&oldRoot[0])), 0755)
-		if err1 != 0 {
-			goto childerror
-		}
-
-		// pivot_root(root, "old_root")
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_PIVOT_ROOT, uintptr(unsafe.Pointer(pivotRoot)), uintptr(unsafe.Pointer(&oldRoot[0])), 0)
-		if err1 != 0 {
-			goto childerror
-		}
-
-		// umount("old_root", MNT_DETACH)
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_UMOUNT2, uintptr(unsafe.Pointer(&oldRoot[0])), syscall.MNT_DETACH, 0)
-		if err1 != 0 {
-			goto childerror
-		}
-
-		// rmdir("old_root")
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_UNLINKAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(&oldRoot[0])), uintptr(unix.AT_REMOVEDIR))
-		if err1 != 0 {
-			goto childerror
-		}
-
-		// mount("tmpfs", "/", "tmpfs", MS_BIND | MS_REMOUNT | MS_RDONLY | MS_NOATIME | MS_NOSUID, nil)
-		_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&tmpfs[0])),
-			uintptr(unsafe.Pointer(&slash[0])), uintptr(unsafe.Pointer(&tmpfs[0])),
-			uintptr(syscall.MS_BIND|syscall.MS_REMOUNT|syscall.MS_RDONLY|syscall.MS_NOATIME|syscall.MS_NOSUID),
-			uintptr(unsafe.Pointer(&empty[0])), 0)
-		if err1 != 0 {
-			goto childerror
-		}
+	if err1 = pivotAndMount(r, pivotRoot); err1 != 0 {
+		goto childerror
 	}
 
 	// SetHostName
@@ -320,37 +227,9 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 
 	// Enable Ptrace & sync with parent (since ptrace_me is a blocking operation)
 	if r.Ptrace && r.Seccomp != nil {
-		err2 = 0
-		r1, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
-		if r1 == 0 || err1 != 0 {
+		if err1 = syncAndDropCaps(r, pipe); err1 != 0 {
 			goto childerror
 		}
-
-		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
-		if r1 == 0 || err1 != 0 {
-			goto childerror
-		}
-
-		// unshare cgroup namespace
-		if r.UnshareCgroupAfterSync {
-			r1, _, err1 = syscall.RawSyscall(syscall.SYS_UNSHARE, uintptr(unix.CLONE_NEWCGROUP), 0, 0)
-			if err1 != 0 {
-				goto childerror
-			}
-			if r.DropCaps || r.Credential != nil {
-				// make sure the children have no privilege at all
-				_, _, err1 = syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_SECUREBITS,
-					_SECURE_KEEP_CAPS_LOCKED|_SECURE_NO_SETUID_FIXUP|_SECURE_NO_SETUID_FIXUP_LOCKED|_SECURE_NOROOT|_SECURE_NOROOT_LOCKED, 0)
-				if err1 != 0 {
-					goto childerror
-				}
-				_, _, err1 = syscall.RawSyscall(syscall.SYS_CAPSET, uintptr(unsafe.Pointer(&dropCapHeader)), uintptr(unsafe.Pointer(&dropCapData)), 0)
-				if err1 != 0 {
-					goto childerror
-				}
-			}
-		}
-
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_PTRACE, uintptr(syscall.PTRACE_TRACEME), 0, 0)
 		if err1 != 0 {
 			goto childerror
@@ -384,42 +263,8 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 
 	// Before exec, sync with parent through pipe (configured as close_on_exec)
 	if !r.Ptrace || r.Seccomp == nil {
-		err2 = 0
-		r1, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
-		if r1 == 0 || err1 != 0 {
+		if err1 = syncAndDropCaps(r, pipe); err1 != 0 {
 			goto childerror
-		}
-
-		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
-		if r1 == 0 || err1 != 0 {
-			goto childerror
-		}
-
-		// unshare cgroup namespace
-		if r.UnshareCgroupAfterSync {
-			r1, _, err1 = syscall.RawSyscall(syscall.SYS_UNSHARE, uintptr(unix.CLONE_NEWCGROUP), 0, 0)
-			if err1 != 0 {
-				goto childerror
-			}
-			if r.DropCaps || r.Credential != nil {
-				// make sure the children have no privilege at all
-				_, _, err1 = syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_SECUREBITS,
-					_SECURE_KEEP_CAPS_LOCKED|_SECURE_NO_SETUID_FIXUP|_SECURE_NO_SETUID_FIXUP_LOCKED|_SECURE_NOROOT|_SECURE_NOROOT_LOCKED, 0)
-				if err1 != 0 {
-					goto childerror
-				}
-				_, _, err1 = syscall.RawSyscall(syscall.SYS_CAPSET, uintptr(unsafe.Pointer(&dropCapHeader)), uintptr(unsafe.Pointer(&dropCapData)), 0)
-				if err1 != 0 {
-					goto childerror
-				}
-			}
-			if r.Seccomp != nil {
-				// Load seccomp filter
-				_, _, err1 = syscall.RawSyscall(unix.SYS_SECCOMP, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, uintptr(unsafe.Pointer(r.Seccomp)))
-				if err1 != 0 {
-					goto childerror
-				}
-			}
 		}
 	}
 
@@ -446,9 +291,13 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 			uintptr(unsafe.Pointer(&argv[0])),
 			uintptr(unsafe.Pointer(&env[0])), 0, 0)
 	}
-
-	// for slow devices, the file close is not as quickly as enough and it is causing ETXTBSY, retrying on this error
-	for err1 == syscall.ETXTBSY {
+	// Fix potential ETXTBSY but with caution (max 50 attempt)
+	for range [50]struct{}{} {
+		if err1 != syscall.ETXTBSY {
+			break
+		}
+		// wait instead of busy wait
+		syscall.RawSyscall(unix.SYS_NANOSLEEP, uintptr(unsafe.Pointer(&etxtbsyRetryInterval)), 0, 0)
 		if r.ExecFile > 0 {
 			_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, r.ExecFile,
 				uintptr(unsafe.Pointer(&empty[0])),
@@ -469,4 +318,154 @@ childerror:
 		syscall.RawSyscall(syscall.SYS_EXIT, uintptr(err1+err2), 0, 0)
 	}
 	// cannot reach this point
+}
+
+// syncAndDropCaps sync with parent process & drop capabilities afterwards
+// nosplit ensure there is no stack growth after fork error
+//go:nosplit
+func syncAndDropCaps(r *Runner, pipe int) (err1 syscall.Errno) {
+	var (
+		r1   uintptr
+		err2 syscall.Errno
+	)
+	err2 = 0
+	r1, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+	if r1 == 0 || err1 != 0 {
+		return
+	}
+
+	r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+	if r1 == 0 || err1 != 0 {
+		return
+	}
+
+	// unshare cgroup namespace
+	if r.UnshareCgroupAfterSync {
+		r1, _, err1 = syscall.RawSyscall(syscall.SYS_UNSHARE, uintptr(unix.CLONE_NEWCGROUP), 0, 0)
+		if err1 != 0 {
+			return
+		}
+		if r.DropCaps || r.Credential != nil {
+			// make sure the children have no privilege at all
+			_, _, err1 = syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_SECUREBITS,
+				_SECURE_KEEP_CAPS_LOCKED|_SECURE_NO_SETUID_FIXUP|_SECURE_NO_SETUID_FIXUP_LOCKED|_SECURE_NOROOT|_SECURE_NOROOT_LOCKED, 0)
+			if err1 != 0 {
+				return
+			}
+			_, _, err1 = syscall.RawSyscall(syscall.SYS_CAPSET, uintptr(unsafe.Pointer(&dropCapHeader)), uintptr(unsafe.Pointer(&dropCapData)), 0)
+			if err1 != 0 {
+				return
+			}
+		}
+		if r.Seccomp != nil {
+			// Load seccomp filter
+			_, _, err1 = syscall.RawSyscall(unix.SYS_SECCOMP, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, uintptr(unsafe.Pointer(r.Seccomp)))
+			if err1 != 0 {
+				return
+			}
+		}
+	}
+	return
+}
+
+// pivotAndMount performs pivot & mount in child process
+//go:nosplit
+func pivotAndMount(r *Runner, pivotRoot *byte) (err1 syscall.Errno) {
+	// If mount point is unshared, mark root as private to avoid propagate
+	// outside to the original mount namespace
+	if r.CloneFlags&syscall.CLONE_NEWNS == syscall.CLONE_NEWNS {
+		_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&none[0])),
+			uintptr(unsafe.Pointer(&slash[0])), 0, syscall.MS_REC|syscall.MS_PRIVATE, 0, 0)
+		if err1 != 0 {
+			return
+		}
+	}
+
+	// mount tmpfs & chdir to new root before performing mounts
+	if pivotRoot != nil {
+		// mount("tmpfs", root, "tmpfs", 0, "")
+		_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&tmpfs[0])),
+			uintptr(unsafe.Pointer(pivotRoot)), uintptr(unsafe.Pointer(&tmpfs[0])), 0,
+			uintptr(unsafe.Pointer(&empty[0])), 0)
+		if err1 != 0 {
+			return
+		}
+
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_CHDIR, uintptr(unsafe.Pointer(pivotRoot)), 0, 0)
+		if err1 != 0 {
+			return
+		}
+	}
+
+	// performing mounts
+	for _, m := range r.Mounts {
+		// mkdirs(target)
+		for i, p := range m.Prefixes {
+			// if target mount point is a file, mknod(target)
+			if i == len(m.Prefixes)-1 && m.MakeNod {
+				_, _, err1 = syscall.RawSyscall(syscall.SYS_MKNODAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(p)), 0755)
+				if err1 != 0 && err1 != syscall.EEXIST {
+					return
+				}
+				break
+			}
+			_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIRAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(p)), 0755)
+			if err1 != 0 && err1 != syscall.EEXIST {
+				return
+			}
+		}
+		// mount(source, target, fsType, flags, data)
+		_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(m.Source)),
+			uintptr(unsafe.Pointer(m.Target)), uintptr(unsafe.Pointer(m.FsType)), uintptr(m.Flags),
+			uintptr(unsafe.Pointer(m.Data)), 0)
+		if err1 != 0 {
+			return
+		}
+		// bind mount is not respect ro flag so that read-only bind mount needs remount
+		if m.Flags&bindRo == bindRo {
+			_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&empty[0])),
+				uintptr(unsafe.Pointer(m.Target)), uintptr(unsafe.Pointer(m.FsType)),
+				uintptr(m.Flags|syscall.MS_REMOUNT), uintptr(unsafe.Pointer(m.Data)), 0)
+			if err1 != 0 {
+				return
+			}
+		}
+	}
+
+	// pivit_root
+	if pivotRoot != nil {
+		// mkdir("old_root")
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIRAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(&oldRoot[0])), 0755)
+		if err1 != 0 {
+			return
+		}
+
+		// pivot_root(root, "old_root")
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_PIVOT_ROOT, uintptr(unsafe.Pointer(pivotRoot)), uintptr(unsafe.Pointer(&oldRoot[0])), 0)
+		if err1 != 0 {
+			return
+		}
+
+		// umount("old_root", MNT_DETACH)
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_UMOUNT2, uintptr(unsafe.Pointer(&oldRoot[0])), syscall.MNT_DETACH, 0)
+		if err1 != 0 {
+			return
+		}
+
+		// rmdir("old_root")
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_UNLINKAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(&oldRoot[0])), uintptr(unix.AT_REMOVEDIR))
+		if err1 != 0 {
+			return
+		}
+
+		// mount("tmpfs", "/", "tmpfs", MS_BIND | MS_REMOUNT | MS_RDONLY | MS_NOATIME | MS_NOSUID, nil)
+		_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&tmpfs[0])),
+			uintptr(unsafe.Pointer(&slash[0])), uintptr(unsafe.Pointer(&tmpfs[0])),
+			uintptr(syscall.MS_BIND|syscall.MS_REMOUNT|syscall.MS_RDONLY|syscall.MS_NOATIME|syscall.MS_NOSUID),
+			uintptr(unsafe.Pointer(&empty[0])), 0)
+		if err1 != 0 {
+			return
+		}
+	}
+	return 0
 }

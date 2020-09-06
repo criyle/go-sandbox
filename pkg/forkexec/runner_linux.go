@@ -98,4 +98,7 @@ type Runner struct {
 	// UnshareCgroupAfterSync specifies whether to unshare cgroup namespace after
 	// sync (the syncFunc might be add the child to the cgroup)
 	UnshareCgroupAfterSync bool
+
+	// CTTY specifies if set the fd 0 as controlling TTY
+	CTTY bool
 }

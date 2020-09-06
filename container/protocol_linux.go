@@ -37,6 +37,7 @@ type execCmd struct {
 	Env     []string        // execve env
 	RLimits []rlimit.RLimit // execve posix rlimit
 	FdExec  bool            // if use fexecve (fd[0] as exec)
+	CTTY    bool            // if set CTTY
 }
 
 // confCmd stores conf parameter

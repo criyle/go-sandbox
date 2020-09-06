@@ -76,6 +76,7 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 		DropCaps:   true,
 		SyncFunc:   syncFunc,
 		Credential: cred,
+		CTTY:       cmd.CTTY,
 
 		UnshareCgroupAfterSync: true,
 	}

@@ -27,6 +27,9 @@ type ExecveParam struct {
 	// RLimits specifies POSIX Resource limit through setrlimit
 	RLimits []rlimit.RLimit
 
+	// CTTY specifies whether to set controlling TTY
+	CTTY bool
+
 	// SyncFunc calls with pid just before execve (for attach the process to cgroups)
 	SyncFunc func(pid int) error
 }
@@ -62,6 +65,7 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan runner
 		Env:     param.Env,
 		RLimits: param.RLimits,
 		FdExec:  param.ExecFile > 0,
+		CTTY:    param.CTTY,
 	}
 	cm := cmd{
 		Cmd:     cmdExecve,

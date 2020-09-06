@@ -46,6 +46,11 @@ var (
 		Permitted:   0,
 		Inheritable: 0,
 	}
+
+	// 1ms
+	etxtbsyRetryInterval = unix.Timespec{
+		Nsec: 1 * 1000 * 1000,
+	}
 )
 
 const (

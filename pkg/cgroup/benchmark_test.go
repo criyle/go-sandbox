@@ -1,6 +1,9 @@
 package cgroup
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func BenchmarkCgroup(b *testing.B) {
 	builder, err := NewBuilder("benchmark").WithCPUAcct().WithMemory().WithPids().FilterByEnv()
@@ -36,6 +39,10 @@ func BenchmarkCgroup(b *testing.B) {
 }
 
 func TestCgroup(t *testing.T) {
+	// ensure root privillege when testing
+	if os.Getuid() != 1 {
+		t.Skip("no root privillege")
+	}
 	builder, err := NewBuilder("test").WithCPUAcct().WithMemory().WithPids().FilterByEnv()
 	if err != nil {
 		t.Error(err)
