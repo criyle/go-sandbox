@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io/ioutil"
 	"os"
+	"runtime"
 	"syscall"
 	"testing"
 
@@ -23,25 +24,32 @@ func BenchmarkContainer(b *testing.B) {
 	builder := &Builder{
 		Root: tmpDir,
 	}
-	m, err := builder.Build()
-	if err != nil {
-		b.Error(err)
-	}
-	b.Cleanup(func() {
-		m.Destroy()
-	})
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		rt := m.Execve(context.TODO(), ExecveParam{
-			Args: []string{"/bin/echo"},
-			Env:  []string{"PATH=/bin"},
-		})
-		r := <-rt
-		if r.Status != runner.StatusNormal {
-			b.Error(r.Status, r.Error)
+	n := runtime.GOMAXPROCS(0)
+	ch := make(chan Environment, n)
+	for i := 0; i < n; i++ {
+		m, err := builder.Build()
+		if err != nil {
+			b.Error(err)
 		}
+		b.Cleanup(func() {
+			m.Destroy()
+		})
+		ch <- m
 	}
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		m := <-ch
+		for pb.Next() {
+			rt := m.Execve(context.TODO(), ExecveParam{
+				Args: []string{"/bin/echo"},
+				Env:  []string{"PATH=/bin"},
+			})
+			r := <-rt
+			if r.Status != runner.StatusNormal {
+				b.Error(r.Status, r.Error)
+			}
+		}
+	})
 }
 
 func TestContainerSuccess(t *testing.T) {
@@ -117,6 +125,9 @@ func getEnv(t *testing.T, credGen CredGenerator) Environment {
 	if err != nil {
 		t.Error(err)
 	}
+	t.Cleanup(func() {
+		os.Remove(tmpDir)
+	})
 	builder := &Builder{
 		Root:          tmpDir,
 		CredGenerator: credGen,
@@ -125,5 +136,8 @@ func getEnv(t *testing.T, credGen CredGenerator) Environment {
 	if err != nil {
 		t.Error(err)
 	}
+	t.Cleanup(func() {
+		m.Destroy()
+	})
 	return m
 }

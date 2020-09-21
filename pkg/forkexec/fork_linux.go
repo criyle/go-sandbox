@@ -102,7 +102,11 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 
 	// if stopped before execve by signal SIGSTOP or PTRACE_ME, then do not wait until execve
 	if r.Ptrace || r.StopBeforeSeccomp {
-		unix.Close(p[0])
+		// let's wait it in another goroutine to avoid SIGPIPE
+		go func() {
+			r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+			unix.Close(p[0])
+		}()
 		return int(pid), nil
 	}
 

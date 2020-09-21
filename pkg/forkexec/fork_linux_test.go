@@ -6,6 +6,8 @@ import (
 	"os"
 	"syscall"
 	"testing"
+
+	"github.com/criyle/go-sandbox/pkg/mount"
 )
 
 func TestFork_DropCaps(t *testing.T) {
@@ -22,7 +24,6 @@ func TestFork_DropCaps(t *testing.T) {
 }
 
 func TestFork_ETXTBSY(t *testing.T) {
-	t.Parallel()
 	f, err := ioutil.TempFile("", "")
 	if err != nil {
 		t.Fatal(err)
@@ -84,6 +85,27 @@ func TestFork_OK(t *testing.T) {
 	}
 	_, err = r.Start()
 	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFork_ENOENT(t *testing.T) {
+	t.Parallel()
+	m, err := mount.NewBuilder().
+		WithMount(
+			mount.Mount{
+				Source: "NOT_EXISTS",
+			}).Build(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := Runner{
+		Args:       []string{"/bin/echo"},
+		CloneFlags: syscall.CLONE_NEWNS | syscall.CLONE_NEWUSER,
+		Mounts:     m,
+	}
+	_, err = r.Start()
+	if err != syscall.ENOENT {
 		t.Fatal(err)
 	}
 }

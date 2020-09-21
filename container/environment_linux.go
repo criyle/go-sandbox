@@ -164,6 +164,11 @@ func (b *Builder) Build() (Environment, error) {
 		pid:    pid,
 		socket: newSocket(ins),
 	}
+	// avoid non cinit enabled executable running as container init process
+	if err = c.Ping(); err != nil {
+		c.Destroy()
+		return nil, fmt.Errorf("container: container init not responding to ping %v", err)
+	}
 
 	// set configuration and check if container creation successful
 	if err = c.conf(&containerConfig{

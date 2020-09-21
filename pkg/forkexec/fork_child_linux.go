@@ -292,6 +292,10 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 			uintptr(unsafe.Pointer(&env[0])), 0, 0)
 	}
 	// Fix potential ETXTBSY but with caution (max 50 attempt)
+	// The ETXTBSY happens when we copy the executable into container, another goroutine
+	// forks but not execve yet (time consuming for setting up mounting points), the forked
+	// process is still holding the fd of the copyied executable fd. However, we don't
+	// want to have different logic to lock the container creation
 	for range [50]struct{}{} {
 		if err1 != syscall.ETXTBSY {
 			break

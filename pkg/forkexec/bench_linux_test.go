@@ -20,6 +20,20 @@ var (
 	defaultBind = []string{"/usr", "/lib", "/lib64", "/bin"}
 )
 
+func BenchmarkStdFork(b *testing.B) {
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			pid, err := syscall.ForkExec("/bin/echo", nil, &syscall.ProcAttr{
+				Env: []string{"PATH=/bin"},
+			})
+			if err != nil {
+				b.Fatal(err)
+			}
+			wait4(pid, b)
+		}
+	})
+}
+
 // BenchmarkSimpleFork is about 0.70ms/op
 func BenchmarkSimpleFork(b *testing.B) {
 	r, f := getRunner(b)
@@ -139,13 +153,15 @@ func getRunner(b *testing.B) (*Runner, *os.File) {
 
 func benchmarkRun(r *Runner, b *testing.B) {
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		pid, err := r.Start()
-		if err != nil {
-			b.Fail()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			pid, err := r.Start()
+			if err != nil {
+				b.Fail()
+			}
+			wait4(pid, b)
 		}
-		wait4(pid, b)
-	}
+	})
 }
 
 func getMounts(dirs []string) []mount.SyscallParams {

@@ -2,6 +2,7 @@ package ptrace
 
 import (
 	"context"
+	"os"
 
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/ptracer"
@@ -21,7 +22,7 @@ func (r *Runner) Run(c context.Context) <-chan runner.Result {
 		Ptrace:   true,
 		SyncFunc: r.SyncFunc,
 
-		UnshareCgroupAfterSync: true,
+		UnshareCgroupAfterSync: os.Getuid() == 0,
 	}
 
 	th := &tracerHandler{
