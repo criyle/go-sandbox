@@ -22,16 +22,12 @@ func NewDefaultBuilder() *Builder {
 }
 
 // Build creates sequence of syscalls for fork_exec
-// skipNotExists skips bind mounts that source not exists
-func (b *Builder) Build(skipNotExists bool) ([]SyscallParams, error) {
+func (b *Builder) Build() ([]SyscallParams, error) {
 	var err error
 	ret := make([]SyscallParams, 0, len(b.Mounts))
 	for _, m := range b.Mounts {
 		var mknod bool
 		if mknod, err = isBindMountFileOrNotExists(m); err != nil {
-			if skipNotExists {
-				continue
-			}
 			return nil, err
 		}
 		sp, err := m.ToSyscall()
@@ -44,8 +40,23 @@ func (b *Builder) Build(skipNotExists bool) ([]SyscallParams, error) {
 	return ret, nil
 }
 
+// FilterNotExist removes bind mount that does not exists
+func (b *Builder) FilterNotExist() *Builder {
+	rt := b.Mounts[:0]
+	for _, m := range b.Mounts {
+		if m.IsBindMount() {
+			if _, err := os.Stat(m.Source); os.IsNotExist(err) {
+				continue
+			}
+		}
+		rt = append(rt, m)
+	}
+	b.Mounts = rt
+	return b
+}
+
 func isBindMountFileOrNotExists(m Mount) (bool, error) {
-	if m.Flags&unix.MS_BIND == unix.MS_BIND {
+	if m.IsBindMount() {
 		if fi, err := os.Stat(m.Source); os.IsNotExist(err) {
 			return false, err
 		} else if !fi.IsDir() {

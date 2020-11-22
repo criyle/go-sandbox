@@ -173,7 +173,7 @@ func getMounts(dirs []string) []mount.SyscallParams {
 			Flags:  roBind,
 		})
 	}
-	m, _ := builder.Build(true)
+	m, _ := builder.FilterNotExist().Build()
 	return m
 }
 

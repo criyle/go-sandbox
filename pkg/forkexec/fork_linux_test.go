@@ -95,7 +95,7 @@ func TestFork_ENOENT(t *testing.T) {
 		WithMount(
 			mount.Mount{
 				Source: "NOT_EXISTS",
-			}).Build(false)
+			}).Build()
 	if err != nil {
 		t.Fatal(err)
 	}

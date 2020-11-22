@@ -22,7 +22,8 @@ func BenchmarkContainer(b *testing.B) {
 		b.Error(err)
 	}
 	builder := &Builder{
-		Root: tmpDir,
+		Root:   tmpDir,
+		Stderr: os.Stderr,
 	}
 	n := runtime.GOMAXPROCS(0)
 	ch := make(chan Environment, n)
@@ -61,7 +62,7 @@ func TestContainerSuccess(t *testing.T) {
 	})
 	r := <-rt
 	if r.Status != runner.StatusNormal {
-		t.Error(r.Status, r.Error)
+		t.Fatal(r.Status, r.Error)
 	}
 }
 
@@ -86,7 +87,7 @@ func TestContainerSetCred(t *testing.T) {
 	})
 	r := <-rt
 	if r.Status != runner.StatusNormal {
-		t.Error(r.Status, r.Error)
+		t.Fatal(r.Status, r.Error)
 	}
 }
 
@@ -99,7 +100,7 @@ func TestContainerNotExists(t *testing.T) {
 	})
 	r := <-rt
 	if r.Status != runner.StatusRunnerError {
-		t.Error(r.Status, r.Error)
+		t.Fatal(r.Status, r.Error)
 	}
 }
 
@@ -116,14 +117,14 @@ func TestContainerSyncFuncFail(t *testing.T) {
 	})
 	r := <-rt
 	if r.Status != runner.StatusRunnerError {
-		t.Error(r.Status, r.Error)
+		t.Fatal(r.Status, r.Error)
 	}
 }
 
 func getEnv(t *testing.T, credGen CredGenerator) Environment {
 	tmpDir, err := ioutil.TempDir("", "")
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	t.Cleanup(func() {
 		os.Remove(tmpDir)
@@ -131,10 +132,11 @@ func getEnv(t *testing.T, credGen CredGenerator) Environment {
 	builder := &Builder{
 		Root:          tmpDir,
 		CredGenerator: credGen,
+		Stderr:        os.Stderr,
 	}
 	m, err := builder.Build()
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	t.Cleanup(func() {
 		m.Destroy()

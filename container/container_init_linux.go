@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"syscall"
 
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
 )
@@ -20,7 +21,7 @@ type containerServer struct {
 func Init() (err error) {
 	// noop if self is not container init process
 	// Notice: docker init is also 1, additional check for args[1] == init
-	if os.Getpid() != 1 || len(os.Args) != 2 || os.Args[1] != initArg {
+	if os.Getpid() != 1 || len(os.Args) < 2 || os.Args[1] != initArg {
 		return nil
 	}
 
@@ -90,4 +91,55 @@ func (c *containerServer) handleCmd(cmd *cmd, msg *unixsocket.Msg) error {
 		return c.handleExecve(cmd.ExecCmd, msg)
 	}
 	return fmt.Errorf("unknown command: %s", cmd.Cmd)
+}
+
+func initContainer(c containerConfig) error {
+	if err := initFileSystem(c); err != nil {
+		return err
+	}
+	if err := syscall.Setdomainname([]byte(c.DomainName)); err != nil {
+		return err
+	}
+	if err := syscall.Sethostname([]byte(c.HostName)); err != nil {
+		return err
+	}
+	return os.Chdir(c.WorkDir)
+}
+
+func initFileSystem(c containerConfig) error {
+	// mount tmpfs as root
+	const tmpfs = "tmpfs"
+	if err := syscall.Mount(tmpfs, c.ContainerRoot, tmpfs, 0, ""); err != nil {
+		return fmt.Errorf("init_fs: mount / %v", err)
+	}
+	// change dir to container root
+	if err := syscall.Chdir(c.ContainerRoot); err != nil {
+		return fmt.Errorf("init_fs: chdir %v", err)
+	}
+	// performing mounts
+	for _, m := range c.Mounts {
+		if err := m.Mount(); err != nil {
+			return fmt.Errorf("init_fs: mount %v %v", m, err)
+		}
+	}
+	// pivot root
+	const oldRoot = "old_root"
+	if err := os.Mkdir(oldRoot, 0755); err != nil {
+		return fmt.Errorf("init_fs: mkdir(old_root) %v", err)
+	}
+	if err := syscall.PivotRoot(c.ContainerRoot, oldRoot); err != nil {
+		return fmt.Errorf("init_fs: pivot_root(%s, %s) %v", c.ContainerRoot, oldRoot, err)
+	}
+	if err := syscall.Unmount(oldRoot, syscall.MNT_DETACH); err != nil {
+		return fmt.Errorf("init_fs: unmount(old_root) %v", err)
+	}
+	if err := os.Remove(oldRoot); err != nil {
+		return fmt.Errorf("init_fs: unlink(old_root) %v", err)
+	}
+	// readonly root
+	const remountFlag = syscall.MS_BIND | syscall.MS_REMOUNT | syscall.MS_RDONLY | syscall.MS_NOATIME | syscall.MS_NOSUID
+	if err := syscall.Mount(tmpfs, "/", tmpfs, remountFlag, ""); err != nil {
+		return fmt.Errorf("init_fs: readonly remount / %v", err)
+	}
+	return nil
 }

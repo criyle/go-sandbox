@@ -15,6 +15,9 @@ func (c *containerServer) handlePing() error {
 func (c *containerServer) handleConf(conf *confCmd) error {
 	if conf != nil {
 		c.containerConfig = conf.Conf
+		if err := initContainer(conf.Conf); err != nil {
+			return err
+		}
 	}
 	return c.sendReply(&reply{}, nil)
 }

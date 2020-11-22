@@ -5,6 +5,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/signal"
@@ -171,9 +172,10 @@ func start() (*runner.Result, error) {
 		// work dir
 		WithTmpfs("w", "size=8m,nr_inodes=4k").
 		// tmp dir
-		WithTmpfs("tmp", "size=8m,nr_inodes=4k")
+		WithTmpfs("tmp", "size=8m,nr_inodes=4k").
+		FilterNotExist()
 
-	mt, err := mb.Build(true)
+	mt, err := mb.FilterNotExist().Build()
 	if err != nil {
 		return nil, err
 	}
@@ -264,10 +266,15 @@ func start() (*runner.Result, error) {
 		if cred {
 			credG = newCredGen()
 		}
+		var stderr io.Writer
+		if showDetails {
+			stderr = os.Stderr
+		}
 
 		b := container.Builder{
 			Root:          root,
-			Mounts:        mt,
+			Mounts:        mb.Mounts,
+			Stderr:        stderr,
 			CredGenerator: credG,
 			CloneFlags:    forkexec.UnshareFlags,
 		}

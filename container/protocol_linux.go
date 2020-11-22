@@ -5,6 +5,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/criyle/go-sandbox/pkg/mount"
 	"github.com/criyle/go-sandbox/pkg/rlimit"
 	"github.com/criyle/go-sandbox/runner"
 )
@@ -47,6 +48,14 @@ type confCmd struct {
 
 // ContainerConfig set the container config
 type containerConfig struct {
+	WorkDir string
+
+	HostName   string
+	DomainName string
+
+	ContainerRoot string
+	Mounts        []mount.Mount
+
 	Cred bool
 }
 

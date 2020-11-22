@@ -3,7 +3,9 @@ package container
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"sync"
 	"syscall"
 
@@ -23,10 +25,13 @@ type Builder struct {
 	Root string
 
 	// Mounts defines container mount points, empty uses default mounts
-	Mounts []mount.SyscallParams
+	Mounts []mount.Mount
+
+	// WorkDir defines container default work directory (default: /w)
+	WorkDir string
 
 	// Stderr defines whether to dup container stderr to stderr for debug
-	Stderr bool
+	Stderr io.Writer
 
 	// ExecFile defines executable that called Init, otherwise defer current
 	// executable (/proc/self/exe)
@@ -37,6 +42,12 @@ type Builder struct {
 
 	// Clone flags defines unshare clone flag to create container
 	CloneFlags uintptr
+
+	// HostName set container hostname (default: go-sandbox)
+	HostName string
+
+	// DomainName set container domainname (default: go-sandbox)
+	DomainName string
 }
 
 // CredGenerator generates uid / gid credential used by container
@@ -57,28 +68,31 @@ type Environment interface {
 
 // container manages single pre-forked container environment
 type container struct {
-	pid    int        // underlying container init pid
-	socket *socket    // host - container communication
-	mu     sync.Mutex // lock to avoid race condition
+	process *os.Process // underlying container init pid
+	socket  *socket     // host - container communication
+	mu      sync.Mutex  // lock to avoid race condition
 }
 
 // Build creates new environment with underlying container
 func (b *Builder) Build() (Environment, error) {
-	var (
-		err            error
-		cred           syscall.Credential
-		uidMap, gidMap []syscall.SysProcIDMap
-	)
+	c, err := b.startContainer()
+	if err != nil {
+		return nil, err
+	}
+
+	// avoid non cinit enabled executable running as container init process
+	if err = c.Ping(); err != nil {
+		c.Destroy()
+		return nil, fmt.Errorf("container: container init not responding to ping %v", err)
+	}
 
 	// container mount points
 	mounts := b.Mounts
 	if len(mounts) == 0 {
-		if mounts, err = mount.NewDefaultBuilder().
+		mounts = mount.NewDefaultBuilder().
 			WithTmpfs("w", "").   // work dir
 			WithTmpfs("tmp", ""). // tmp
-			Build(true); err != nil {
-			return nil, fmt.Errorf("container: failed to build rootfs mount %v", err)
-		}
+			FilterNotExist().Mounts
 	}
 
 	// container root directory on the host
@@ -88,29 +102,40 @@ func (b *Builder) Build() (Environment, error) {
 			return nil, fmt.Errorf("container: failed to get work directory %v", err)
 		}
 	}
-
-	// prepare stdin / stdout / stderr
-	devNull, err := os.OpenFile(os.DevNull, os.O_RDWR, os.ModePerm)
-	if err != nil {
-		return nil, fmt.Errorf("container: failed to open devNull %v", err)
+	workDir := containerWD
+	if b.WorkDir != "" {
+		workDir = b.WorkDir
 	}
-	defer devNull.Close()
-
-	files := make([]uintptr, 0, 4)
-	files = append(files, devNull.Fd(), devNull.Fd())
-	if b.Stderr {
-		files = append(files, os.Stderr.Fd())
-	} else {
-		files = append(files, devNull.Fd())
+	hostName := containerName
+	if b.HostName != "" {
+		hostName = b.HostName
+	}
+	domainName := containerName
+	if b.DomainName != "" {
+		domainName = b.DomainName
 	}
 
-	// prepare container exec file
-	execFile, err := b.exec()
-	if err != nil {
-		return nil, fmt.Errorf("container: prepare exec %v", err)
+	// set configuration and check if container creation successful
+	if err = c.conf(&containerConfig{
+		WorkDir:       workDir,
+		HostName:      hostName,
+		DomainName:    domainName,
+		ContainerRoot: root,
+		Mounts:        mounts,
+		Cred:          b.CredGenerator != nil,
+	}); err != nil {
+		c.Destroy()
+		return nil, err
 	}
-	defer execFile.Close()
+	return c, nil
+}
 
+func (b *Builder) startContainer() (*container, error) {
+	var (
+		err            error
+		cred           syscall.Credential
+		uidMap, gidMap []syscall.SysProcIDMap
+	)
 	// prepare host <-> container unix socket
 	ins, outs, err := newPassCredSocketPair()
 	if err != nil {
@@ -125,12 +150,13 @@ func (b *Builder) Build() (Environment, error) {
 	}
 	defer outf.Close()
 
-	files = append(files, uintptr(outf.Fd()))
-
 	// prepare container running credential
 	if b.CredGenerator != nil {
 		cred = b.CredGenerator.Get()
 		uidMap, gidMap = getIDMapping(&cred)
+	} else {
+		uidMap = []syscall.SysProcIDMap{{HostID: os.Geteuid(), Size: 1}}
+		gidMap = []syscall.SysProcIDMap{{HostID: os.Getegid(), Size: 1}}
 	}
 
 	var cloneFlag uintptr
@@ -140,45 +166,34 @@ func (b *Builder) Build() (Environment, error) {
 		cloneFlag = b.CloneFlags & forkexec.UnshareFlags
 	}
 
-	r := &forkexec.Runner{
-		Args:        []string{os.Args[0], initArg},
-		Env:         []string{PathEnv},
-		ExecFile:    execFile.Fd(),
-		Files:       files,
-		WorkDir:     containerWD,
-		CloneFlags:  cloneFlag,
-		Mounts:      mounts,
-		HostName:    containerName,
-		DomainName:  containerName,
-		PivotRoot:   root,
-		UIDMappings: uidMap,
-		GIDMappings: gidMap,
+	args := []string{os.Args[0], initArg}
+	if b.ExecFile != "" {
+		args[0] = b.ExecFile
 	}
-	pid, err := r.Start()
-	if err != nil {
+
+	r := exec.Cmd{
+		Path:       args[0],
+		Args:       args,
+		Env:        []string{PathEnv},
+		Stderr:     b.Stderr,
+		ExtraFiles: []*os.File{outf},
+		SysProcAttr: &syscall.SysProcAttr{
+			Cloneflags:  cloneFlag,
+			UidMappings: uidMap,
+			GidMappings: gidMap,
+			AmbientCaps: []uintptr{
+				unix.CAP_SYS_ADMIN,
+			},
+		},
+	}
+	if err = r.Start(); err != nil {
 		ins.Close()
 		return nil, fmt.Errorf("container: failed to start container %v", err)
 	}
-
-	c := &container{
-		pid:    pid,
-		socket: newSocket(ins),
-	}
-	// avoid non cinit enabled executable running as container init process
-	if err = c.Ping(); err != nil {
-		c.Destroy()
-		return nil, fmt.Errorf("container: container init not responding to ping %v", err)
-	}
-
-	// set configuration and check if container creation successful
-	if err = c.conf(&containerConfig{
-		Cred: b.CredGenerator != nil,
-	}); err != nil {
-		c.Destroy()
-		return nil, err
-	}
-
-	return c, nil
+	return &container{
+		process: r.Process,
+		socket:  newSocket(ins),
+	}, nil
 }
 
 // Destroy kill the container process (with its children)
@@ -192,13 +207,8 @@ func (c *container) Destroy() error {
 	defer c.mu.Unlock()
 
 	// kill process
-	var wstatus unix.WaitStatus
-	unix.Kill(c.pid, unix.SIGKILL)
-	// wait for container process to exit
-	_, err := unix.Wait4(c.pid, &wstatus, 0, nil)
-	for err == unix.EINTR {
-		_, err = unix.Wait4(c.pid, &wstatus, 0, nil)
-	}
+	c.process.Kill()
+	_, err := c.process.Wait()
 	return err
 }
 

@@ -8,7 +8,7 @@ import (
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
 )
 
-// Ping send ping message to container
+// Ping send ping message to container, wait for 3 second before timeout
 func (c *container) Ping() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
