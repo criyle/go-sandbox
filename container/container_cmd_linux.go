@@ -52,11 +52,13 @@ func (c *containerServer) handleDelete(delete *deleteCmd) error {
 }
 
 func (c *containerServer) handleReset() error {
-	if err := removeContents("/tmp"); err != nil {
-		return c.sendErrorReply("reset: /tmp %v", err)
-	}
-	if err := removeContents("/w"); err != nil {
-		return c.sendErrorReply("reset: /w %v", err)
+	for _, m := range c.Mounts {
+		if !m.IsTmpFs() {
+			continue
+		}
+		if err := removeContents(m.Target); err != nil {
+			return c.sendErrorReply("reset: %v %v", m.Target, err)
+		}
 	}
 	return c.sendReply(&reply{}, nil)
 }

@@ -35,6 +35,11 @@ func (m Mount) IsReadOnly() bool {
 	return m.Flags&syscall.MS_RDONLY == syscall.MS_RDONLY
 }
 
+// IsTmpFs returns if the fsType is tmpfs
+func (m Mount) IsTmpFs() bool {
+	return m.FsType == "tmpfs"
+}
+
 func ensureMountTargetExists(source, target string) error {
 	isFile := false
 	if fi, err := os.Stat(source); err == nil {

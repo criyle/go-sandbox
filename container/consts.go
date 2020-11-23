@@ -13,8 +13,6 @@ const (
 
 	initArg = "container_init"
 
-	currentExec = "/proc/self/exe"
-
 	containerUID = 1000
 	containerGID = 1000
 

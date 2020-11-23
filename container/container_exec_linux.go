@@ -71,7 +71,7 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 		ExecFile:   execFile,
 		RLimits:    cmd.RLimits,
 		Files:      files,
-		WorkDir:    "/w",
+		WorkDir:    c.WorkDir,
 		NoNewPrivs: true,
 		DropCaps:   true,
 		SyncFunc:   syncFunc,

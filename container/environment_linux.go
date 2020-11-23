@@ -212,19 +212,6 @@ func (c *container) Destroy() error {
 	return err
 }
 
-// exec prepares executable
-func (b *Builder) exec() (*os.File, error) {
-	if b.ExecFile != "" {
-		return os.Open(b.ExecFile)
-	}
-	return OpenCurrentExec()
-}
-
-// OpenCurrentExec opens current executable (/proc/self/exe)
-func OpenCurrentExec() (*os.File, error) {
-	return os.Open(currentExec)
-}
-
 // newPassCredSocketPair creates socket pair and let the first socket to receive credential information
 func newPassCredSocketPair() (*unixsocket.Socket, *unixsocket.Socket, error) {
 	ins, outs, err := unixsocket.NewSocketPair()
