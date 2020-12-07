@@ -5,6 +5,7 @@
 //  cpuacct
 //  memory
 //  pids
+//  cpuset
 //
 // Current not available: cpu, cpuset, devices, freezer, net_cls, blkio, perf_event, net_prio, huge_tlb, rdma
 //

@@ -3,46 +3,63 @@ package cgroup
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 // Cgroup is the combination of sub-cgroups
 type Cgroup struct {
-	prefix                string
-	cpuacct, memory, pids *SubCgroup
+	prefix string
+
+	cpuset  *SubCgroup
+	cpuacct *SubCgroup
+	memory  *SubCgroup
+	pids    *SubCgroup
 }
 
 // Build creates new cgrouup directories
 func (b *Builder) Build() (cg *Cgroup, err error) {
 	var (
-		cpuacctPath, memoryPath, pidsPath string
+		cpuSetPath, cpuacctPath, memoryPath, pidsPath string
 	)
 	// if failed, remove potential created directory
 	defer func() {
 		if err != nil {
+			remove(cpuSetPath)
 			remove(cpuacctPath)
 			remove(memoryPath)
 			remove(pidsPath)
 		}
 	}()
-	if b.CPUAcct {
-		if cpuacctPath, err = CreateSubCgroupPath("cpuacct", b.Prefix); err != nil {
+	for _, c := range []struct {
+		enable bool
+		name   string
+		path   *string
+	}{
+		{b.CPUSet, "cpuset", &cpuSetPath},
+		{b.CPUAcct, "cpuacct", &cpuacctPath},
+		{b.Memory, "memory", &memoryPath},
+		{b.Pids, "pids", &pidsPath},
+	} {
+		if !c.enable {
+			continue
+		}
+		if *c.path, err = CreateSubCgroupPath(c.name, b.Prefix); err != nil {
 			return
 		}
 	}
-	if b.Memory {
-		if memoryPath, err = CreateSubCgroupPath("memory", b.Prefix); err != nil {
-			return
-		}
-	}
-	if b.Pids {
-		if pidsPath, err = CreateSubCgroupPath("pids", b.Prefix); err != nil {
+
+	if b.CPUSet {
+		if err = initCpuset(cpuSetPath); err != nil {
 			return
 		}
 	}
 
 	return &Cgroup{
 		prefix:  b.Prefix,
+		cpuset:  NewSubCgroup(cpuSetPath),
 		cpuacct: NewSubCgroup(cpuacctPath),
 		memory:  NewSubCgroup(memoryPath),
 		pids:    NewSubCgroup(pidsPath),
@@ -51,14 +68,10 @@ func (b *Builder) Build() (cg *Cgroup, err error) {
 
 // AddProc writes cgroup.procs to all sub-cgroup
 func (c *Cgroup) AddProc(pid int) error {
-	if err := c.cpuacct.WriteUint(cgroupProcs, uint64(pid)); err != nil {
-		return err
-	}
-	if err := c.memory.WriteUint(cgroupProcs, uint64(pid)); err != nil {
-		return err
-	}
-	if err := c.pids.WriteUint(cgroupProcs, uint64(pid)); err != nil {
-		return err
+	for _, s := range []*SubCgroup{c.cpuset, c.cpuset, c.memory, c.pids} {
+		if err := s.WriteUint(cgroupProcs, uint64(pid)); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -66,16 +79,22 @@ func (c *Cgroup) AddProc(pid int) error {
 // Destroy removes dir for sub-cgroup, errors are ignored if remove one failed
 func (c *Cgroup) Destroy() error {
 	var err1 error
-	if err := remove(c.cpuacct.path); err != nil {
-		err1 = err
-	}
-	if err := remove(c.memory.path); err != nil {
-		err1 = err
-	}
-	if err := remove(c.pids.path); err != nil {
-		err1 = err
+	for _, s := range []*SubCgroup{c.cpuset, c.cpuset, c.memory, c.pids} {
+		if err := remove(s.path); err != nil {
+			err1 = err
+		}
 	}
 	return err1
+}
+
+// SetCpusetCpus set cpuset.cpus
+func (c *Cgroup) SetCpusetCpus(b []byte) error {
+	return c.cpuset.WriteFile("cpuset.cpus", b)
+}
+
+// SetCpusetMems set cpuset.mems
+func (c *Cgroup) SetCpusetMems(b []byte) error {
+	return c.cpuset.WriteFile("cpuset.mems", b)
 }
 
 // CpuacctUsage read cpuacct.usage in ns
@@ -126,6 +145,36 @@ func (c *Cgroup) FindMemoryStatProperty(prop string) (uint64, error) {
 			return i, nil
 		}
 	}
+}
+
+// initCpuset will copy the config from the parent cpu sets if not exists
+func initCpuset(path string) error {
+	for _, f := range []string{"cpuset.cpus", "cpuset.mems"} {
+		if err := copyCgroupPropertyFromParent(path, f); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyCgroupPropertyFromParent(path, name string) error {
+	// ensure current one empty
+	b, err := ioutil.ReadFile(filepath.Join(path, name))
+	if err != nil {
+		return err
+	}
+	if len(strings.TrimSpace(string(b))) > 0 {
+		return nil
+	}
+	// otherwise copy from parent, first to ensure it is empty by recurssion
+	if err := copyCgroupPropertyFromParent(filepath.Dir(path), name); err != nil {
+		return err
+	}
+	b, err = ioutil.ReadFile(filepath.Join(filepath.Dir(path), name))
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(filepath.Join(path, name), b, filePerm)
 }
 
 func remove(name string) error {

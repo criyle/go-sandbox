@@ -49,10 +49,13 @@ func (c *SubCgroup) ReadUint(filename string) (uint64, error) {
 // WriteFile writes cgroup file and handles potential EINTR error while writes to
 // the slow device (cgroup)
 func (c *SubCgroup) WriteFile(name string, content []byte) error {
+	if c.path == "" {
+		return ErrNotInitialized
+	}
 	p := path.Join(c.path, name)
-	err := ioutil.WriteFile(p, content, 0664)
+	err := ioutil.WriteFile(p, content, filePerm)
 	for err != nil && errors.Is(err, syscall.EINTR) {
-		err = ioutil.WriteFile(p, content, 0664)
+		err = ioutil.WriteFile(p, content, filePerm)
 	}
 	return err
 }
@@ -60,6 +63,9 @@ func (c *SubCgroup) WriteFile(name string, content []byte) error {
 // ReadFile reads cgroup file and handles potential EINTR error while read to
 // the slow device (cgroup)
 func (c *SubCgroup) ReadFile(name string) ([]byte, error) {
+	if c.path == "" {
+		return nil, nil
+	}
 	p := path.Join(c.path, name)
 	data, err := ioutil.ReadFile(p)
 	for err != nil && errors.Is(err, syscall.EINTR) {

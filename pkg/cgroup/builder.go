@@ -8,8 +8,12 @@ import (
 // Builder builds cgroup directories
 // available: cpuacct, memory, pids
 type Builder struct {
-	Prefix                string
-	CPUAcct, Memory, Pids bool
+	Prefix string
+
+	CPUSet  bool
+	CPUAcct bool
+	Memory  bool
+	Pids    bool
 }
 
 // NewBuilder return a dumb builder without any sub-cgroup
@@ -17,6 +21,12 @@ func NewBuilder(prefix string) *Builder {
 	return &Builder{
 		Prefix: prefix,
 	}
+}
+
+// WithCPUSet includes cpuset cgroup
+func (b *Builder) WithCPUSet() *Builder {
+	b.CPUSet = true
+	return b
 }
 
 // WithCPUAcct includes cpuacct cgroup
@@ -43,6 +53,7 @@ func (b *Builder) FilterByEnv() (*Builder, error) {
 	if err != nil {
 		return b, err
 	}
+	b.CPUSet = b.CPUSet && m["cpuset"]
 	b.CPUAcct = b.CPUAcct && m["cpuacct"]
 	b.Memory = b.Memory && m["memory"]
 	b.Pids = b.Pids && m["pids"]
@@ -56,6 +67,7 @@ func (b *Builder) String() string {
 		name    string
 		enabled bool
 	}{
+		{"cpuset", b.CPUSet},
 		{"cpuacct", b.CPUAcct},
 		{"memory", b.Memory},
 		{"pids", b.Pids},

@@ -5,4 +5,6 @@ const (
 	basePath        = "/sys/fs/cgroup"
 	cgroupProcs     = "cgroup.procs"
 	procCgroupsPath = "/proc/cgroups"
+
+	filePerm = 0644
 )
