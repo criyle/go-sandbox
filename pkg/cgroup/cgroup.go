@@ -68,7 +68,7 @@ func (b *Builder) Build() (cg *Cgroup, err error) {
 
 // AddProc writes cgroup.procs to all sub-cgroup
 func (c *Cgroup) AddProc(pid int) error {
-	for _, s := range []*SubCgroup{c.cpuset, c.cpuset, c.memory, c.pids} {
+	for _, s := range []*SubCgroup{c.cpuset, c.cpuacct, c.memory, c.pids} {
 		if err := s.WriteUint(cgroupProcs, uint64(pid)); err != nil {
 			return err
 		}
