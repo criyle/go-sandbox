@@ -249,6 +249,19 @@ func start() (*runner.Result, error) {
 	if showDetails {
 		actionDefault = seccomp.ActionTrace.WithReturnCode(seccomp.MsgDisallow)
 	}
+	if runt != "ptrace" {
+		allow = append(allow, trace...)
+		trace = nil
+	}
+	builder := libseccomp.Builder{
+		Allow:   allow,
+		Trace:   trace,
+		Default: actionDefault,
+	}
+	filter, err := builder.Build()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create seccomp filter %v", err)
+	}
 
 	limit := runner.Limit{
 		TimeLimit:   time.Duration(timeLimit) * time.Second,
@@ -296,18 +309,11 @@ func start() (*runner.Result, error) {
 				Files:    fds,
 				ExecFile: execFile,
 				RLimits:  rlims.PrepareRLimit(),
+				Seccomp:  filter,
 				SyncFunc: syncFunc,
 			},
 		}
 	} else if runt == "ns" {
-		builder := libseccomp.Builder{
-			Allow:   append(allow, trace...),
-			Default: actionDefault,
-		}
-		filter, err := builder.Build()
-		if err != nil {
-			return nil, fmt.Errorf("cannot build seccomp filter %v", err)
-		}
 		root, err := ioutil.TempDir("", "ns")
 		if err != nil {
 			return nil, fmt.Errorf("cannot make temp root for new namespace")
@@ -330,15 +336,6 @@ func start() (*runner.Result, error) {
 			DomainName:  "run_program",
 		}
 	} else if runt == "ptrace" {
-		builder := libseccomp.Builder{
-			Allow:   allow,
-			Trace:   trace,
-			Default: actionDefault,
-		}
-		filter, err := builder.Build()
-		if err != nil {
-			return nil, fmt.Errorf("failed to create seccomp filter %v", err)
-		}
 		r = &ptrace.Runner{
 			Args:        args,
 			Env:         []string{pathEnv},

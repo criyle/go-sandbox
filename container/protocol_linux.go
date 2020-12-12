@@ -7,6 +7,7 @@ import (
 
 	"github.com/criyle/go-sandbox/pkg/mount"
 	"github.com/criyle/go-sandbox/pkg/rlimit"
+	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/runner"
 )
 
@@ -37,6 +38,7 @@ type execCmd struct {
 	Argv    []string        // execve argv
 	Env     []string        // execve env
 	RLimits []rlimit.RLimit // execve posix rlimit
+	Seccomp seccomp.Filter  // seccomp filter
 	FdExec  bool            // if use fexecve (fd[0] as exec)
 	CTTY    bool            // if set CTTY
 }

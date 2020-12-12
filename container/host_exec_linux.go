@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/criyle/go-sandbox/pkg/rlimit"
+	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
 	"github.com/criyle/go-sandbox/runner"
 )
@@ -26,6 +27,9 @@ type ExecveParam struct {
 
 	// RLimits specifies POSIX Resource limit through setrlimit
 	RLimits []rlimit.RLimit
+
+	// Seccomp specifies seccomp filter
+	Seccomp seccomp.Filter
 
 	// CTTY specifies whether to set controlling TTY
 	CTTY bool
@@ -64,6 +68,7 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan runner
 		Argv:    param.Args,
 		Env:     param.Env,
 		RLimits: param.RLimits,
+		Seccomp: param.Seccomp,
 		FdExec:  param.ExecFile > 0,
 		CTTY:    param.CTTY,
 	}

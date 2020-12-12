@@ -65,6 +65,11 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 		}
 	}
 
+	var seccomp *syscall.SockFprog
+	if cmd.Seccomp != nil {
+		seccomp = cmd.Seccomp.SockFprog()
+	}
+
 	r := forkexec.Runner{
 		Args:       cmd.Argv,
 		Env:        cmd.Env,
@@ -77,6 +82,7 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 		SyncFunc:   syncFunc,
 		Credential: cred,
 		CTTY:       cmd.CTTY,
+		Seccomp:    seccomp,
 
 		UnshareCgroupAfterSync: true,
 	}
