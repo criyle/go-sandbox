@@ -48,6 +48,10 @@ type Builder struct {
 
 	// DomainName set container domainname (default: go-sandbox)
 	DomainName string
+
+	// ContainerUID & ContainerGID set the container uid / gid mapping
+	ContainerUID int
+	ContainerGID int
 }
 
 // CredGenerator generates uid / gid credential used by container
@@ -123,6 +127,8 @@ func (b *Builder) Build() (Environment, error) {
 		ContainerRoot: root,
 		Mounts:        mounts,
 		Cred:          b.CredGenerator != nil,
+		ContainerUID:  b.ContainerUID,
+		ContainerGID:  b.ContainerGID,
 	}); err != nil {
 		c.Destroy()
 		return nil, err
@@ -153,7 +159,7 @@ func (b *Builder) startContainer() (*container, error) {
 	// prepare container running credential
 	if b.CredGenerator != nil {
 		cred = b.CredGenerator.Get()
-		uidMap, gidMap = getIDMapping(&cred)
+		uidMap, gidMap = b.getIDMapping(&cred)
 	} else {
 		uidMap = []syscall.SysProcIDMap{{HostID: os.Geteuid(), Size: 1}}
 		gidMap = []syscall.SysProcIDMap{{HostID: os.Getegid(), Size: 1}}
@@ -226,7 +232,17 @@ func newPassCredSocketPair() (*unixsocket.Socket, *unixsocket.Socket, error) {
 	return ins, outs, nil
 }
 
-func getIDMapping(cred *syscall.Credential) ([]syscall.SysProcIDMap, []syscall.SysProcIDMap) {
+func (b *Builder) getIDMapping(cred *syscall.Credential) ([]syscall.SysProcIDMap, []syscall.SysProcIDMap) {
+	cUID := b.ContainerUID
+	if cUID == 0 {
+		cUID = containerUID
+	}
+
+	cGID := b.ContainerGID
+	if cGID == 0 {
+		cGID = containerGID
+	}
+
 	uidMap := []syscall.SysProcIDMap{
 		{
 			ContainerID: 0,
@@ -234,7 +250,7 @@ func getIDMapping(cred *syscall.Credential) ([]syscall.SysProcIDMap, []syscall.S
 			Size:        1,
 		},
 		{
-			ContainerID: containerUID,
+			ContainerID: cUID,
 			HostID:      int(cred.Uid),
 			Size:        1,
 		},
@@ -247,7 +263,7 @@ func getIDMapping(cred *syscall.Credential) ([]syscall.SysProcIDMap, []syscall.S
 			Size:        1,
 		},
 		{
-			ContainerID: containerGID,
+			ContainerID: cGID,
 			HostID:      int(cred.Gid),
 			Size:        1,
 		},

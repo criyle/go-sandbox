@@ -59,8 +59,8 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 
 	if c.Cred {
 		cred = &syscall.Credential{
-			Uid:         containerUID,
-			Gid:         containerGID,
+			Uid:         uint32(c.ContainerUID),
+			Gid:         uint32(c.ContainerGID),
 			NoSetGroups: true,
 		}
 	}

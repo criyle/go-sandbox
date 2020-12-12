@@ -18,6 +18,12 @@ func (c *containerServer) handleConf(conf *confCmd) error {
 		if err := initContainer(conf.Conf); err != nil {
 			return err
 		}
+		if c.ContainerUID == 0 {
+			c.ContainerUID = containerUID
+		}
+		if c.ContainerGID == 0 {
+			c.ContainerGID = containerGID
+		}
 	}
 	return c.sendReply(&reply{}, nil)
 }
