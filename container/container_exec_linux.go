@@ -88,6 +88,10 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 	}
 	// starts the runner, error is handled same as wait4 to make communication equal
 	pid, err := r.Start()
+	if err != nil {
+		// cannot exists now since host assumes the start will alway work
+		err = fmt.Errorf("execve: start: %v", err)
+	}
 
 	// done is to signal kill goroutine exits
 	killDone := make(chan struct{})
@@ -120,12 +124,15 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 		for err == syscall.EINTR {
 			_, err = syscall.Wait4(pid, &wstatus, 0, &rusage)
 		}
+		if err != nil {
+			err = fmt.Errorf("execve: wait4: %v", err)
+		}
 	}
 	// sync with kill goroutine
 	close(waitDone)
 
 	if err != nil {
-		c.sendErrorReply("execve: wait4 %v", err)
+		c.sendErrorReply(err.Error())
 	} else {
 		status := runner.StatusNormal
 		userTime := time.Duration(rusage.Utime.Nano()) // ns
