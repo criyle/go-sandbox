@@ -13,62 +13,77 @@ import (
 type Cgroup struct {
 	prefix string
 
+	cpu     *SubCgroup
 	cpuset  *SubCgroup
 	cpuacct *SubCgroup
 	memory  *SubCgroup
 	pids    *SubCgroup
+
+	all []*SubCgroup
 }
 
 // Build creates new cgrouup directories
 func (b *Builder) Build() (cg *Cgroup, err error) {
 	var (
-		cpuSetPath, cpuacctPath, memoryPath, pidsPath string
+		paths     []string
+		subCgroup = make(map[int]*SubCgroup)
+		info      = getCachedCgroupHierarchy()
 	)
 	// if failed, remove potential created directory
 	defer func() {
 		if err != nil {
-			remove(cpuSetPath)
-			remove(cpuacctPath)
-			remove(memoryPath)
-			remove(pidsPath)
+			removeAll(paths...)
 		}
 	}()
 	for _, c := range []struct {
 		enable bool
 		name   string
-		path   *string
 	}{
-		{b.CPUSet, "cpuset", &cpuSetPath},
-		{b.CPUAcct, "cpuacct", &cpuacctPath},
-		{b.Memory, "memory", &memoryPath},
-		{b.Pids, "pids", &pidsPath},
+		{b.CPU, "cpu"},
+		{b.CPUSet, "cpuset"},
+		{b.CPUAcct, "cpuacct"},
+		{b.Memory, "memory"},
+		{b.Pids, "pids"},
 	} {
 		if !c.enable {
 			continue
 		}
-		if *c.path, err = CreateSubCgroupPath(c.name, b.Prefix); err != nil {
-			return
+		h := info[c.name]
+		if subCgroup[h] == nil {
+			var path string
+			if path, err = CreateSubCgroupPath(c.name, b.Prefix); err != nil {
+				return
+			}
+			paths = append(paths, path)
+			subCgroup[h] = NewSubCgroup(path)
 		}
 	}
 
 	if b.CPUSet {
-		if err = initCpuset(cpuSetPath); err != nil {
+		if err = initCpuset(subCgroup[info["cpuset"]].path); err != nil {
 			return
 		}
 	}
 
+	var all []*SubCgroup
+	for _, v := range subCgroup {
+		all = append(all, v)
+	}
+
 	return &Cgroup{
 		prefix:  b.Prefix,
-		cpuset:  NewSubCgroup(cpuSetPath),
-		cpuacct: NewSubCgroup(cpuacctPath),
-		memory:  NewSubCgroup(memoryPath),
-		pids:    NewSubCgroup(pidsPath),
+		cpu:     subCgroup[info["cpu"]],
+		cpuset:  subCgroup[info["cpuset"]],
+		cpuacct: subCgroup[info["cpuacct"]],
+		memory:  subCgroup[info["memory"]],
+		pids:    subCgroup[info["pids"]],
+		all:     all,
 	}, nil
 }
 
 // AddProc writes cgroup.procs to all sub-cgroup
 func (c *Cgroup) AddProc(pid int) error {
-	for _, s := range []*SubCgroup{c.cpuset, c.cpuacct, c.memory, c.pids} {
+	for _, s := range c.all {
 		if err := s.WriteUint(cgroupProcs, uint64(pid)); err != nil {
 			return err
 		}
@@ -79,12 +94,22 @@ func (c *Cgroup) AddProc(pid int) error {
 // Destroy removes dir for sub-cgroup, errors are ignored if remove one failed
 func (c *Cgroup) Destroy() error {
 	var err1 error
-	for _, s := range []*SubCgroup{c.cpuset, c.cpuset, c.memory, c.pids} {
+	for _, s := range c.all {
 		if err := remove(s.path); err != nil {
 			err1 = err
 		}
 	}
 	return err1
+}
+
+// SetCPUCfsPeriod set cpu.cfs_period_us in us
+func (c *Cgroup) SetCPUCfsPeriod(p uint64) error {
+	return c.cpu.WriteUint("cpu.cfs_period_us", p)
+}
+
+// SetCPUCfsQuota set cpu.cfs_quota_us in us
+func (c *Cgroup) SetCPUCfsQuota(p uint64) error {
+	return c.cpu.WriteUint("cpu.cfs_quota_us", p)
 }
 
 // SetCpusetCpus set cpuset.cpus
@@ -110,6 +135,16 @@ func (c *Cgroup) MemoryMaxUsageInBytes() (uint64, error) {
 // SetMemoryLimitInBytes write memory.limit_in_bytes
 func (c *Cgroup) SetMemoryLimitInBytes(i uint64) error {
 	return c.memory.WriteUint("memory.limit_in_bytes", i)
+}
+
+// MemoryMemswMaxUsageInBytes read memory.memsw.max_usage_in_bytes
+func (c *Cgroup) MemoryMemswMaxUsageInBytes() (uint64, error) {
+	return c.memory.ReadUint("memory.memsw.max_usage_in_bytes")
+}
+
+// SetMemoryMemswLimitInBytes write memory.memsw.limit_in_bytes
+func (c *Cgroup) SetMemoryMemswLimitInBytes(i uint64) error {
+	return c.memory.WriteUint("memory.memsw.limit_in_bytes", i)
 }
 
 // SetPidsMax write pids.max
@@ -182,4 +217,15 @@ func remove(name string) error {
 		return os.Remove(name)
 	}
 	return nil
+}
+
+func removeAll(name ...string) error {
+	var err1 error
+	for _, n := range name {
+		err := remove(n)
+		if err != nil && err1 == nil {
+			err1 = err
+		}
+	}
+	return err1
 }

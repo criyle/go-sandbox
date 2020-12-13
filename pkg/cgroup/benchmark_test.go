@@ -6,7 +6,7 @@ import (
 )
 
 func BenchmarkCgroup(b *testing.B) {
-	builder, err := NewBuilder("benchmark").WithCPUSet().WithCPUAcct().WithMemory().WithPids().FilterByEnv()
+	builder, err := NewBuilder("benchmark").WithCPU().WithCPUSet().WithCPUAcct().WithMemory().WithPids().FilterByEnv()
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -36,11 +36,11 @@ func BenchmarkCgroup(b *testing.B) {
 }
 
 func TestCgroupAll(t *testing.T) {
-	// ensure root privillege when testing
+	// ensure root privilege when testing
 	if os.Getuid() != 0 {
 		t.Skip("no root privillege")
 	}
-	builder, err := NewBuilder("test").WithCPUSet().WithCPUAcct().WithMemory().WithPids().FilterByEnv()
+	builder, err := NewBuilder("test").WithCPU().WithCPUSet().WithCPUAcct().WithMemory().WithPids().FilterByEnv()
 	if err != nil {
 		t.Fatal(err)
 	}

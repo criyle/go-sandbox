@@ -10,6 +10,7 @@ import (
 type Builder struct {
 	Prefix string
 
+	CPU     bool
 	CPUSet  bool
 	CPUAcct bool
 	Memory  bool
@@ -21,6 +22,12 @@ func NewBuilder(prefix string) *Builder {
 	return &Builder{
 		Prefix: prefix,
 	}
+}
+
+// WithCPU includes cpu cgroup
+func (b *Builder) WithCPU() *Builder {
+	b.CPU = true
+	return b
 }
 
 // WithCPUSet includes cpuset cgroup

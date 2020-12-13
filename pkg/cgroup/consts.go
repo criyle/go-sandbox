@@ -7,4 +7,5 @@ const (
 	procCgroupsPath = "/proc/cgroups"
 
 	filePerm = 0644
+	dirPerm  = 0755
 )

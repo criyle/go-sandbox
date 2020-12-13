@@ -2,12 +2,13 @@
 // under systemd defined mount path (i.e.,sys/fs/cgroup).
 //
 // Current available:
+//  cpu
+//  cpuset
 //  cpuacct
 //  memory
 //  pids
-//  cpuset
 //
-// Current not available: cpu, cpuset, devices, freezer, net_cls, blkio, perf_event, net_prio, huge_tlb, rdma
+// Current not available: devices, freezer, net_cls, blkio, perf_event, net_prio, huge_tlb, rdma
 //
 // Additional ideas:
 //
