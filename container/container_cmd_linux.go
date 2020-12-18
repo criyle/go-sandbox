@@ -3,6 +3,7 @@ package container
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"syscall"
 
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
@@ -62,7 +63,7 @@ func (c *containerServer) handleReset() error {
 		if !m.IsTmpFs() {
 			continue
 		}
-		if err := removeContents(m.Target); err != nil {
+		if err := removeContents(filepath.Join("/", m.Target)); err != nil {
 			return c.sendErrorReply("reset: %v %v", m.Target, err)
 		}
 	}
