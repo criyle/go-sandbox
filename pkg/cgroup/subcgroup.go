@@ -24,7 +24,7 @@ func NewSubCgroup(p string) *SubCgroup {
 
 // WriteUint writes uint64 into given file
 func (c *SubCgroup) WriteUint(filename string, i uint64) error {
-	if c.path == "" {
+	if c == nil || c.path == "" {
 		return nil
 	}
 	return c.WriteFile(filename, []byte(strconv.FormatUint(i, 10)))
@@ -32,7 +32,7 @@ func (c *SubCgroup) WriteUint(filename string, i uint64) error {
 
 // ReadUint read uint64 from given file
 func (c *SubCgroup) ReadUint(filename string) (uint64, error) {
-	if c.path == "" {
+	if c == nil || c.path == "" {
 		return 0, ErrNotInitialized
 	}
 	b, err := c.ReadFile(filename)
@@ -49,7 +49,7 @@ func (c *SubCgroup) ReadUint(filename string) (uint64, error) {
 // WriteFile writes cgroup file and handles potential EINTR error while writes to
 // the slow device (cgroup)
 func (c *SubCgroup) WriteFile(name string, content []byte) error {
-	if c.path == "" {
+	if c == nil || c.path == "" {
 		return ErrNotInitialized
 	}
 	p := path.Join(c.path, name)
@@ -63,7 +63,7 @@ func (c *SubCgroup) WriteFile(name string, content []byte) error {
 // ReadFile reads cgroup file and handles potential EINTR error while read to
 // the slow device (cgroup)
 func (c *SubCgroup) ReadFile(name string) ([]byte, error) {
-	if c.path == "" {
+	if c == nil || c.path == "" {
 		return nil, nil
 	}
 	p := path.Join(c.path, name)
