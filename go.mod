@@ -8,7 +8,6 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/stretchr/testify v1.6.1 // indirect
-	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
 	golang.org/x/net v0.0.0-20201216054612-986b41b23924
 	golang.org/x/sys v0.0.0-20201223074533-0d417f636930
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
