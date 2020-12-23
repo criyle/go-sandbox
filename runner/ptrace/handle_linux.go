@@ -8,7 +8,6 @@ import (
 
 	"github.com/criyle/go-sandbox/pkg/seccomp/libseccomp"
 	"github.com/criyle/go-sandbox/ptracer"
-	"github.com/criyle/go-sandbox/runner"
 )
 
 type tracerHandler struct {
@@ -59,17 +58,15 @@ func (h *tracerHandler) checkStat(ctx *ptracer.Context, addr uint) ptracer.Trace
 }
 
 func (h *tracerHandler) Handle(ctx *ptracer.Context) ptracer.TraceAction {
-	var (
-		action           ptracer.TraceAction
-		syscallNo        = ctx.SyscallNo()
-		syscallName, err = libseccomp.ToSyscallName(syscallNo)
-	)
-	h.Debug("syscall: ", syscallNo, syscallName, err)
+	syscallNo := ctx.SyscallNo()
+	syscallName, err := libseccomp.ToSyscallName(syscallNo)
+	h.Debug("syscall:", syscallNo, syscallName, err)
 	if err != nil {
 		h.Debug("invalid syscall no")
 		return ptracer.TraceKill
 	}
 
+	action := ptracer.TraceKill
 	switch syscallName {
 	case "open":
 		action = h.checkOpen(ctx, ctx.Arg0(), ctx.Arg1())
@@ -105,8 +102,12 @@ func (h *tracerHandler) Handle(ctx *ptracer.Context) ptracer.TraceAction {
 		action = h.checkWrite(ctx, ctx.Arg0())
 	case "rename":
 		action = h.checkWrite(ctx, ctx.Arg0())
+
 	default:
 		action = h.Handler.CheckSyscall(syscallName)
+		if h.Unsafe && action == ptracer.TraceKill {
+			action = ptracer.TraceBan
+		}
 	}
 
 	switch action {
@@ -118,18 +119,6 @@ func (h *tracerHandler) Handle(ctx *ptracer.Context) ptracer.TraceAction {
 	default:
 		return ptracer.TraceKill
 	}
-}
-
-func (h *tracerHandler) GetSyscallName(ctx *ptracer.Context) (string, error) {
-	syscallNo := ctx.SyscallNo()
-	return libseccomp.ToSyscallName(syscallNo)
-}
-
-func (h *tracerHandler) HandlerDisallow(name string) error {
-	if !h.Unsafe {
-		return runner.StatusDisallowedSyscall
-	}
-	return nil
 }
 
 func softBanSyscall(ctx *ptracer.Context) ptracer.TraceAction {

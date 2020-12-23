@@ -90,7 +90,7 @@ func (c *containerServer) handleCmd(cmd *cmd, msg *unixsocket.Msg) error {
 	case cmdExecve:
 		return c.handleExecve(cmd.ExecCmd, msg)
 	}
-	return fmt.Errorf("unknown command: %s", cmd.Cmd)
+	return fmt.Errorf("unknown command: %v", cmd.Cmd)
 }
 
 func initContainer(c containerConfig) error {

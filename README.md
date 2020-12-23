@@ -163,7 +163,7 @@ type Environment interface {
 
 ## Packages
 
-- config: defines arch & language specified trace condition for ptrace runner from UOJ
+- cmd/runprog/config: defines arch & language specified trace condition for ptrace runner from UOJ
 - container: creates pre-forked container to run programs inside
 - runner: interface to run program
   - ptrace: wrapper to call forkexec and ptracer

@@ -92,7 +92,10 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 		// cannot exists now since host assumes the start will alway work
 		err = fmt.Errorf("execve: start: %v", err)
 	}
+	return c.handleExecveStarted(pid, err)
+}
 
+func (c *containerServer) handleExecveStarted(pid int, err error) error {
 	// done is to signal kill goroutine exits
 	killDone := make(chan struct{})
 	// waitDone is to signal kill goroutine to collect zombies

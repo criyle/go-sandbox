@@ -1,15 +1,15 @@
 package container
 
 const (
-	cmdPing   = "ping"
-	cmdCopyIn = "copyin"
-	cmdOpen   = "open"
-	cmdDelete = "delete"
-	cmdReset  = "reset"
-	cmdExecve = "execve"
-	cmdOk     = "ok"
-	cmdKill   = "kill"
-	cmdConf   = "conf"
+	cmdPing cmdType = iota + 1
+	cmdCopyIn
+	cmdOpen
+	cmdDelete
+	cmdReset
+	cmdExecve
+	cmdOk
+	cmdKill
+	cmdConf
 
 	initArg = "container_init"
 

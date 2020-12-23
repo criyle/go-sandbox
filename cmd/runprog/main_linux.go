@@ -13,14 +13,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/criyle/go-sandbox/config"
+	"github.com/criyle/go-sandbox/cmd/runprog/config"
 	"github.com/criyle/go-sandbox/container"
 	"github.com/criyle/go-sandbox/pkg/cgroup"
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/pkg/memfd"
 	"github.com/criyle/go-sandbox/pkg/mount"
 	"github.com/criyle/go-sandbox/pkg/rlimit"
-	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/pkg/seccomp/libseccomp"
 	"github.com/criyle/go-sandbox/runner"
 	"github.com/criyle/go-sandbox/runner/ptrace"
@@ -245,9 +244,9 @@ func start() (*runner.Result, error) {
 	}
 	debug("rlimit: ", rlims)
 
-	actionDefault := seccomp.ActionKill
+	actionDefault := libseccomp.ActionKill
 	if showDetails {
-		actionDefault = seccomp.ActionTrace.WithReturnCode(seccomp.MsgDisallow)
+		actionDefault = libseccomp.ActionTrace
 	}
 	if runt != "ptrace" {
 		allow = append(allow, trace...)

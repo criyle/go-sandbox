@@ -37,6 +37,8 @@ var (
 		"ioctl",
 		"fcntl",
 		"fadvise64",
+		"pread64",
+		"pwrite64",
 
 		// memory action
 		"mmap",

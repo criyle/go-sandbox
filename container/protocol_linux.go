@@ -11,9 +11,11 @@ import (
 	"github.com/criyle/go-sandbox/runner"
 )
 
+type cmdType int
+
 // cmd is the control message send into container
 type cmd struct {
-	Cmd string // type of the cmd
+	Cmd cmdType // type of the cmd
 
 	OpenCmd   []OpenCmd  // open argument
 	DeleteCmd *deleteCmd // delete argument

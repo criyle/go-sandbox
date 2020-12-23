@@ -33,7 +33,7 @@ func BenchmarkBuildDefaultFilter(b *testing.B) {
 		builder := Builder{
 			Allow:   defaultSyscallAllows,
 			Trace:   defaultSyscallTraces,
-			Default: seccomp.ActionTrace,
+			Default: ActionTrace,
 		}
 		builder.Build()
 	}
@@ -43,7 +43,7 @@ func buildFilterMock() (seccomp.Filter, error) {
 	b := Builder{
 		Allow:   []string{"fork"},
 		Trace:   []string{"execve"},
-		Default: seccomp.ActionTrace,
+		Default: ActionTrace,
 	}
 	return b.Build()
 }
