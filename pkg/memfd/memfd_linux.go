@@ -34,9 +34,9 @@ func DupToMemfd(name string, reader io.Reader) (*os.File, error) {
 		return nil, fmt.Errorf("DupToMemfd: %v", err)
 	}
 	// linux syscall sendfile might be more efficient here if reader is a file
-	if _, err = io.Copy(file, reader); err != nil {
+	if _, err = file.ReadFrom(reader); err != nil {
 		file.Close()
-		return nil, fmt.Errorf("DupToMemfd: io.Copy %v", err)
+		return nil, fmt.Errorf("DupToMemfd: read from %v", err)
 	}
 	// make memfd readonly
 	if _, err = unix.FcntlInt(file.Fd(), unix.F_ADD_SEALS, roSeal); err != nil {

@@ -1,7 +1,6 @@
 package forkexec
 
 import (
-	"io"
 	"io/ioutil"
 	"os"
 	"syscall"
@@ -41,7 +40,7 @@ func TestFork_ETXTBSY(t *testing.T) {
 	}
 	defer echo.Close()
 
-	_, err = io.Copy(f, echo)
+	_, err = f.ReadFrom(echo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +73,7 @@ func TestFork_OK(t *testing.T) {
 	}
 	defer echo.Close()
 
-	_, err = io.Copy(f, echo)
+	_, err = f.ReadFrom(echo)
 	if err != nil {
 		t.Fatal(err)
 	}

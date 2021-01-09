@@ -190,6 +190,7 @@ func (b *Builder) startContainer() (*container, error) {
 			AmbientCaps: []uintptr{
 				unix.CAP_SYS_ADMIN,
 			},
+			Pdeathsig: syscall.SIGTERM,
 		},
 	}
 	if err = r.Start(); err != nil {
