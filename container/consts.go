@@ -1,5 +1,7 @@
 package container
 
+type cmdType int
+
 const (
 	cmdPing cmdType = iota + 1
 	cmdCopyIn
