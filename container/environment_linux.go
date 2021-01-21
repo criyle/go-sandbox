@@ -129,6 +129,7 @@ func (b *Builder) Build() (Environment, error) {
 		Cred:          b.CredGenerator != nil,
 		ContainerUID:  b.ContainerUID,
 		ContainerGID:  b.ContainerGID,
+		UnshareCgroup: b.CloneFlags&unix.CLONE_NEWCGROUP == unix.CLONE_NEWCGROUP,
 	}); err != nil {
 		c.Destroy()
 		return nil, err

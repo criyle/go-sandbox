@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // Cgroup is the combination of sub-cgroups
@@ -198,7 +197,7 @@ func copyCgroupPropertyFromParent(path, name string) error {
 	if err != nil {
 		return err
 	}
-	if len(strings.TrimSpace(string(b))) > 0 {
+	if len(bytes.TrimSpace(b)) > 0 {
 		return nil
 	}
 	// otherwise copy from parent, first to ensure it is empty by recurssion

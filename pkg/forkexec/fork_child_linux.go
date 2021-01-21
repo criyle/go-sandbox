@@ -282,14 +282,11 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	// if execfile fd is specified, call fexecve
 	if r.ExecFile > 0 {
 		_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, r.ExecFile,
-			uintptr(unsafe.Pointer(&empty[0])),
-			uintptr(unsafe.Pointer(&argv[0])),
+			uintptr(unsafe.Pointer(&empty[0])), uintptr(unsafe.Pointer(&argv[0])),
 			uintptr(unsafe.Pointer(&env[0])), unix.AT_EMPTY_PATH, 0)
 	} else {
-		_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, uintptr(_AT_FDCWD),
-			uintptr(unsafe.Pointer(argv0)),
-			uintptr(unsafe.Pointer(&argv[0])),
-			uintptr(unsafe.Pointer(&env[0])), 0, 0)
+		_, _, err1 = syscall.RawSyscall(unix.SYS_EXECVE, uintptr(unsafe.Pointer(argv0)),
+			uintptr(unsafe.Pointer(&argv[0])), uintptr(unsafe.Pointer(&env[0])))
 	}
 	// Fix potential ETXTBSY but with caution (max 50 attempt)
 	// The ETXTBSY happens when we copy the executable into container, another goroutine
@@ -304,14 +301,11 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 		syscall.RawSyscall(unix.SYS_NANOSLEEP, uintptr(unsafe.Pointer(&etxtbsyRetryInterval)), 0, 0)
 		if r.ExecFile > 0 {
 			_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, r.ExecFile,
-				uintptr(unsafe.Pointer(&empty[0])),
-				uintptr(unsafe.Pointer(&argv[0])),
+				uintptr(unsafe.Pointer(&empty[0])), uintptr(unsafe.Pointer(&argv[0])),
 				uintptr(unsafe.Pointer(&env[0])), unix.AT_EMPTY_PATH, 0)
 		} else {
-			_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, uintptr(_AT_FDCWD),
-				uintptr(unsafe.Pointer(argv0)),
-				uintptr(unsafe.Pointer(&argv[0])),
-				uintptr(unsafe.Pointer(&env[0])), 0, 0)
+			_, _, err1 = syscall.RawSyscall(unix.SYS_EXECVE, uintptr(unsafe.Pointer(argv0)),
+				uintptr(unsafe.Pointer(&argv[0])), uintptr(unsafe.Pointer(&env[0])))
 		}
 	}
 

@@ -25,11 +25,12 @@ import (
 	"github.com/criyle/go-sandbox/runner/ptrace"
 	"github.com/criyle/go-sandbox/runner/ptrace/filehandler"
 	"github.com/criyle/go-sandbox/runner/unshare"
+	"golang.org/x/sys/unix"
 )
 
 var (
 	addReadable, addWritable, addRawReadable, addRawWritable       arrayFlags
-	allowProc, unsafe, showDetails, useCGroup, memfile, cred       bool
+	allowProc, unsafe, showDetails, useCGroup, memfile, cred, nucg bool
 	timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint64
 	inputFileName, outputFileName, errorFileName, workPath, runt   string
 
@@ -66,6 +67,7 @@ func main() {
 	flag.BoolVar(&memfile, "memfd", false, "Use memfd as exec file")
 	flag.StringVar(&runt, "runner", "ptrace", "Runner for the program (ptrace, ns, container)")
 	flag.BoolVar(&cred, "cred", false, "Generate credential for containers (uid=10000)")
+	flag.BoolVar(&nucg, "nucg", false, "don't unshare cgroup")
 	flag.Parse()
 
 	args = flag.Args()
@@ -283,12 +285,17 @@ func start() (*runner.Result, error) {
 			stderr = os.Stderr
 		}
 
+		cloneFlag := forkexec.UnshareFlags
+		if nucg {
+			cloneFlag &= ^unix.CLONE_NEWCGROUP
+		}
+
 		b := container.Builder{
 			Root:          root,
 			Mounts:        mb.Mounts,
 			Stderr:        stderr,
 			CredGenerator: credG,
-			CloneFlags:    forkexec.UnshareFlags,
+			CloneFlags:    uintptr(cloneFlag),
 		}
 
 		m, err := b.Build()

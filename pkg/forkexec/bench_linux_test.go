@@ -157,7 +157,7 @@ func benchmarkRun(r *Runner, b *testing.B) {
 		for pb.Next() {
 			pid, err := r.Start()
 			if err != nil {
-				b.Fail()
+				b.Fatal(err)
 			}
 			wait4(pid, b)
 		}

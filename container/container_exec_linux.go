@@ -84,7 +84,7 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 		CTTY:       cmd.CTTY,
 		Seccomp:    seccomp,
 
-		UnshareCgroupAfterSync: true,
+		UnshareCgroupAfterSync: c.UnshareCgroup,
 	}
 	// starts the runner, error is handled same as wait4 to make communication equal
 	pid, err := r.Start()

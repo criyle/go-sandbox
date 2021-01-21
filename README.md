@@ -179,6 +179,17 @@ type Environment interface {
 
 - config/config.go: all configs toward running specs (similar to UOJ)
 
+## Kernel Versions
+
+- 4.14: SECCOMP_RET_KILL_PROCESS 
+- 4.6: CLONE_NEWCGROUP
+- 3.19: execveat()
+- 3.17: seccomp, memfd_create
+- 3.10: CentOS 7
+- 3.8: CLONE_NEWUSER without CAP_SYS_ADMIN, CAP_SETUID, CAP_SETGID
+- 3.5: prctl(PR_SET_NO_NEW_PRIVS)
+- 2.6.36: prlimit64
+
 ## Benchmarks
 
 ### ForkExec

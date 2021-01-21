@@ -58,9 +58,10 @@ type containerConfig struct {
 	ContainerRoot string
 	Mounts        []mount.Mount
 
-	Cred         bool
-	ContainerUID int
-	ContainerGID int
+	ContainerUID  int
+	ContainerGID  int
+	Cred          bool
+	UnshareCgroup bool
 }
 
 // reply is the reply message send back to controller
