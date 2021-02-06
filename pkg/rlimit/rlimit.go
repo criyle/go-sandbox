@@ -17,6 +17,7 @@ type RLimits struct {
 	FileSize     uint64 // in bytes
 	Stack        uint64 // in bytes
 	AddressSpace uint64 // in bytes
+	DisableCore  bool   // set core to 0
 }
 
 // RLimit is the resource limits defined by Linux setrlimit
@@ -70,6 +71,12 @@ func (r *RLimits) PrepareRLimit() []RLimit {
 			Rlim: getRlimit(r.AddressSpace, r.AddressSpace),
 		})
 	}
+	if r.DisableCore {
+		ret = append(ret, RLimit{
+			Res:  syscall.RLIMIT_CORE,
+			Rlim: getRlimit(0, 0),
+		})
+	}
 	return ret
 }
 
@@ -87,6 +94,8 @@ func (r RLimit) String() string {
 		t = "Stack"
 	case syscall.RLIMIT_AS:
 		t = "AddressSpace"
+	case syscall.RLIMIT_CORE:
+		t = "Core"
 	}
 	return fmt.Sprintf("%s[%v:%v]", t, runner.Size(r.Rlim.Cur), runner.Size(r.Rlim.Max))
 }

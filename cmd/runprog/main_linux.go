@@ -239,10 +239,11 @@ func start() (*runner.Result, error) {
 	}
 
 	rlims := rlimit.RLimits{
-		CPU:      timeLimit,
-		CPUHard:  realTimeLimit,
-		FileSize: outputLimit << 20,
-		Stack:    stackLimit << 20,
+		CPU:         timeLimit,
+		CPUHard:     realTimeLimit,
+		FileSize:    outputLimit << 20,
+		Stack:       stackLimit << 20,
+		DisableCore: true,
 	}
 	debug("rlimit: ", rlims)
 
