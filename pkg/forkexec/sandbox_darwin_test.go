@@ -1,13 +1,12 @@
 package forkexec
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 )
 
 func TestWrite(t *testing.T) {
-	c, err := ioutil.ReadFile("test.sb")
+	c, err := os.ReadFile("test.sb")
 	if err != nil {
 		t.Error(err)
 		return

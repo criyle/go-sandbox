@@ -4,7 +4,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"syscall"
 	"time"
@@ -113,7 +112,7 @@ func start() (*runner.Result, error) {
 
 	var profile string
 	if profilePath != "" {
-		c, err := ioutil.ReadFile(profilePath)
+		c, err := os.ReadFile(profilePath)
 		if err != nil {
 			return nil, fmt.Errorf("profile: %v", err)
 		}

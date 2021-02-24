@@ -3,7 +3,6 @@ package cgroup
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 )
@@ -193,7 +192,7 @@ func initCpuset(path string) error {
 
 func copyCgroupPropertyFromParent(path, name string) error {
 	// ensure current one empty
-	b, err := ioutil.ReadFile(filepath.Join(path, name))
+	b, err := os.ReadFile(filepath.Join(path, name))
 	if err != nil {
 		return err
 	}
@@ -204,11 +203,11 @@ func copyCgroupPropertyFromParent(path, name string) error {
 	if err := copyCgroupPropertyFromParent(filepath.Dir(path), name); err != nil {
 		return err
 	}
-	b, err = ioutil.ReadFile(filepath.Join(filepath.Dir(path), name))
+	b, err = os.ReadFile(filepath.Join(filepath.Dir(path), name))
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(filepath.Join(path, name), b, filePerm)
+	return os.WriteFile(filepath.Join(path, name), b, filePerm)
 }
 
 func remove(name string) error {

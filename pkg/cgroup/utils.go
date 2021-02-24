@@ -1,7 +1,6 @@
 package cgroup
 
 import (
-	"io/ioutil"
 	"os"
 	"path"
 )
@@ -18,5 +17,5 @@ func EnsureDirExists(path string) error {
 func CreateSubCgroupPath(group, prefix string) (string, error) {
 	base := path.Join(basePath, group, prefix)
 	EnsureDirExists(base)
-	return ioutil.TempDir(base, "")
+	return os.MkdirTemp(base, "")
 }

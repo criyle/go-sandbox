@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 )
 
@@ -32,7 +31,7 @@ func NewPipe(writer io.Writer, n int64) (<-chan struct{}, *os.File, error) {
 		io.CopyN(writer, r, int64(n))
 		close(done)
 		// ensure no blocking / SIGPIPE on the other end
-		io.Copy(ioutil.Discard, r)
+		io.Copy(io.Discard, r)
 		r.Close()
 	}()
 	return done, w, nil

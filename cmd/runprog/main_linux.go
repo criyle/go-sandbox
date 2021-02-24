@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/signal"
 	"sync/atomic"
@@ -271,7 +270,7 @@ func start() (*runner.Result, error) {
 	}
 
 	if runt == "container" {
-		root, err := ioutil.TempDir("", "dm")
+		root, err := os.MkdirTemp("", "dm")
 		if err != nil {
 			return nil, fmt.Errorf("cannot make temp root for container namespace: %v", err)
 		}
@@ -321,7 +320,7 @@ func start() (*runner.Result, error) {
 			},
 		}
 	} else if runt == "ns" {
-		root, err := ioutil.TempDir("", "ns")
+		root, err := os.MkdirTemp("", "ns")
 		if err != nil {
 			return nil, fmt.Errorf("cannot make temp root for new namespace")
 		}

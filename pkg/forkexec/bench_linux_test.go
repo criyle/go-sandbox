@@ -1,7 +1,6 @@
 package forkexec
 
 import (
-	"io/ioutil"
 	"os"
 	"syscall"
 	"testing"
@@ -99,7 +98,7 @@ func BenchmarkUnshareNet(b *testing.B) {
 
 // BenchmarkFastUnshareMountPivot is about 104ms/op
 func BenchmarkFastUnshareMountPivot(b *testing.B) {
-	root, err := ioutil.TempDir("", "ns")
+	root, err := os.MkdirTemp("", "ns")
 	if err != nil {
 		b.Errorf("failed to create temp dir")
 	}
@@ -126,7 +125,7 @@ func BenchmarkUnshareAll(b *testing.B) {
 
 // BenchmarkUnshareMountPivot is about 880ms/op
 func BenchmarkUnshareMountPivot(b *testing.B) {
-	root, err := ioutil.TempDir("", "ns")
+	root, err := os.MkdirTemp("", "ns")
 	if err != nil {
 		b.Errorf("failed to create temp dir")
 	}

@@ -2,7 +2,7 @@ package cgroup
 
 import (
 	"errors"
-	"io/ioutil"
+	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -53,9 +53,9 @@ func (c *SubCgroup) WriteFile(name string, content []byte) error {
 		return ErrNotInitialized
 	}
 	p := path.Join(c.path, name)
-	err := ioutil.WriteFile(p, content, filePerm)
+	err := os.WriteFile(p, content, filePerm)
 	for err != nil && errors.Is(err, syscall.EINTR) {
-		err = ioutil.WriteFile(p, content, filePerm)
+		err = os.WriteFile(p, content, filePerm)
 	}
 	return err
 }
@@ -67,9 +67,9 @@ func (c *SubCgroup) ReadFile(name string) ([]byte, error) {
 		return nil, nil
 	}
 	p := path.Join(c.path, name)
-	data, err := ioutil.ReadFile(p)
+	data, err := os.ReadFile(p)
 	for err != nil && errors.Is(err, syscall.EINTR) {
-		data, err = ioutil.ReadFile(p)
+		data, err = os.ReadFile(p)
 	}
 	return data, err
 }

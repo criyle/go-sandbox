@@ -173,13 +173,14 @@ func (b *Builder) startContainer() (*container, error) {
 		cloneFlag = b.CloneFlags & forkexec.UnshareFlags
 	}
 
-	args := []string{os.Args[0], initArg}
+	exe := "/proc/self/exe"
 	if b.ExecFile != "" {
-		args[0] = b.ExecFile
+		exe = b.ExecFile
 	}
+	args := []string{exe, initArg}
 
 	r := exec.Cmd{
-		Path:       args[0],
+		Path:       exe,
 		Args:       args,
 		Env:        []string{PathEnv},
 		Stderr:     b.Stderr,

@@ -3,7 +3,6 @@ package container
 import (
 	"context"
 	"errors"
-	"io/ioutil"
 	"os"
 	"runtime"
 	"syscall"
@@ -17,7 +16,7 @@ func init() {
 }
 
 func BenchmarkContainer(b *testing.B) {
-	tmpDir, err := ioutil.TempDir("", "")
+	tmpDir, err := os.MkdirTemp("", "")
 	if err != nil {
 		b.Error(err)
 	}
@@ -122,7 +121,7 @@ func TestContainerSyncFuncFail(t *testing.T) {
 }
 
 func getEnv(t *testing.T, credGen CredGenerator) Environment {
-	tmpDir, err := ioutil.TempDir("", "")
+	tmpDir, err := os.MkdirTemp("", "")
 	if err != nil {
 		t.Fatal(err)
 	}

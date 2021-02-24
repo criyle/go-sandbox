@@ -1,7 +1,6 @@
 package forkexec
 
 import (
-	"io/ioutil"
 	"os"
 	"syscall"
 	"testing"
@@ -23,7 +22,7 @@ func TestFork_DropCaps(t *testing.T) {
 }
 
 func TestFork_ETXTBSY(t *testing.T) {
-	f, err := ioutil.TempFile("", "")
+	f, err := os.CreateTemp("", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +56,7 @@ func TestFork_ETXTBSY(t *testing.T) {
 
 func TestFork_OK(t *testing.T) {
 	t.Parallel()
-	f, err := ioutil.TempFile("", "")
+	f, err := os.CreateTemp("", "")
 	if err != nil {
 		t.Fatal(err)
 	}
