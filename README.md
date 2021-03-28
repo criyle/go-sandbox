@@ -237,3 +237,41 @@ BenchmarkCgroup-4   	   50283	    245094 ns/op
 PASS
 ok  	github.com/criyle/go-sandbox/pkg/cgroup	14.744s
 ```
+
+### Socket
+
+Blocking:
+
+```bash
+$ go test -bench . -benchtime 10s
+goos: linux
+goarch: amd64
+pkg: github.com/criyle/go-sandbox/pkg/unixsocket
+cpu: Intel(R) Core(TM) i7-7700K CPU @ 4.20GHz
+BenchmarkBaseline-8             12170148              1048 ns/op
+BenchmarkGoroutine-8             2658846              4910 ns/op
+BenchmarkChannel-8               8454133              1431 ns/op
+BenchmarkChannelBuffed-8         8767264              1357 ns/op
+BenchmarkChannelBuffed4-8        9670935              1230 ns/op
+BenchmarkEmptyGoroutine-8       34927512               342.8 ns/op
+PASS
+ok      github.com/criyle/go-sandbox/pkg/unixsocket     83.669s
+```
+
+Non-block:
+
+```bash
+$ go test -bench . -benchtime 10s
+goos: linux
+goarch: amd64
+pkg: github.com/criyle/go-sandbox/pkg/unixsocket
+cpu: Intel(R) Core(TM) i7-7700K CPU @ 4.20GHz
+BenchmarkBaseline-8             11609772              1001 ns/op
+BenchmarkGoroutine-8             2470767              4788 ns/op
+BenchmarkChannel-8               8488646              1427 ns/op
+BenchmarkChannelBuffed-8         8876050              1345 ns/op
+BenchmarkChannelBuffed4-8        9813187              1212 ns/op
+BenchmarkEmptyGoroutine-8       34852828               342.2 ns/op
+PASS
+ok      github.com/criyle/go-sandbox/pkg/unixsocket     81.679s
+```

@@ -12,7 +12,7 @@ func BenchmarkBaseline(b *testing.B) {
 	go func() {
 		msg := []byte("message")
 		for i := 0; i < b.N; i++ {
-			s.SendMsg(msg, nil)
+			s.SendMsg(msg, Msg{})
 		}
 	}()
 
@@ -31,7 +31,7 @@ func BenchmarkGoroutine(b *testing.B) {
 	go func() {
 		msg := []byte("message")
 		for i := 0; i < b.N; i++ {
-			s.SendMsg(msg, nil)
+			s.SendMsg(msg, Msg{})
 		}
 	}()
 
@@ -79,7 +79,7 @@ func benchGoroutine(b *testing.B, c chan []byte) {
 	go func() {
 		msg := []byte("message")
 		for i := 0; i < b.N; i++ {
-			s.SendMsg(msg, nil)
+			s.SendMsg(msg, Msg{})
 		}
 	}()
 

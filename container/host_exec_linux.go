@@ -61,7 +61,7 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan runner
 		files = append(files, int(param.ExecFile))
 	}
 	files = append(files, uintptrSliceToInt(param.Files)...)
-	msg := &unixsocket.Msg{
+	msg := unixsocket.Msg{
 		Fds: files,
 	}
 	execCmd := &execCmd{
@@ -76,7 +76,7 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan runner
 		Cmd:     cmdExecve,
 		ExecCmd: execCmd,
 	}
-	if err := c.sendCmd(&cm, msg); err != nil {
+	if err := c.sendCmd(cm, msg); err != nil {
 		c.mu.Unlock()
 		return errResult("execve: sendCmd %v", err)
 	}
@@ -87,7 +87,7 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan runner
 		return errResult("execve: recvReply %v", err)
 	}
 	// if sync function did not involved
-	if reply.Error != nil || msg == nil || msg.Cred == nil {
+	if reply.Error != nil || msg.Cred == nil {
 		// tell kill function to exit and sync
 		c.execveSyncKill()
 		c.mu.Unlock()
@@ -104,7 +104,7 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan runner
 		}
 	}
 	// send to syncFunc ack ok
-	if err := c.sendCmd(&cmd{Cmd: cmdOk}, nil); err != nil {
+	if err := c.sendCmd(cmd{Cmd: cmdOk}, unixsocket.Msg{}); err != nil {
 		c.mu.Unlock()
 		return errResult("execve: ack failed %v", err)
 	}
@@ -161,7 +161,7 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan runner
 		case <-ctx.Done():
 		case <-waitDone:
 		}
-		c.sendCmd(&cmd{Cmd: cmdKill}, nil)
+		c.sendCmd(cmd{Cmd: cmdKill}, unixsocket.Msg{})
 	}()
 
 	return result
@@ -169,6 +169,6 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan runner
 
 // execveSyncKill will send kill and recv reply
 func (c *container) execveSyncKill() {
-	c.sendCmd(&cmd{Cmd: cmdKill}, nil)
+	c.sendCmd(cmd{Cmd: cmdKill}, unixsocket.Msg{})
 	c.recvReply()
 }

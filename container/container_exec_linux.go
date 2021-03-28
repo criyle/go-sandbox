@@ -10,7 +10,7 @@ import (
 	"github.com/criyle/go-sandbox/runner"
 )
 
-func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error {
+func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 	var (
 		files    []uintptr
 		execFile uintptr
@@ -19,7 +19,7 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 	if cmd == nil {
 		return c.sendErrorReply("execve: no parameter provided")
 	}
-	if msg != nil {
+	if len(msg.Fds) > 0 {
 		files = intSliceToUintptr(msg.Fds)
 		// don't leak fds to child
 		closeOnExecFds(msg.Fds)
@@ -37,14 +37,14 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg *unixsocket.Msg) error 
 	}
 
 	syncFunc := func(pid int) error {
-		msg := &unixsocket.Msg{
+		msg := unixsocket.Msg{
 			Cred: &syscall.Ucred{
 				Pid: int32(pid),
 				Uid: uint32(syscall.Getuid()),
 				Gid: uint32(syscall.Getgid()),
 			},
 		}
-		if err := c.sendReply(&reply{}, msg); err != nil {
+		if err := c.sendReply(reply{}, msg); err != nil {
 			return fmt.Errorf("syncFunc: sendReply %v", err)
 		}
 		cmd, _, err := c.recvCmd()
@@ -146,14 +146,14 @@ func (c *containerServer) handleExecveStarted(pid int, err error) error {
 			if exitStatus != 0 {
 				status = runner.StatusNonzeroExitStatus
 			}
-			c.sendReply(&reply{
+			c.sendReply(reply{
 				ExecReply: &execReply{
 					Status:     status,
 					ExitStatus: exitStatus,
 					Time:       userTime,
 					Memory:     userMem,
 				},
-			}, nil)
+			}, unixsocket.Msg{})
 
 		case wstatus.Signaled():
 			switch wstatus.Signal() {
@@ -167,14 +167,14 @@ func (c *containerServer) handleExecveStarted(pid int, err error) error {
 			default:
 				status = runner.StatusSignalled
 			}
-			c.sendReply(&reply{
+			c.sendReply(reply{
 				ExecReply: &execReply{
 					ExitStatus: int(wstatus.Signal()),
 					Status:     status,
 					Time:       userTime,
 					Memory:     userMem,
 				},
-			}, nil)
+			}, unixsocket.Msg{})
 
 		default:
 			c.sendErrorReply("execve: unknown status %v", wstatus)
@@ -183,5 +183,5 @@ func (c *containerServer) handleExecveStarted(pid int, err error) error {
 
 	// wait for kill msg and reply done for finish
 	<-killDone
-	return c.sendReply(&reply{}, nil)
+	return c.sendReply(reply{}, unixsocket.Msg{})
 }

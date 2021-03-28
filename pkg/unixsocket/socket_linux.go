@@ -36,12 +36,14 @@ type Msg struct {
 // it will need SO_PASSCRED to pass unix credential, Notice: in the documentation,
 // if cred is not specified, self information will be sent
 func NewSocket(fd int) (*Socket, error) {
+	syscall.SetNonblock(fd, true)
+	syscall.CloseOnExec(fd)
+
 	file := os.NewFile(uintptr(fd), "unix-socket")
 	if file == nil {
 		return nil, fmt.Errorf("NewSocket: %d is not a valid fd", fd)
 	}
 	defer file.Close()
-	syscall.CloseOnExec(int(file.Fd()))
 
 	conn, err := net.FileConn(file)
 	if err != nil {
@@ -92,18 +94,16 @@ func (s *Socket) SetPassCred(option int) error {
 }
 
 // SendMsg sendmsg to unix socket and encode possible unix right / credential
-func (s *Socket) SendMsg(b []byte, m *Msg) error {
+func (s *Socket) SendMsg(b []byte, m Msg) error {
 	buf := oobPool.Get().([]byte)
 	defer oobPool.Put(buf)
 
 	oob := bytes.NewBuffer(buf[:0])
-	if m != nil {
-		if len(m.Fds) > 0 {
-			oob.Write(syscall.UnixRights(m.Fds...))
-		}
-		if m.Cred != nil {
-			oob.Write(syscall.UnixCredentials(m.Cred))
-		}
+	if len(m.Fds) > 0 {
+		oob.Write(syscall.UnixRights(m.Fds...))
+	}
+	if m.Cred != nil {
+		oob.Write(syscall.UnixCredentials(m.Cred))
 	}
 
 	_, _, err := (*net.UnixConn)(s).WriteMsgUnix(b, oob.Bytes(), nil)
@@ -114,28 +114,36 @@ func (s *Socket) SendMsg(b []byte, m *Msg) error {
 }
 
 // RecvMsg recvmsg from unix socket and parse possible unix right / credential
-func (s *Socket) RecvMsg(b []byte) (int, *Msg, error) {
+func (s *Socket) RecvMsg(b []byte) (int, Msg, error) {
 	oob := oobPool.Get().([]byte)
 	defer oobPool.Put(oob)
 
+	var msg Msg
 	n, oobn, _, _, err := (*net.UnixConn)(s).ReadMsgUnix(b, oob)
 	if err != nil {
-		return 0, nil, err
+		return 0, msg, err
 	}
 	// parse oob msg
 	msgs, err := syscall.ParseSocketControlMessage(oob[:oobn])
 	if err != nil {
-		return 0, nil, err
+		return 0, msg, err
 	}
-	msg, err := parseMsg(msgs)
+	msg, err = parseMsg(msgs)
 	if err != nil {
-		return 0, nil, err
+		return 0, msg, err
 	}
 	return n, msg, nil
 }
 
-func parseMsg(msgs []syscall.SocketControlMessage) (*Msg, error) {
-	var msg Msg
+func parseMsg(msgs []syscall.SocketControlMessage) (msg Msg, err error) {
+	defer func() {
+		if err != nil {
+			for _, f := range msg.Fds {
+				syscall.Close(f)
+			}
+			msg.Fds = nil
+		}
+	}()
 	for _, m := range msgs {
 		if m.Header.Level != syscall.SOL_SOCKET {
 			continue
@@ -145,17 +153,17 @@ func parseMsg(msgs []syscall.SocketControlMessage) (*Msg, error) {
 		case syscall.SCM_CREDENTIALS:
 			cred, err := syscall.ParseUnixCredentials(&m)
 			if err != nil {
-				return nil, err
+				return msg, err
 			}
 			msg.Cred = cred
 
 		case syscall.SCM_RIGHTS:
 			fds, err := syscall.ParseUnixRights(&m)
 			if err != nil {
-				return nil, err
+				return msg, err
 			}
 			msg.Fds = fds
 		}
 	}
-	return &msg, nil
+	return msg, nil
 }

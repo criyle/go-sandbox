@@ -274,3 +274,27 @@ func (b *Builder) getIDMapping(cred *syscall.Credential) ([]syscall.SysProcIDMap
 
 	return uidMap, gidMap
 }
+
+func (c *container) recvAckReply(name string) error {
+	reply, _, err := c.recvReply()
+	if err != nil {
+		return fmt.Errorf("%v: recvAck %v", name, err)
+	}
+	if reply.Error != nil {
+		return fmt.Errorf("%v: container error %v", name, reply.Error)
+	}
+	return nil
+}
+
+func (c *container) recvReply() (reply, unixsocket.Msg, error) {
+	var reply reply
+	msg, err := c.socket.RecvMsg(&reply)
+	if err != nil {
+		return reply, msg, err
+	}
+	return reply, msg, nil
+}
+
+func (c *container) sendCmd(cmd cmd, msg unixsocket.Msg) error {
+	return c.socket.SendMsg(cmd, msg)
+}

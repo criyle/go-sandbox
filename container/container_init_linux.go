@@ -70,7 +70,7 @@ func (c *containerServer) serve() error {
 	}
 }
 
-func (c *containerServer) handleCmd(cmd *cmd, msg *unixsocket.Msg) error {
+func (c *containerServer) handleCmd(cmd cmd, msg unixsocket.Msg) error {
 	switch cmd.Cmd {
 	case cmdPing:
 		return c.handlePing()
@@ -142,4 +142,31 @@ func initFileSystem(c containerConfig) error {
 		return fmt.Errorf("init_fs: readonly remount / %v", err)
 	}
 	return nil
+}
+
+func (c *containerServer) recvCmd() (cmd, unixsocket.Msg, error) {
+	var cm cmd
+	msg, err := c.socket.RecvMsg(&cm)
+	if err != nil {
+		return cm, msg, err
+	}
+	return cm, msg, nil
+}
+
+func (c *containerServer) sendReply(rep reply, msg unixsocket.Msg) error {
+	return c.socket.SendMsg(rep, msg)
+}
+
+// sendErrorReply sends error reply
+func (c *containerServer) sendErrorReply(ft string, v ...interface{}) error {
+	errRep := &errorReply{
+		Msg: fmt.Sprintf(ft, v...),
+	}
+	// store errno
+	if len(v) == 1 {
+		if errno, ok := v[0].(syscall.Errno); ok {
+			errRep.Errno = &errno
+		}
+	}
+	return c.sendReply(reply{Error: errRep}, unixsocket.Msg{})
 }

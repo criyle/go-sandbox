@@ -22,7 +22,7 @@ func (c *container) Ping() error {
 	cmd := cmd{
 		Cmd: cmdPing,
 	}
-	if err := c.sendCmd(&cmd, nil); err != nil {
+	if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
 		return fmt.Errorf("ping: %v", err)
 	}
 	// receive no error
@@ -38,7 +38,7 @@ func (c *container) conf(conf *containerConfig) error {
 		Cmd:     cmdConf,
 		ConfCmd: &confCmd{Conf: *conf},
 	}
-	if err := c.sendCmd(&cmd, nil); err != nil {
+	if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
 		return fmt.Errorf("conf: %v", err)
 	}
 	return c.recvAckReply("conf")
@@ -54,7 +54,7 @@ func (c *container) Open(p []OpenCmd) ([]*os.File, error) {
 		Cmd:     cmdOpen,
 		OpenCmd: p,
 	}
-	if err := c.sendCmd(&cmd, nil); err != nil {
+	if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
 		return nil, fmt.Errorf("open: %v", err)
 	}
 	reply, msg, err := c.recvReply()
@@ -90,7 +90,7 @@ func (c *container) Delete(p string) error {
 		Cmd:       cmdDelete,
 		DeleteCmd: &deleteCmd{Path: p},
 	}
-	if err := c.sendCmd(&cmd, nil); err != nil {
+	if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
 		return fmt.Errorf("delete: %v", err)
 	}
 	return c.recvAckReply("delete")
@@ -104,32 +104,8 @@ func (c *container) Reset() error {
 	cmd := cmd{
 		Cmd: cmdReset,
 	}
-	if err := c.sendCmd(&cmd, nil); err != nil {
+	if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
 		return fmt.Errorf("reset: %v", err)
 	}
 	return c.recvAckReply("reset")
-}
-
-func (c *container) recvAckReply(name string) error {
-	reply, _, err := c.recvReply()
-	if err != nil {
-		return fmt.Errorf("%v: recvAck %v", name, err)
-	}
-	if reply.Error != nil {
-		return fmt.Errorf("%v: container error %v", name, reply.Error)
-	}
-	return nil
-}
-
-func (c *container) recvReply() (*reply, *unixsocket.Msg, error) {
-	reply := new(reply)
-	msg, err := c.socket.RecvMsg(reply)
-	if err != nil {
-		return nil, nil, err
-	}
-	return reply, msg, nil
-}
-
-func (c *container) sendCmd(cmd *cmd, msg *unixsocket.Msg) error {
-	return c.socket.SendMsg(cmd, msg)
 }

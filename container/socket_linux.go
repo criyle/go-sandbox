@@ -38,24 +38,24 @@ func newSocket(s *unixsocket.Socket) *socket {
 	return &soc
 }
 
-func (s *socket) RecvMsg(e interface{}) (*unixsocket.Msg, error) {
+func (s *socket) RecvMsg(e interface{}) (msg unixsocket.Msg, err error) {
 	buff := bufferPool.Get().([]byte)
 	defer bufferPool.Put(buff)
 
 	n, msg, err := s.Socket.RecvMsg(buff)
 	if err != nil {
-		return nil, fmt.Errorf("RecvMsg: %v", err)
+		return msg, fmt.Errorf("RecvMsg: %v", err)
 	}
 	s.recvBuff.Reset()
 	s.recvBuff.Write(buff[:n])
 
 	if err := s.decoder.Decode(e); err != nil {
-		return nil, fmt.Errorf("RecvMsg: failed to decode %v", err)
+		return msg, fmt.Errorf("RecvMsg: failed to decode %v", err)
 	}
 	return msg, nil
 }
 
-func (s *socket) SendMsg(e interface{}, msg *unixsocket.Msg) error {
+func (s *socket) SendMsg(e interface{}, msg unixsocket.Msg) error {
 	s.sendBuff.Reset()
 	if err := s.encoder.Encode(e); err != nil {
 		return fmt.Errorf("SendMsg: failed to encode %v", err)
