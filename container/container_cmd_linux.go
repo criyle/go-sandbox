@@ -34,16 +34,17 @@ func (c *containerServer) handleOpen(open []OpenCmd) error {
 
 	// open files
 	fds := make([]int, 0, len(open))
+	fileToClose := make([]*os.File, 0, len(open)) // let sendMsg close these files
 	for _, o := range open {
 		outFile, err := os.OpenFile(o.Path, o.Flag, o.Perm)
 		if err != nil {
 			return c.sendErrorReply("open: %v", err)
 		}
-		defer outFile.Close()
+		fileToClose = append(fileToClose, outFile)
 		fds = append(fds, int(outFile.Fd()))
 	}
 
-	return c.sendReply(reply{}, unixsocket.Msg{Fds: fds})
+	return c.sendReplyFiles(reply{}, unixsocket.Msg{Fds: fds}, fileToClose)
 }
 
 func (c *containerServer) handleDelete(delete *deleteCmd) error {

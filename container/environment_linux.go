@@ -75,6 +75,23 @@ type container struct {
 	process *os.Process // underlying container init pid
 	socket  *socket     // host - container communication
 	mu      sync.Mutex  // lock to avoid race condition
+
+	done     chan struct{}
+	err      error
+	doneOnce sync.Once
+
+	recvCh chan recvReply
+	sendCh chan sendCmd
+}
+
+type recvReply struct {
+	Reply reply
+	Msg   unixsocket.Msg
+}
+
+type sendCmd struct {
+	Cmd cmd
+	Msg unixsocket.Msg
 }
 
 // Build creates new environment with underlying container
@@ -199,10 +216,57 @@ func (b *Builder) startContainer() (*container, error) {
 		ins.Close()
 		return nil, fmt.Errorf("container: failed to start container %v", err)
 	}
-	return &container{
+	c := &container{
 		process: r.Process,
 		socket:  newSocket(ins),
-	}, nil
+		recvCh:  make(chan recvReply, 1),
+		sendCh:  make(chan sendCmd, 1),
+		done:    make(chan struct{}),
+	}
+	go c.sendLoop()
+	go c.recvLoop()
+
+	return c, nil
+}
+
+func (c *container) sendLoop() {
+	for {
+		select {
+		case <-c.done:
+			return
+
+		case cmd, ok := <-c.sendCh:
+			if !ok {
+				return
+			}
+			if err := c.socket.SendMsg(cmd.Cmd, cmd.Msg); err != nil {
+				c.socketError(err)
+				return
+			}
+		}
+	}
+}
+
+func (c *container) recvLoop() {
+	for {
+		var reply reply
+		msg, err := c.socket.RecvMsg(&reply)
+		if err != nil {
+			c.socketError(err)
+			return
+		}
+		c.recvCh <- recvReply{
+			Reply: reply,
+			Msg:   msg,
+		}
+	}
+}
+
+func (c *container) socketError(err error) {
+	c.doneOnce.Do(func() {
+		c.err = err
+		close(c.done)
+	})
 }
 
 // Destroy kill the container process (with its children)
@@ -285,16 +349,22 @@ func (c *container) recvAckReply(name string) error {
 	}
 	return nil
 }
-
 func (c *container) recvReply() (reply, unixsocket.Msg, error) {
-	var reply reply
-	msg, err := c.socket.RecvMsg(&reply)
-	if err != nil {
-		return reply, msg, err
+	select {
+	case <-c.done:
+		return reply{}, unixsocket.Msg{}, c.err
+
+	case recv := <-c.recvCh:
+		return recv.Reply, recv.Msg, nil
 	}
-	return reply, msg, nil
 }
 
 func (c *container) sendCmd(cmd cmd, msg unixsocket.Msg) error {
-	return c.socket.SendMsg(cmd, msg)
+	select {
+	case <-c.done:
+		return c.err
+
+	case c.sendCh <- sendCmd{Cmd: cmd, Msg: msg}:
+		return nil
+	}
 }

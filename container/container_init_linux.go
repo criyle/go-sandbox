@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"sync"
 	"syscall"
 
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
@@ -12,6 +13,36 @@ import (
 type containerServer struct {
 	socket *socket
 	containerConfig
+
+	done     chan struct{}
+	err      error
+	doneOnce sync.Once
+
+	recvCh chan recvCmd
+	sendCh chan sendReply
+
+	waitPid       chan int
+	waitPidResult chan waitPidResult
+
+	waitAll     chan struct{}
+	waitAllDone chan struct{}
+}
+
+type recvCmd struct {
+	Cmd cmd
+	Msg unixsocket.Msg
+}
+
+type sendReply struct {
+	Reply       reply
+	Msg         unixsocket.Msg
+	FileToClose []*os.File
+}
+
+type waitPidResult struct {
+	WaitStatus syscall.WaitStatus
+	Rusage     syscall.Rusage
+	Err        error
 }
 
 // Init is called for container init process
@@ -54,8 +85,98 @@ func Init() (err error) {
 	}
 
 	// serve forever
-	cs := &containerServer{socket: newSocket(soc)}
+	cs := &containerServer{
+		socket:        newSocket(soc),
+		done:          make(chan struct{}),
+		sendCh:        make(chan sendReply, 1),
+		recvCh:        make(chan recvCmd, 1),
+		waitPid:       make(chan int),
+		waitAll:       make(chan struct{}),
+		waitPidResult: make(chan waitPidResult, 1),
+		waitAllDone:   make(chan struct{}, 1),
+	}
+	go cs.sendLoop()
+	go cs.recvLoop()
+	go cs.waitLoop()
+
 	return cs.serve()
+}
+
+func (c *containerServer) sendLoop() {
+	for {
+		select {
+		case <-c.done:
+			return
+
+		case rep, ok := <-c.sendCh:
+			if !ok {
+				return
+			}
+			err := c.socket.SendMsg(rep.Reply, rep.Msg)
+			for _, f := range rep.FileToClose {
+				f.Close()
+			}
+			if err != nil {
+				c.socketError(err)
+				return
+			}
+		}
+	}
+}
+
+func (c *containerServer) recvLoop() {
+	for {
+		var cmd cmd
+		msg, err := c.socket.RecvMsg(&cmd)
+		if err != nil {
+			c.socketError(err)
+			return
+		}
+		c.recvCh <- recvCmd{
+			Cmd: cmd,
+			Msg: msg,
+		}
+	}
+}
+
+func (c *containerServer) socketError(err error) {
+	c.doneOnce.Do(func() {
+		c.err = err
+		close(c.done)
+	})
+}
+
+func (c *containerServer) waitLoop() {
+	for {
+		select {
+		case pid := <-c.waitPid:
+			var waitStatus syscall.WaitStatus
+			var rusage syscall.Rusage
+
+			_, err := syscall.Wait4(pid, &waitStatus, 0, &rusage)
+			for err == syscall.EINTR {
+				_, err = syscall.Wait4(pid, &waitStatus, 0, &rusage)
+			}
+			if err != nil {
+				c.waitPidResult <- waitPidResult{
+					Err: err,
+				}
+				continue
+			}
+			c.waitPidResult <- waitPidResult{
+				WaitStatus: waitStatus,
+				Rusage:     rusage,
+			}
+
+		case <-c.waitAll:
+			for {
+				if _, err := syscall.Wait4(-1, nil, syscall.WNOHANG, nil); err != nil && err != syscall.EINTR {
+					break
+				}
+			}
+			c.waitAllDone <- struct{}{}
+		}
+	}
 }
 
 func (c *containerServer) serve() error {
@@ -145,16 +266,27 @@ func initFileSystem(c containerConfig) error {
 }
 
 func (c *containerServer) recvCmd() (cmd, unixsocket.Msg, error) {
-	var cm cmd
-	msg, err := c.socket.RecvMsg(&cm)
-	if err != nil {
-		return cm, msg, err
+	select {
+	case <-c.done:
+		return cmd{}, unixsocket.Msg{}, c.err
+
+	case recv := <-c.recvCh:
+		return recv.Cmd, recv.Msg, nil
 	}
-	return cm, msg, nil
+}
+
+func (c *containerServer) sendReplyFiles(rep reply, msg unixsocket.Msg, fileToClose []*os.File) error {
+	select {
+	case <-c.done:
+		return c.err
+
+	case c.sendCh <- sendReply{Reply: rep, Msg: msg}:
+		return nil
+	}
 }
 
 func (c *containerServer) sendReply(rep reply, msg unixsocket.Msg) error {
-	return c.socket.SendMsg(rep, msg)
+	return c.sendReplyFiles(rep, msg, nil)
 }
 
 // sendErrorReply sends error reply

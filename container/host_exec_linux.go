@@ -109,62 +109,64 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan runner
 		return errResult("execve: ack failed %v", err)
 	}
 
-	mTime := time.Now()
-
-	waitDone := make(chan struct{})
-
-	// Wait
-	go func() {
-		reply2, _, err := c.recvReply()
-		close(waitDone)
-		// done signal (should recv after kill)
-		c.recvReply()
-		// unlock after last read / write
-		c.mu.Unlock()
-
-		// handle potential error
-		if err != nil {
-			result <- runner.Result{
-				Status: runner.StatusRunnerError,
-				Error:  err.Error(),
-			}
-			return
-		}
-		if reply2.Error != nil {
-			result <- runner.Result{
-				Status: runner.StatusRunnerError,
-				Error:  reply2.Error.Error(),
-			}
-			return
-		}
-		if reply2.ExecReply == nil {
-			result <- runner.Result{
-				Status: runner.StatusRunnerError,
-				Error:  "execve: no reply received",
-			}
-			return
-		}
-		// emit result after all communication finish
-		result <- runner.Result{
-			Status:      reply2.ExecReply.Status,
-			ExitStatus:  reply2.ExecReply.ExitStatus,
-			Time:        reply2.ExecReply.Time,
-			Memory:      reply2.ExecReply.Memory,
-			SetUpTime:   mTime.Sub(sTime),
-			RunningTime: time.Since(mTime),
-		}
-	}()
-
-	// Kill (if wait is done, a kill message need to be send to collect zombies)
-	go func() {
-		select {
-		case <-ctx.Done():
-		case <-waitDone:
-		}
-		c.sendCmd(cmd{Cmd: cmdKill}, unixsocket.Msg{})
-	}()
+	c.execveWait(ctx, sTime, result)
 
 	return result
+}
+
+func (c *container) execveWait(ctx context.Context, sTime time.Time, result chan runner.Result) {
+	mTime := time.Now()
+
+	// wait for result / cancel
+	go func() {
+		defer c.mu.Unlock()
+		select {
+		case <-c.done: // socket error
+			result <- convertReplyResult(reply{}, sTime, mTime, c.err)
+
+		case <-ctx.Done(): // cancel
+			c.sendCmd(cmd{Cmd: cmdKill}, unixsocket.Msg{}) // kill
+			reply, _, _ := c.recvReply()
+			_, _, err := c.recvReply()
+			result <- convertReplyResult(reply, sTime, mTime, err)
+
+		case ret := <-c.recvCh: // result
+			c.sendCmd(cmd{Cmd: cmdKill}, unixsocket.Msg{}) // kill
+			_, _, err := c.recvReply()
+			result <- convertReplyResult(ret.Reply, sTime, mTime, err)
+		}
+	}()
+}
+
+func convertReplyResult(reply reply, sTime, mTime time.Time, err error) runner.Result {
+	// handle potential error
+	if err != nil {
+		return runner.Result{
+			Status: runner.StatusRunnerError,
+			Error:  err.Error(),
+		}
+	}
+	if reply.Error != nil {
+		return runner.Result{
+			Status: runner.StatusRunnerError,
+			Error:  reply.Error.Error(),
+		}
+	}
+	if reply.ExecReply == nil {
+		return runner.Result{
+			Status: runner.StatusRunnerError,
+			Error:  "execve: no reply received",
+		}
+	}
+	// emit result after all communication finish
+	return runner.Result{
+		Status:      reply.ExecReply.Status,
+		ExitStatus:  reply.ExecReply.ExitStatus,
+		Time:        reply.ExecReply.Time,
+		Memory:      reply.ExecReply.Memory,
+		SetUpTime:   mTime.Sub(sTime),
+		RunningTime: time.Since(mTime),
+	}
 }
 
 // execveSyncKill will send kill and recv reply

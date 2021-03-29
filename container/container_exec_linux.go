@@ -89,99 +89,107 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 	// starts the runner, error is handled same as wait4 to make communication equal
 	pid, err := r.Start()
 	if err != nil {
-		// cannot exists now since host assumes the start will alway work
-		err = fmt.Errorf("execve: start: %v", err)
+		c.sendErrorReply("execve: start: %v", err)
+		c.recvCmd()
+		return c.sendReply(reply{}, unixsocket.Msg{})
 	}
-	return c.handleExecveStarted(pid, err)
+	return c.handleExecveStarted(pid)
 }
 
-func (c *containerServer) handleExecveStarted(pid int, err error) error {
-	// done is to signal kill goroutine exits
-	killDone := make(chan struct{})
-	// waitDone is to signal kill goroutine to collect zombies
-	waitDone := make(chan struct{})
+func (c *containerServer) handleExecveStarted(pid int) error {
+	// At this point, either recv kill / send result would be happend
+	// host -> container: kill
+	// container -> host: result
+	// container -> host: done
 
-	// recv kill
-	go func() {
-		// signal done
-		defer close(killDone)
-		// msg must be kill
-		c.recvCmd()
-		// kill all
+	// Let's register a wait event
+	c.waitPid <- pid
+
+	var ret waitPidResult
+	select {
+	case <-c.done: // socket error happend
+		return c.err
+
+	case <-c.recvCh: // kill cmd received
 		syscall.Kill(-1, syscall.SIGKILL)
-		// make sure collect zombie does not consume the exit status
-		<-waitDone
-		// collect zombies
-		for {
-			if _, err := syscall.Wait4(-1, nil, syscall.WNOHANG, nil); err != nil && err != syscall.EINTR {
-				break
-			}
-		}
-	}()
+		ret = <-c.waitPidResult
+		c.waitAll <- struct{}{}
 
-	// wait pid if no error encountered for execve
-	var wstatus syscall.WaitStatus
-	var rusage syscall.Rusage
-	if err == nil {
-		_, err = syscall.Wait4(pid, &wstatus, 0, &rusage)
-		for err == syscall.EINTR {
-			_, err = syscall.Wait4(pid, &wstatus, 0, &rusage)
+		if err := c.sendReply(convertReply(ret), unixsocket.Msg{}); err != nil {
+			return err
 		}
-		if err != nil {
-			err = fmt.Errorf("execve: wait4: %v", err)
+
+	case ret = <-c.waitPidResult: // child process returned
+		syscall.Kill(-1, syscall.SIGKILL)
+		c.waitAll <- struct{}{}
+
+		if err := c.sendReply(convertReply(ret), unixsocket.Msg{}); err != nil {
+			return err
+		}
+		if _, _, err := c.recvCmd(); err != nil { // kill cmd received
+			return err
 		}
 	}
-	// sync with kill goroutine
-	close(waitDone)
-
-	if err != nil {
-		c.sendErrorReply(err.Error())
-	} else {
-		status := runner.StatusNormal
-		userTime := time.Duration(rusage.Utime.Nano()) // ns
-		userMem := runner.Size(rusage.Maxrss << 10)    // bytes
-		switch {
-		case wstatus.Exited():
-			exitStatus := wstatus.ExitStatus()
-			if exitStatus != 0 {
-				status = runner.StatusNonzeroExitStatus
-			}
-			c.sendReply(reply{
-				ExecReply: &execReply{
-					Status:     status,
-					ExitStatus: exitStatus,
-					Time:       userTime,
-					Memory:     userMem,
-				},
-			}, unixsocket.Msg{})
-
-		case wstatus.Signaled():
-			switch wstatus.Signal() {
-			// kill signal treats as TLE
-			case syscall.SIGXCPU, syscall.SIGKILL:
-				status = runner.StatusTimeLimitExceeded
-			case syscall.SIGXFSZ:
-				status = runner.StatusOutputLimitExceeded
-			case syscall.SIGSYS:
-				status = runner.StatusDisallowedSyscall
-			default:
-				status = runner.StatusSignalled
-			}
-			c.sendReply(reply{
-				ExecReply: &execReply{
-					ExitStatus: int(wstatus.Signal()),
-					Status:     status,
-					Time:       userTime,
-					Memory:     userMem,
-				},
-			}, unixsocket.Msg{})
-
-		default:
-			c.sendErrorReply("execve: unknown status %v", wstatus)
-		}
-	}
-
-	// wait for kill msg and reply done for finish
-	<-killDone
+	<-c.waitAllDone
 	return c.sendReply(reply{}, unixsocket.Msg{})
+}
+
+func convertReply(ret waitPidResult) reply {
+	if ret.Err != nil {
+		return reply{
+			Error: &errorReply{
+				Msg: fmt.Sprintf("execve: wait4 %v", ret.Err),
+			},
+		}
+	}
+
+	waitStatus := ret.WaitStatus
+	rusage := ret.Rusage
+
+	status := runner.StatusNormal
+	userTime := time.Duration(rusage.Utime.Nano()) // ns
+	userMem := runner.Size(rusage.Maxrss << 10)    // bytes
+	switch {
+	case waitStatus.Exited():
+		exitStatus := waitStatus.ExitStatus()
+		if exitStatus != 0 {
+			status = runner.StatusNonzeroExitStatus
+		}
+		return reply{
+			ExecReply: &execReply{
+				Status:     status,
+				ExitStatus: exitStatus,
+				Time:       userTime,
+				Memory:     userMem,
+			},
+		}
+
+	case waitStatus.Signaled():
+		switch waitStatus.Signal() {
+		// kill signal treats as TLE
+		case syscall.SIGXCPU, syscall.SIGKILL:
+			status = runner.StatusTimeLimitExceeded
+		case syscall.SIGXFSZ:
+			status = runner.StatusOutputLimitExceeded
+		case syscall.SIGSYS:
+			status = runner.StatusDisallowedSyscall
+		default:
+			status = runner.StatusSignalled
+		}
+		return reply{
+			ExecReply: &execReply{
+				ExitStatus: int(waitStatus.Signal()),
+				Status:     status,
+				Time:       userTime,
+				Memory:     userMem,
+			},
+		}
+
+	default:
+		return reply{
+			Error: &errorReply{
+				Msg: fmt.Sprintf("execve: unknown status %v", waitStatus),
+			},
+		}
+	}
 }
