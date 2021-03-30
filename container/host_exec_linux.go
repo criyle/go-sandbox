@@ -118,8 +118,29 @@ func (c *container) execveWait(ctx context.Context, sTime time.Time, result chan
 	mTime := time.Now()
 
 	// wait for result / cancel
-	go func() {
-		defer c.mu.Unlock()
+	c.execveWaitCh <- execveWait{
+		ctx:    ctx,
+		sTime:  sTime,
+		mTime:  mTime,
+		result: result,
+	}
+}
+
+type execveWait struct {
+	ctx    context.Context
+	sTime  time.Time
+	mTime  time.Time
+	result chan runner.Result
+}
+
+func (c *container) execveWaitLoop() {
+	for {
+		waitParam := <-c.execveWaitCh
+		ctx := waitParam.ctx
+		sTime := waitParam.sTime
+		mTime := waitParam.mTime
+		result := waitParam.result
+
 		select {
 		case <-c.done: // socket error
 			result <- convertReplyResult(reply{}, sTime, mTime, c.err)
@@ -135,7 +156,8 @@ func (c *container) execveWait(ctx context.Context, sTime time.Time, result chan
 			_, _, err := c.recvReply()
 			result <- convertReplyResult(ret.Reply, sTime, mTime, err)
 		}
-	}()
+		c.mu.Unlock()
+	}
 }
 
 func convertReplyResult(reply reply, sTime, mTime time.Time, err error) runner.Result {
