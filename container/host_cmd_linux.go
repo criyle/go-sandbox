@@ -3,6 +3,7 @@ package container
 import (
 	"fmt"
 	"os"
+	"syscall"
 	"time"
 
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
@@ -49,6 +50,9 @@ func (c *container) Open(p []OpenCmd) ([]*os.File, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	syscall.ForkLock.RLock()
+	defer syscall.ForkLock.RUnlock()
+
 	// send copyin
 	cmd := cmd{
 		Cmd:     cmdOpen,
@@ -71,6 +75,7 @@ func (c *container) Open(p []OpenCmd) ([]*os.File, error) {
 
 	ret := make([]*os.File, 0, len(p))
 	for i, fd := range msg.Fds {
+		syscall.CloseOnExec(fd)
 		f := os.NewFile(uintptr(fd), p[i].Path)
 		if f == nil {
 			closeFds(msg.Fds)
