@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strconv"
 	"sync"
 	"syscall"
 
@@ -76,6 +77,11 @@ func Init() (err error) {
 
 	// limit container resource usage
 	runtime.GOMAXPROCS(containerMaxProc)
+
+	// ensure there's no fd leak to child process (e.g. VSCode leaks ptmx fd)
+	if err := closeOnExecAllFds(); err != nil {
+		return fmt.Errorf("container_init: failed to close_on_exec all fd %v", err)
+	}
 
 	// new_container environment shared the socket at fd 3 (marked close_exec)
 	const defaultFd = 3
@@ -301,4 +307,21 @@ func (c *containerServer) sendErrorReply(ft string, v ...interface{}) error {
 		}
 	}
 	return c.sendReply(reply{Error: errRep}, unixsocket.Msg{})
+}
+
+func closeOnExecAllFds() error {
+	// get all fd from /proc/self/fd
+	const fdPath = "/proc/self/fd"
+	fds, err := os.ReadDir(fdPath)
+	if err != nil {
+		return err
+	}
+	for _, f := range fds {
+		fd, err := strconv.Atoi(f.Name())
+		if err != nil {
+			return err
+		}
+		syscall.CloseOnExec(fd)
+	}
+	return nil
 }

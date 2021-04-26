@@ -1,6 +1,6 @@
 package container
 
-type cmdType int
+type cmdType int8
 
 const (
 	cmdPing cmdType = iota + 1

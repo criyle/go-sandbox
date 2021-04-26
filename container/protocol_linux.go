@@ -13,12 +13,12 @@ import (
 
 // cmd is the control message send into container
 type cmd struct {
-	Cmd cmdType // type of the cmd
-
 	OpenCmd   []OpenCmd  // open argument
 	DeleteCmd *deleteCmd // delete argument
 	ExecCmd   *execCmd   // execve argument
 	ConfCmd   *confCmd   // to set configuration
+
+	Cmd cmdType // type of the cmd
 }
 
 // OpenCmd correspond to a single open syscall

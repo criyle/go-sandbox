@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
-	"sync"
 
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
 )
@@ -12,26 +11,32 @@ import (
 // 16k buffsize
 const bufferSize = 16 << 10
 
-var bufferPool = sync.Pool{
-	New: func() interface{} {
-		return make([]byte, bufferSize)
-	},
-}
-
 type socket struct {
 	*unixsocket.Socket
 
-	recvBuff bytes.Buffer
-	decoder  *gob.Decoder
+	buff []byte
 
-	sendBuff bytes.Buffer
+	decoder  *gob.Decoder
+	recvBuff bufferRotater
+
 	encoder  *gob.Encoder
+	sendBuff bytes.Buffer
+}
+
+// bufferRotater replace the underlying Buffers to avoid allocation
+type bufferRotater struct {
+	*bytes.Buffer
+}
+
+func (b *bufferRotater) Rotate(buffer *bytes.Buffer) {
+	b.Buffer = buffer
 }
 
 func newSocket(s *unixsocket.Socket) *socket {
 	soc := socket{
 		Socket: s,
 	}
+	soc.buff = make([]byte, bufferSize)
 	soc.decoder = gob.NewDecoder(&soc.recvBuff)
 	soc.encoder = gob.NewEncoder(&soc.sendBuff)
 
@@ -39,15 +44,11 @@ func newSocket(s *unixsocket.Socket) *socket {
 }
 
 func (s *socket) RecvMsg(e interface{}) (msg unixsocket.Msg, err error) {
-	buff := bufferPool.Get().([]byte)
-	defer bufferPool.Put(buff)
-
-	n, msg, err := s.Socket.RecvMsg(buff)
+	n, msg, err := s.Socket.RecvMsg(s.buff)
 	if err != nil {
 		return msg, fmt.Errorf("RecvMsg: %v", err)
 	}
-	s.recvBuff.Reset()
-	s.recvBuff.Write(buff[:n])
+	s.recvBuff.Rotate(bytes.NewBuffer(s.buff[:n]))
 
 	if err := s.decoder.Decode(e); err != nil {
 		return msg, fmt.Errorf("RecvMsg: failed to decode %v", err)

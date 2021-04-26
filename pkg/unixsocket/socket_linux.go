@@ -7,27 +7,31 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"sync"
 	"syscall"
 )
 
 // oob size default to page size
-const oobSize = 4096
-
-// use pool to minimize allocate gabage collector overhead
-var oobPool = sync.Pool{
-	New: func() interface{} {
-		return make([]byte, oobSize)
-	},
-}
+const oobSize = 4 << 10 // 4kb
 
 // Socket wrappers a unix socket connection
-type Socket net.UnixConn
+type Socket struct {
+	*net.UnixConn
+	sendBuff []byte
+	recvBuff []byte
+}
 
 // Msg is the oob msg with the message
 type Msg struct {
 	Fds  []int          // unix rights
 	Cred *syscall.Ucred // unix credential
+}
+
+func newSocket(conn *net.UnixConn) *Socket {
+	return &Socket{
+		UnixConn: conn,
+		sendBuff: make([]byte, oobSize),
+		recvBuff: make([]byte, oobSize),
+	}
 }
 
 // NewSocket creates Socket conn struct using existing unix socket fd
@@ -55,7 +59,7 @@ func NewSocket(fd int) (*Socket, error) {
 		conn.Close()
 		return nil, fmt.Errorf("NewSocket: %d is not a valid unix socket connection", fd)
 	}
-	return (*Socket)(unixConn), nil
+	return newSocket(unixConn), nil
 }
 
 // NewSocketPair creates connected unix socketpair using SOCK_SEQPACKET
@@ -84,7 +88,7 @@ func NewSocketPair() (*Socket, *Socket, error) {
 
 // SetPassCred set sockopt for pass cred for unix socket
 func (s *Socket) SetPassCred(option int) error {
-	sysconn, err := (*net.UnixConn)(s).SyscallConn()
+	sysconn, err := s.SyscallConn()
 	if err != nil {
 		return err
 	}
@@ -95,10 +99,7 @@ func (s *Socket) SetPassCred(option int) error {
 
 // SendMsg sendmsg to unix socket and encode possible unix right / credential
 func (s *Socket) SendMsg(b []byte, m Msg) error {
-	buf := oobPool.Get().([]byte)
-	defer oobPool.Put(buf)
-
-	oob := bytes.NewBuffer(buf[:0])
+	oob := bytes.NewBuffer(s.sendBuff[:0])
 	if len(m.Fds) > 0 {
 		oob.Write(syscall.UnixRights(m.Fds...))
 	}
@@ -106,7 +107,7 @@ func (s *Socket) SendMsg(b []byte, m Msg) error {
 		oob.Write(syscall.UnixCredentials(m.Cred))
 	}
 
-	_, _, err := (*net.UnixConn)(s).WriteMsgUnix(b, oob.Bytes(), nil)
+	_, _, err := s.WriteMsgUnix(b, oob.Bytes(), nil)
 	if err != nil {
 		return err
 	}
@@ -115,16 +116,13 @@ func (s *Socket) SendMsg(b []byte, m Msg) error {
 
 // RecvMsg recvmsg from unix socket and parse possible unix right / credential
 func (s *Socket) RecvMsg(b []byte) (int, Msg, error) {
-	oob := oobPool.Get().([]byte)
-	defer oobPool.Put(oob)
-
 	var msg Msg
-	n, oobn, _, _, err := (*net.UnixConn)(s).ReadMsgUnix(b, oob)
+	n, oobn, _, _, err := s.ReadMsgUnix(b, s.recvBuff)
 	if err != nil {
 		return 0, msg, err
 	}
 	// parse oob msg
-	msgs, err := syscall.ParseSocketControlMessage(oob[:oobn])
+	msgs, err := syscall.ParseSocketControlMessage(s.recvBuff[:oobn])
 	if err != nil {
 		return 0, msg, err
 	}
