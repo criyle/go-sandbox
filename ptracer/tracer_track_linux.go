@@ -11,18 +11,9 @@ import (
 	"github.com/criyle/go-sandbox/runner"
 )
 
-// Trace starts new goroutine and trace runner with ptrace
-func (t *Tracer) Trace(c context.Context) <-chan runner.Result {
-	result := make(chan runner.Result, 1)
-	go func() {
-		result <- t.TraceRun(c)
-	}()
-	return result
-}
-
-// TraceRun start and traces all child process by runner in the calling goroutine
+// Trace start and traces all child process by runner in the calling goroutine
 // parameter done used to cancel work, start is used notify child starts
-func (t *Tracer) TraceRun(c context.Context) (result runner.Result) {
+func (t *Tracer) Trace(c context.Context) (result runner.Result) {
 	// ptrace is thread based (kernel proc)
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()

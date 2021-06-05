@@ -133,7 +133,7 @@ type containerRunner struct {
 	container.ExecveParam
 }
 
-func (r *containerRunner) Run(c context.Context) <-chan runner.Result {
+func (r *containerRunner) Run(c context.Context) runner.Result {
 	return r.Environment.Execve(c, r.ExecveParam)
 }
 
@@ -369,7 +369,10 @@ func start() (*runner.Result, error) {
 	c, cancel := context.WithTimeout(context.Background(), time.Duration(int64(realTimeLimit)*int64(time.Second)))
 	defer cancel()
 
-	s := r.Run(c)
+	s := make(chan runner.Result, 1)
+	go func() {
+		s <- r.Run(c)
+	}()
 	rTime := time.Now()
 
 	select {

@@ -20,16 +20,7 @@ const (
 )
 
 // Run starts the unshared process
-func (r *Runner) Run(c context.Context) <-chan runner.Result {
-	result := make(chan runner.Result, 1)
-	go func() {
-		result <- r.trace(c)
-	}()
-	return result
-}
-
-// Trace tracks child processes
-func (r *Runner) trace(c context.Context) (result runner.Result) {
+func (r *Runner) Run(c context.Context) (result runner.Result) {
 	ch := &forkexec.Runner{
 		Args:       r.Args,
 		Env:        r.Env,

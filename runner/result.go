@@ -31,6 +31,6 @@ func (r Result) String() string {
 		return fmt.Sprintf("Result[RunnerFailed(%s)][%v %v][%v %v]", r.Error, r.Time, r.Memory, r.SetUpTime, r.RunningTime)
 
 	default:
-		return fmt.Sprintf("Result[%v(%s)][%v %v][%v %v]", r.Status, r.Error, r.Time, r.Memory, r.SetUpTime, r.RunningTime)
+		return fmt.Sprintf("Result[%v(%s %d)][%v %v][%v %v]", r.Status, r.Error, r.ExitStatus, r.Time, r.Memory, r.SetUpTime, r.RunningTime)
 	}
 }

@@ -39,21 +39,11 @@ type ExecveParam struct {
 }
 
 // Execve runs process inside container. It accepts context cancelation as time limit exceeded.
-func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan runner.Result {
+func (c *container) Execve(ctx context.Context, param ExecveParam) runner.Result {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	sTime := time.Now()
-
-	// make sure goroutine not leaked (blocked) even if result is not consumed
-	result := make(chan runner.Result, 1)
-
-	errResult := func(f string, v ...interface{}) <-chan runner.Result {
-		result <- runner.Result{
-			Status: runner.StatusRunnerError,
-			Error:  fmt.Sprintf(f, v...),
-		}
-		return result
-	}
 
 	// if execve with fd, put fd at the first parameter
 	var files []int
@@ -77,21 +67,18 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan runner
 		ExecCmd: execCmd,
 	}
 	if err := c.sendCmd(cm, msg); err != nil {
-		c.mu.Unlock()
 		return errResult("execve: sendCmd %v", err)
 	}
 	// sync function
-	reply, msg, err := c.recvReply()
+	rep, msg, err := c.recvReply()
 	if err != nil {
-		c.mu.Unlock()
 		return errResult("execve: recvReply %v", err)
 	}
 	// if sync function did not involved
-	if reply.Error != nil || msg.Cred == nil {
+	if rep.Error != nil || msg.Cred == nil {
 		// tell kill function to exit and sync
 		c.execveSyncKill()
-		c.mu.Unlock()
-		return errResult("execve: no pid received or error %v", reply.Error)
+		return errResult("execve: no pid received or error %v", rep.Error)
 	}
 	if param.SyncFunc != nil {
 		if err := param.SyncFunc(int(msg.Cred.Pid)); err != nil {
@@ -99,64 +86,34 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) <-chan runner
 			c.execveSyncKill()
 			// tell kill function to exit and sync
 			c.execveSyncKill()
-			c.mu.Unlock()
 			return errResult("execve: syncfunc failed %v", err)
 		}
 	}
 	// send to syncFunc ack ok
 	if err := c.sendCmd(cmd{Cmd: cmdOk}, unixsocket.Msg{}); err != nil {
-		c.mu.Unlock()
 		return errResult("execve: ack failed %v", err)
 	}
 
-	c.execveWait(ctx, sTime, result)
-
-	return result
+	// wait for done
+	return c.waitForDone(ctx, sTime)
 }
 
-func (c *container) execveWait(ctx context.Context, sTime time.Time, result chan runner.Result) {
+func (c *container) waitForDone(ctx context.Context, sTime time.Time) runner.Result {
 	mTime := time.Now()
+	select {
+	case <-c.done: // socket error
+		return convertReplyResult(reply{}, sTime, mTime, c.err)
 
-	// wait for result / cancel
-	c.execveWaitCh <- execveWait{
-		ctx:    ctx,
-		sTime:  sTime,
-		mTime:  mTime,
-		result: result,
-	}
-}
+	case <-ctx.Done(): // cancel
+		c.sendCmd(cmd{Cmd: cmdKill}, unixsocket.Msg{}) // kill
+		reply, _, _ := c.recvReply()
+		_, _, err := c.recvReply()
+		return convertReplyResult(reply, sTime, mTime, err)
 
-type execveWait struct {
-	ctx    context.Context
-	sTime  time.Time
-	mTime  time.Time
-	result chan runner.Result
-}
-
-func (c *container) execveWaitLoop() {
-	for {
-		waitParam := <-c.execveWaitCh
-		ctx := waitParam.ctx
-		sTime := waitParam.sTime
-		mTime := waitParam.mTime
-		result := waitParam.result
-
-		select {
-		case <-c.done: // socket error
-			result <- convertReplyResult(reply{}, sTime, mTime, c.err)
-
-		case <-ctx.Done(): // cancel
-			c.sendCmd(cmd{Cmd: cmdKill}, unixsocket.Msg{}) // kill
-			reply, _, _ := c.recvReply()
-			_, _, err := c.recvReply()
-			result <- convertReplyResult(reply, sTime, mTime, err)
-
-		case ret := <-c.recvCh: // result
-			c.sendCmd(cmd{Cmd: cmdKill}, unixsocket.Msg{}) // kill
-			_, _, err := c.recvReply()
-			result <- convertReplyResult(ret.Reply, sTime, mTime, err)
-		}
-		c.mu.Unlock()
+	case ret := <-c.recvCh: // result
+		c.sendCmd(cmd{Cmd: cmdKill}, unixsocket.Msg{}) // kill
+		_, _, err := c.recvReply()
+		return convertReplyResult(ret.Reply, sTime, mTime, err)
 	}
 }
 
@@ -195,4 +152,11 @@ func convertReplyResult(reply reply, sTime, mTime time.Time, err error) runner.R
 func (c *container) execveSyncKill() {
 	c.sendCmd(cmd{Cmd: cmdKill}, unixsocket.Msg{})
 	c.recvReply()
+}
+
+func errResult(f string, v ...interface{}) runner.Result {
+	return runner.Result{
+		Status: runner.StatusRunnerError,
+		Error:  fmt.Sprintf(f, v...),
+	}
 }

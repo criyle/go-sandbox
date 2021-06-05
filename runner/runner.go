@@ -6,5 +6,5 @@ import (
 
 // Runner interface defines method to start running
 type Runner interface {
-	Run(context.Context) <-chan Result
+	Run(context.Context) Result
 }

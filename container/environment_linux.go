@@ -66,7 +66,7 @@ type Environment interface {
 	Open([]OpenCmd) ([]*os.File, error)
 	Delete(p string) error
 	Reset() error
-	Execve(context.Context, ExecveParam) <-chan runner.Result
+	Execve(context.Context, ExecveParam) runner.Result
 	Destroy() error
 }
 
@@ -82,8 +82,6 @@ type container struct {
 
 	recvCh chan recvReply
 	sendCh chan sendCmd
-
-	execveWaitCh chan execveWait
 }
 
 type recvReply struct {
@@ -224,12 +222,9 @@ func (b *Builder) startContainer() (*container, error) {
 		recvCh:  make(chan recvReply, 1),
 		sendCh:  make(chan sendCmd, 1),
 		done:    make(chan struct{}),
-
-		execveWaitCh: make(chan execveWait, 1),
 	}
 	go c.sendLoop()
 	go c.recvLoop()
-	go c.execveWaitLoop()
 
 	return c, nil
 }

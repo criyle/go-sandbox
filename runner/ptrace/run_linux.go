@@ -10,7 +10,7 @@ import (
 )
 
 // Run starts the tracing process
-func (r *Runner) Run(c context.Context) <-chan runner.Result {
+func (r *Runner) Run(c context.Context) runner.Result {
 	ch := &forkexec.Runner{
 		Args:     r.Args,
 		Env:      r.Env,

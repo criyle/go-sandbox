@@ -97,7 +97,7 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 }
 
 func (c *containerServer) handleExecveStarted(pid int) error {
-	// At this point, either recv kill / send result would be happend
+	// At this point, either recv kill / send result would be happened
 	// host -> container: kill
 	// container -> host: result
 	// container -> host: done
@@ -107,7 +107,7 @@ func (c *containerServer) handleExecveStarted(pid int) error {
 
 	var ret waitPidResult
 	select {
-	case <-c.done: // socket error happend
+	case <-c.done: // socket error happened
 		return c.err
 
 	case <-c.recvCh: // kill cmd received

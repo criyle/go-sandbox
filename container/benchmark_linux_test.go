@@ -40,11 +40,10 @@ func BenchmarkContainer(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		m := <-ch
 		for pb.Next() {
-			rt := m.Execve(context.TODO(), ExecveParam{
-				Args: []string{"/bin/echo"},
+			r := m.Execve(context.TODO(), ExecveParam{
+				Args: []string{"/bin/true"},
 				Env:  []string{"PATH=/bin"},
 			})
-			r := <-rt
 			if r.Status != runner.StatusNormal {
 				b.Error(r.Status, r.Error)
 			}
@@ -55,13 +54,12 @@ func BenchmarkContainer(b *testing.B) {
 func TestContainerSuccess(t *testing.T) {
 	t.Parallel()
 	m := getEnv(t, nil)
-	rt := m.Execve(context.TODO(), ExecveParam{
-		Args: []string{"/bin/echo"},
+	r := m.Execve(context.TODO(), ExecveParam{
+		Args: []string{"/bin/true"},
 		Env:  []string{"PATH=/bin"},
 	})
-	r := <-rt
 	if r.Status != runner.StatusNormal {
-		t.Fatal(r.Status, r.Error)
+		t.Fatal(r.Status, r.Error, r)
 	}
 }
 
@@ -80,11 +78,10 @@ func TestContainerSetCred(t *testing.T) {
 		t.Skip("root required for this test")
 	}
 	m := getEnv(t, credgen{})
-	rt := m.Execve(context.TODO(), ExecveParam{
-		Args: []string{"/bin/echo"},
+	r := m.Execve(context.TODO(), ExecveParam{
+		Args: []string{"/bin/true"},
 		Env:  []string{"PATH=/bin"},
 	})
-	r := <-rt
 	if r.Status != runner.StatusNormal {
 		t.Fatal(r.Status, r.Error)
 	}
@@ -93,11 +90,10 @@ func TestContainerSetCred(t *testing.T) {
 func TestContainerNotExists(t *testing.T) {
 	t.Parallel()
 	m := getEnv(t, nil)
-	rt := m.Execve(context.TODO(), ExecveParam{
+	r := m.Execve(context.TODO(), ExecveParam{
 		Args: []string{"not_exists"},
 		Env:  []string{"PATH=/bin"},
 	})
-	r := <-rt
 	if r.Status != runner.StatusRunnerError {
 		t.Fatal(r.Status, r.Error)
 	}
@@ -107,14 +103,13 @@ func TestContainerSyncFuncFail(t *testing.T) {
 	t.Parallel()
 	m := getEnv(t, nil)
 	err := errors.New("test error")
-	rt := m.Execve(context.TODO(), ExecveParam{
-		Args: []string{"/bin/echo"},
+	r := m.Execve(context.TODO(), ExecveParam{
+		Args: []string{"/bin/true"},
 		Env:  []string{"PATH=/bin"},
 		SyncFunc: func(pid int) error {
 			return err
 		},
 	})
-	r := <-rt
 	if r.Status != runner.StatusRunnerError {
 		t.Fatal(r.Status, r.Error)
 	}
