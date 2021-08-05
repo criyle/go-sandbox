@@ -65,6 +65,7 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 		err2        syscall.Errno
 		err         error
 		unshareUser = r.CloneFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
+		childErr    ChildError
 	)
 
 	// sync with child
@@ -73,7 +74,9 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 	// clone syscall failed
 	if err1 != 0 {
 		unix.Close(p[0])
-		return 0, syscall.Errno(err1)
+		childErr.Location = LocClone
+		childErr.Err = err1
+		return 0, childErr
 	}
 
 	// synchronize with child for uid / gid map
@@ -84,10 +87,10 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 		syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 	}
 
-	r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+	r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&childErr)), uintptr(unsafe.Sizeof(childErr)))
 	// child returned error code
-	if r1 != unsafe.Sizeof(err2) || err2 != 0 || err1 != 0 {
-		err = handlePipeError(r1, err2)
+	if (r1 != unsafe.Sizeof(err2) && r1 != unsafe.Sizeof(childErr)) || childErr.Err != 0 || err1 != 0 {
+		childErr.Err = handlePipeError(r1, childErr.Err)
 		goto fail
 	}
 
@@ -104,17 +107,17 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 	if r.Ptrace || r.StopBeforeSeccomp {
 		// let's wait it in another goroutine to avoid SIGPIPE
 		go func() {
-			r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+			syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&childErr)), uintptr(unsafe.Sizeof(childErr)))
 			unix.Close(p[0])
 		}()
 		return int(pid), nil
 	}
 
 	// if read anything mean child failed after sync (close_on_exec so it should not block)
-	r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+	r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&childErr)), uintptr(unsafe.Sizeof(childErr)))
 	unix.Close(p[0])
 	if r1 != 0 || err1 != 0 {
-		err = handlePipeError(r1, err2)
+		childErr.Err = handlePipeError(r1, childErr.Err)
 		goto failAfterClose
 	}
 	return int(pid), nil
@@ -124,12 +127,15 @@ fail:
 
 failAfterClose:
 	handleChildFailed(int(pid))
-	return 0, err
+	if childErr.Err == 0 {
+		return 0, err
+	}
+	return 0, childErr
 }
 
 // check pipe error
-func handlePipeError(r1 uintptr, errno syscall.Errno) error {
-	if r1 == unsafe.Sizeof(errno) {
+func handlePipeError(r1 uintptr, errno syscall.Errno) syscall.Errno {
+	if r1 >= unsafe.Sizeof(errno) {
 		return syscall.Errno(errno)
 	}
 	return syscall.EPIPE
