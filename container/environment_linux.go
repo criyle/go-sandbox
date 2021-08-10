@@ -208,6 +208,7 @@ func (b *Builder) startContainer() (*container, error) {
 			GidMappings: gidMap,
 			AmbientCaps: []uintptr{
 				unix.CAP_SYS_ADMIN,
+				unix.CAP_SYS_RESOURCE,
 			},
 			Pdeathsig: syscall.SIGTERM,
 		},
