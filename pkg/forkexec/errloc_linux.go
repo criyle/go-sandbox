@@ -92,5 +92,8 @@ func (e ErrorLocation) String() string {
 }
 
 func (e ChildError) Error() string {
-	return fmt.Sprintf("%s(%d): %s", e.Location.String(), e.Index, e.Err.Error())
+	if e.Index > 0 {
+		return fmt.Sprintf("%s(%d): %s", e.Location.String(), e.Index, e.Err.Error())
+	}
+	return fmt.Sprintf("%s: %s", e.Location.String(), e.Err.Error())
 }
