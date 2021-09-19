@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	bind  = unix.MS_BIND | unix.MS_NOSUID | unix.MS_PRIVATE
+	bind  = unix.MS_BIND | unix.MS_NOSUID | unix.MS_PRIVATE | unix.MS_REC
 	mFlag = unix.MS_NOSUID | unix.MS_NOATIME | unix.MS_NODEV
 )
 
@@ -110,7 +110,7 @@ func (b *Builder) WithProc() *Builder {
 		Source: "proc",
 		Target: "proc",
 		FsType: "proc",
-		Flags:  unix.MS_NOSUID | unix.MS_RDONLY,
+		Flags:  unix.MS_NOSUID | unix.MS_NODEV | unix.MS_NOATIME | unix.MS_NOEXEC | unix.MS_RDONLY,
 	})
 	return b
 }
