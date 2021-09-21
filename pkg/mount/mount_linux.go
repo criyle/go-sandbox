@@ -73,7 +73,7 @@ func (m Mount) String() string {
 		return fmt.Sprintf("tmpfs[%s]", m.Target)
 
 	case m.FsType == "proc":
-		return fmt.Sprintf("proc[]")
+		return "proc[ro]"
 
 	default:
 		return fmt.Sprintf("mount[%s,%s:%s:%x,%s]", m.FsType, m.Source, m.Target, m.Flags, m.Data)

@@ -110,7 +110,7 @@ func (b *Builder) WithProc() *Builder {
 		Source: "proc",
 		Target: "proc",
 		FsType: "proc",
-		Flags:  unix.MS_NOSUID | unix.MS_NODEV | unix.MS_NOATIME | unix.MS_NOEXEC | unix.MS_RDONLY,
+		Flags:  unix.MS_NOSUID | unix.MS_NODEV | unix.MS_NOEXEC | unix.MS_RDONLY,
 	})
 	return b
 }
