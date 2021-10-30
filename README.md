@@ -6,6 +6,8 @@ Original goal was to replica [uoj-judger/run_program](https://github.com/vfleaki
 
 The idea of rootfs and interval CPU usage checking comes from [syzoj/judge-v3](https://github.com/syzoj/judge-v3) and the pooled pre-forked container comes from [vijos/jd4](https://github.com/vijos/jd4).
 
+If you are looking for sandbox implementation via REST API, please check [go-judge](https://github.com/criyle/go-judge).
+
 Notice: Only works on Linux since ptrace, unshare, cgroup are available only on Linux
 
 ## Build & Install
