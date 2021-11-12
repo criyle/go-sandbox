@@ -242,6 +242,8 @@ func start() (*runner.Result, error) {
 		CPUHard:     realTimeLimit,
 		FileSize:    outputLimit << 20,
 		Stack:       stackLimit << 20,
+		Data:        memoryLimit << 20,
+		OpenFile:    256,
 		DisableCore: true,
 	}
 	debug("rlimit: ", rlims)

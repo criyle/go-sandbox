@@ -17,6 +17,7 @@ type RLimits struct {
 	FileSize     uint64 // in bytes
 	Stack        uint64 // in bytes
 	AddressSpace uint64 // in bytes
+	OpenFile     uint64 // count
 	DisableCore  bool   // set core to 0
 }
 
@@ -71,6 +72,12 @@ func (r *RLimits) PrepareRLimit() []RLimit {
 			Rlim: getRlimit(r.AddressSpace, r.AddressSpace),
 		})
 	}
+	if r.OpenFile > 0 {
+		ret = append(ret, RLimit{
+			Res:  syscall.RLIMIT_NOFILE,
+			Rlim: getRlimit(r.OpenFile, r.OpenFile),
+		})
+	}
 	if r.DisableCore {
 		ret = append(ret, RLimit{
 			Res:  syscall.RLIMIT_CORE,
@@ -81,11 +88,12 @@ func (r *RLimits) PrepareRLimit() []RLimit {
 }
 
 func (r RLimit) String() string {
-	if r.Res == syscall.RLIMIT_CPU {
-		return fmt.Sprintf("CPU[%d s:%d s]", r.Rlim.Cur, r.Rlim.Max)
-	}
 	t := ""
 	switch r.Res {
+	case syscall.RLIMIT_CPU:
+		return fmt.Sprintf("CPU[%d s:%d s]", r.Rlim.Cur, r.Rlim.Max)
+	case syscall.RLIMIT_NOFILE:
+		return fmt.Sprintf("OpenFile[%d:%d]", r.Rlim.Cur, r.Rlim.Max)
 	case syscall.RLIMIT_DATA:
 		t = "Data"
 	case syscall.RLIMIT_FSIZE:
