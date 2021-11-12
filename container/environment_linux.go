@@ -27,6 +27,9 @@ type Builder struct {
 	// Mounts defines container mount points, empty uses default mounts
 	Mounts []mount.Mount
 
+	// SymbolicLinks defines symlinks to be created after mount file system
+	SymbolicLinks []SymbolicLink
+
 	// WorkDir defines container default work directory (default: /w)
 	WorkDir string
 
@@ -52,6 +55,12 @@ type Builder struct {
 	// ContainerUID & ContainerGID set the container uid / gid mapping
 	ContainerUID int
 	ContainerGID int
+}
+
+// SymbolicLink defines symlinks to be created after mount
+type SymbolicLink struct {
+	LinkPath string
+	Target   string
 }
 
 // CredGenerator generates uid / gid credential used by container
@@ -94,6 +103,13 @@ type sendCmd struct {
 	Msg unixsocket.Msg
 }
 
+var defaultSymLinks = []SymbolicLink{
+	{LinkPath: "/dev/fd", Target: "/proc/self/fd"},
+	{LinkPath: "/dev/stdin", Target: "/proc/self/fd/0"},
+	{LinkPath: "/dev/stdout", Target: "/proc/self/fd/1"},
+	{LinkPath: "/dev/stderr", Target: "/proc/self/fd/2"},
+}
+
 // Build creates new environment with underlying container
 func (b *Builder) Build() (Environment, error) {
 	c, err := b.startContainer()
@@ -114,6 +130,12 @@ func (b *Builder) Build() (Environment, error) {
 			WithTmpfs("w", "").   // work dir
 			WithTmpfs("tmp", ""). // tmp
 			FilterNotExist().Mounts
+	}
+
+	// container symbolic links
+	links := b.SymbolicLinks
+	if len(links) == 0 {
+		links = defaultSymLinks
 	}
 
 	// container root directory on the host
@@ -143,6 +165,7 @@ func (b *Builder) Build() (Environment, error) {
 		DomainName:    domainName,
 		ContainerRoot: root,
 		Mounts:        mounts,
+		SymbolicLinks: links,
 		Cred:          b.CredGenerator != nil,
 		ContainerUID:  b.ContainerUID,
 		ContainerGID:  b.ContainerGID,

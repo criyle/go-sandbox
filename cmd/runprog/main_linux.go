@@ -307,6 +307,9 @@ func start() (*runner.Result, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to ping container: %v", err)
 		}
+		if unsafe {
+			filter = nil
+		}
 		r = &containerRunner{
 			Environment: m,
 			ExecveParam: container.ExecveParam{

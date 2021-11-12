@@ -3,6 +3,7 @@ package container
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"sync"
@@ -262,6 +263,17 @@ func initFileSystem(c containerConfig) error {
 	}
 	if err := os.Remove(oldRoot); err != nil {
 		return fmt.Errorf("init_fs: unlink(old_root) %v", err)
+	}
+	// create symlinks
+	for _, l := range c.SymbolicLinks {
+		// ensure dir exists
+		dir := filepath.Dir(l.LinkPath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("init_fs: mkdir_all(%s) %v", dir, err)
+		}
+		if err := os.Symlink(l.Target, l.LinkPath); err != nil {
+			return fmt.Errorf("init_fs: symlink %v", err)
+		}
 	}
 	// readonly root
 	const remountFlag = syscall.MS_BIND | syscall.MS_REMOUNT | syscall.MS_RDONLY | syscall.MS_NOATIME | syscall.MS_NOSUID
