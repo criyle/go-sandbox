@@ -26,8 +26,10 @@ func TestFork_ETXTBSY(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer os.Remove(f.Name())
-	defer f.Close()
+	t.Cleanup(func() {
+		os.Remove(f.Name())
+		f.Close()
+	})
 
 	if err := f.Chmod(0777); err != nil {
 		t.Fatal(err)
@@ -49,7 +51,11 @@ func TestFork_ETXTBSY(t *testing.T) {
 		ExecFile: f.Fd(),
 	}
 	_, err = r.Start()
-	if err != syscall.ETXTBSY {
+	e, ok := err.(ChildError)
+	if !ok {
+		t.Fatalf("not a child error")
+	}
+	if e.Err != syscall.ETXTBSY && e.Location != LocExecve && e.Index != 0 {
 		t.Fatal(err)
 	}
 }
@@ -103,7 +109,11 @@ func TestFork_ENOENT(t *testing.T) {
 		Mounts:     m,
 	}
 	_, err = r.Start()
-	if err != syscall.ENOENT {
+	e, ok := err.(ChildError)
+	if !ok {
+		t.Fatalf("not a child error")
+	}
+	if e.Err != syscall.ENOENT && e.Location != LocExecve {
 		t.Fatal(err)
 	}
 }
