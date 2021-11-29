@@ -30,6 +30,10 @@ type Builder struct {
 	// SymbolicLinks defines symlinks to be created after mount file system
 	SymbolicLinks []SymbolicLink
 
+	// MaskPaths defines paths to be masked to avoid reading information from
+	// outside of the container
+	MaskPaths []string
+
 	// WorkDir defines container default work directory (default: /w)
 	WorkDir string
 
@@ -103,13 +107,6 @@ type sendCmd struct {
 	Msg unixsocket.Msg
 }
 
-var defaultSymLinks = []SymbolicLink{
-	{LinkPath: "/dev/fd", Target: "/proc/self/fd"},
-	{LinkPath: "/dev/stdin", Target: "/proc/self/fd/0"},
-	{LinkPath: "/dev/stdout", Target: "/proc/self/fd/1"},
-	{LinkPath: "/dev/stderr", Target: "/proc/self/fd/2"},
-}
-
 // Build creates new environment with underlying container
 func (b *Builder) Build() (Environment, error) {
 	c, err := b.startContainer()
@@ -136,6 +133,11 @@ func (b *Builder) Build() (Environment, error) {
 	links := b.SymbolicLinks
 	if len(links) == 0 {
 		links = defaultSymLinks
+	}
+
+	maskPaths := b.MaskPaths
+	if len(maskPaths) == 0 {
+		maskPaths = defaultMaskPaths
 	}
 
 	// container root directory on the host
@@ -166,6 +168,7 @@ func (b *Builder) Build() (Environment, error) {
 		ContainerRoot: root,
 		Mounts:        mounts,
 		SymbolicLinks: links,
+		MaskPaths:     maskPaths,
 		Cred:          b.CredGenerator != nil,
 		ContainerUID:  b.ContainerUID,
 		ContainerGID:  b.ContainerGID,

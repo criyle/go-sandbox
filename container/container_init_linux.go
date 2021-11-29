@@ -1,6 +1,7 @@
 package container
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -275,6 +276,12 @@ func initFileSystem(c containerConfig) error {
 			return fmt.Errorf("init_fs: symlink %v", err)
 		}
 	}
+	// mask paths
+	for _, p := range c.MaskPaths {
+		if err := maskPath(p); err != nil {
+			return fmt.Errorf("init_fs: mask path %v", err)
+		}
+	}
 	// readonly root
 	const remountFlag = syscall.MS_BIND | syscall.MS_REMOUNT | syscall.MS_RDONLY | syscall.MS_NOATIME | syscall.MS_NOSUID
 	if err := syscall.Mount(tmpfs, "/", tmpfs, remountFlag, ""); err != nil {
@@ -334,6 +341,18 @@ func closeOnExecAllFds() error {
 			return err
 		}
 		syscall.CloseOnExec(fd)
+	}
+	return nil
+}
+
+func maskPath(path string) error {
+	// bind mount /dev/null if it is file
+	if err := syscall.Mount("/dev/null", path, "", syscall.MS_BIND, ""); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, syscall.ENOTDIR) {
+			// otherwise, mount tmpfs to mask it
+			return syscall.Mount("tmpfs", path, "tmpfs", syscall.MS_RDONLY, "")
+		}
+		return err
 	}
 	return nil
 }

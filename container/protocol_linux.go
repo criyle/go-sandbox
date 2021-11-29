@@ -58,6 +58,7 @@ type containerConfig struct {
 	ContainerRoot string
 	Mounts        []mount.Mount
 	SymbolicLinks []SymbolicLink
+	MaskPaths     []string
 
 	ContainerUID  int
 	ContainerGID  int
