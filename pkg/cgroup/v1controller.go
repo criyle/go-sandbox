@@ -2,28 +2,26 @@ package cgroup
 
 import (
 	"errors"
-	"os"
 	"path"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
-// SubCgroup is the accessor for single cgroup resource with given path
-type SubCgroup struct {
+// v1controller is the accessor for single cgroup resource with given path
+type v1controller struct {
 	path string
 }
 
 // ErrNotInitialized returned when trying to read from not initialized cgroup
 var ErrNotInitialized = errors.New("cgroup was not initialized")
 
-// NewSubCgroup creates a cgroup accessor with given path (path needs to be created in advance)
-func NewSubCgroup(p string) *SubCgroup {
-	return &SubCgroup{path: p}
+// NewV1Controller creates a cgroup accessor with given path (path needs to be created in advance)
+func NewV1Controller(p string) *v1controller {
+	return &v1controller{path: p}
 }
 
 // WriteUint writes uint64 into given file
-func (c *SubCgroup) WriteUint(filename string, i uint64) error {
+func (c *v1controller) WriteUint(filename string, i uint64) error {
 	if c == nil || c.path == "" {
 		return nil
 	}
@@ -31,7 +29,7 @@ func (c *SubCgroup) WriteUint(filename string, i uint64) error {
 }
 
 // ReadUint read uint64 from given file
-func (c *SubCgroup) ReadUint(filename string) (uint64, error) {
+func (c *v1controller) ReadUint(filename string) (uint64, error) {
 	if c == nil || c.path == "" {
 		return 0, ErrNotInitialized
 	}
@@ -48,28 +46,20 @@ func (c *SubCgroup) ReadUint(filename string) (uint64, error) {
 
 // WriteFile writes cgroup file and handles potential EINTR error while writes to
 // the slow device (cgroup)
-func (c *SubCgroup) WriteFile(name string, content []byte) error {
+func (c *v1controller) WriteFile(name string, content []byte) error {
 	if c == nil || c.path == "" {
 		return ErrNotInitialized
 	}
 	p := path.Join(c.path, name)
-	err := os.WriteFile(p, content, filePerm)
-	for err != nil && errors.Is(err, syscall.EINTR) {
-		err = os.WriteFile(p, content, filePerm)
-	}
-	return err
+	return writeFile(p, content, filePerm)
 }
 
 // ReadFile reads cgroup file and handles potential EINTR error while read to
 // the slow device (cgroup)
-func (c *SubCgroup) ReadFile(name string) ([]byte, error) {
+func (c *v1controller) ReadFile(name string) ([]byte, error) {
 	if c == nil || c.path == "" {
 		return nil, nil
 	}
 	p := path.Join(c.path, name)
-	data, err := os.ReadFile(p)
-	for err != nil && errors.Is(err, syscall.EINTR) {
-		data, err = os.ReadFile(p)
-	}
-	return data, err
+	return readFile(p)
 }

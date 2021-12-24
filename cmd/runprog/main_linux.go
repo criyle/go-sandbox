@@ -140,7 +140,7 @@ func (r *containerRunner) Run(c context.Context) runner.Result {
 func start() (*runner.Result, error) {
 	var (
 		r        runner.Runner
-		cg       *cgroup.Cgroup
+		cg       cgroup.Cgroup
 		err      error
 		execFile uintptr
 		rt       runner.Result
@@ -181,17 +181,24 @@ func start() (*runner.Result, error) {
 	}
 
 	if useCGroup {
-		b, err := cgroup.NewBuilder("runprog").WithCPUAcct().WithMemory().WithPids().FilterByEnv()
+		b, err := cgroup.NewBuilder("runprog").
+			DetectType().
+			WithCPUAcct().
+			WithMemory().
+			WithPids().
+			WithCPUSet().
+			WithCPU().
+			FilterByEnv()
 		if err != nil {
 			return nil, err
 		}
 		debug(b)
-		cg, err = b.Build()
+		cg, err = b.Random("runprog")
 		if err != nil {
 			return nil, err
 		}
 		defer cg.Destroy()
-		if err = cg.SetMemoryLimitInBytes(memoryLimit << 20); err != nil {
+		if err = cg.SetMemoryLimit(memoryLimit << 20); err != nil {
 			return nil, err
 		}
 	}
@@ -398,21 +405,17 @@ func start() (*runner.Result, error) {
 	debug("results:", rt, err)
 
 	if useCGroup {
-		cpu, err := cg.CpuacctUsage()
+		cpu, err := cg.CPUUsage()
 		if err != nil {
 			return nil, fmt.Errorf("cgroup cpu: %v", err)
 		}
-		memory, err := cg.MemoryMaxUsageInBytes()
+		memory, err := cg.MemoryMaxUsage()
 		if err != nil {
 			return nil, fmt.Errorf("cgroup memory: %v", err)
 		}
-		cache, err := cg.FindMemoryStatProperty("cache")
-		if err != nil {
-			return nil, fmt.Errorf("cgroup cache %v", err)
-		}
-		debug("cgroup: cpu: ", cpu, " memory: ", memory, "cache: ", cache)
+		debug("cgroup: cpu: ", cpu, " memory: ", memory)
 		rt.Time = time.Duration(cpu)
-		rt.Memory = runner.Size(memory - cache)
+		rt.Memory = runner.Size(memory)
 		debug("cgroup:", rt)
 	}
 	return &rt, nil
