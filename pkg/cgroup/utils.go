@@ -17,14 +17,15 @@ func EnsureDirExists(path string) error {
 	return os.ErrExist
 }
 
-// CreateSubCgroupPath creates path for sub-cgroup with given group and prefix
-func CreateV1SubCgroupPath(controller, prefix string) (string, error) {
+// CreateSubCgroupPath creates path for controller with given group and prefix
+func CreateV1ControllerPath(controller, prefix string) (string, error) {
 	base := path.Join(basePath, controller, prefix)
 	EnsureDirExists(base)
 	return os.MkdirTemp(base, "")
 }
 
-func CreateV1SubCgroupPathName(controller, prefix, name string) (string, error) {
+// CreateV1ControllerPathName create path for controller with given group, prefix and name
+func CreateV1ControllerPathName(controller, prefix, name string) (string, error) {
 	p := path.Join(basePath, controller, prefix, name)
 	return p, EnsureDirExists(p)
 }

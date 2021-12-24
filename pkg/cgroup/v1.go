@@ -9,7 +9,7 @@ import (
 
 var _ Cgroup = &CgroupV1{}
 
-// CgroupV1 is the combination of sub-cgroups
+// CgroupV1 is the combination of v1 controllers
 type CgroupV1 struct {
 	prefix string
 
@@ -22,7 +22,7 @@ type CgroupV1 struct {
 	all []*v1controller
 }
 
-// AddProc writes cgroup.procs to all sub-cgroup
+// AddProc writes cgroup.procs to all controller
 func (c *CgroupV1) AddProc(pid int) error {
 	for _, s := range c.all {
 		if err := s.WriteUint(cgroupProcs, uint64(pid)); err != nil {
@@ -32,7 +32,7 @@ func (c *CgroupV1) AddProc(pid int) error {
 	return nil
 }
 
-// Destroy removes dir for sub-cgroup, errors are ignored if remove one failed
+// Destroy removes dir for controller, errors are ignored if remove one failed
 func (c *CgroupV1) Destroy() error {
 	var err1 error
 	for _, s := range c.all {

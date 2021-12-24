@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 	"github.com/criyle/go-sandbox/pkg/memfd"
 	"github.com/criyle/go-sandbox/pkg/mount"
 	"github.com/criyle/go-sandbox/pkg/rlimit"
+	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/pkg/seccomp/libseccomp"
 	"github.com/criyle/go-sandbox/runner"
 	"github.com/criyle/go-sandbox/runner/ptrace"
@@ -119,12 +121,14 @@ func main() {
 			c = runner.StatusRunnerError
 		}
 		// Handle fatal error from trace
-		fmt.Fprintf(f, "%d %d %d %d\n", getStatus(c), int(rt.Time/time.Millisecond), uint64(rt.Memory)>>10, rt.ExitStatus)
+		fmt.Fprintf(f, "%d %d %d %d\n", getStatus(c),
+			int(rt.Time.Round(time.Millisecond)/time.Millisecond), uint64(rt.Memory)>>10, rt.ExitStatus)
 		if c == runner.StatusRunnerError {
 			os.Exit(1)
 		}
 	} else {
-		fmt.Fprintf(f, "%d %d %d %d\n", 0, int(rt.Time/time.Millisecond), uint64(rt.Memory)>>10, rt.ExitStatus)
+		fmt.Fprintf(f, "%d %d %d %d\n", 0,
+			int(rt.Time.Round(time.Millisecond)/time.Millisecond), uint64(rt.Memory)>>10, rt.ExitStatus)
 	}
 }
 
@@ -268,9 +272,13 @@ func start() (*runner.Result, error) {
 		Trace:   trace,
 		Default: actionDefault,
 	}
-	filter, err := builder.Build()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create seccomp filter %v", err)
+	// do not build filter for container unsafe since seccomp is not compatible with aarch64 syscalls
+	var filter seccomp.Filter
+	if !unsafe || runt != "container" {
+		filter, err = builder.Build()
+		if err != nil {
+			return nil, fmt.Errorf("failed to create seccomp filter %v", err)
+		}
 	}
 
 	limit := runner.Limit{
@@ -409,13 +417,16 @@ func start() (*runner.Result, error) {
 		if err != nil {
 			return nil, fmt.Errorf("cgroup cpu: %v", err)
 		}
+		// max memory usage may not exist in cgroup v2
 		memory, err := cg.MemoryMaxUsage()
-		if err != nil {
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("cgroup memory: %v", err)
 		}
 		debug("cgroup: cpu: ", cpu, " memory: ", memory)
 		rt.Time = time.Duration(cpu)
-		rt.Memory = runner.Size(memory)
+		if memory > 0 {
+			rt.Memory = runner.Size(memory)
+		}
 		debug("cgroup:", rt)
 	}
 	return &rt, nil

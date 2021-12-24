@@ -3,7 +3,6 @@ package cgroup
 import (
 	"bufio"
 	"bytes"
-	"errors"
 	"os"
 	"path"
 	"strconv"
@@ -49,36 +48,28 @@ func (c *CgroupV2) MemoryUsage() (uint64, error) {
 	return c.ReadUint("memory.current")
 }
 
-// not exist, use rusage.max_rss instead
+// MemoryMaxUsage not exist, use rusage.max_rss instead
 func (c *CgroupV2) MemoryMaxUsage() (uint64, error) {
 	return 0, os.ErrNotExist
 }
 
-// cpu.max quota period
+// SetCPUBandwidth set cpu.max quota period
 func (c *CgroupV2) SetCPUBandwidth(quota, period uint64) error {
 	content := strconv.FormatUint(quota, 10) + " " + strconv.FormatUint(period, 10)
-	err := c.WriteFile("cpu.max", []byte(content))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	return err
+	return c.WriteFile("cpu.max", []byte(content))
 }
 
-// cpuset.cpus
+// SetCPUSet sets cpuset.cpus
 func (c *CgroupV2) SetCPUSet(content []byte) error {
-	err := c.WriteFile("cpuset.cpus", content)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	return err
+	return c.WriteFile("cpuset.cpus", content)
 }
 
-// memory.max
+// SetMemoryLimit memory.max
 func (c *CgroupV2) SetMemoryLimit(l uint64) error {
 	return c.WriteUint("memory.max", l)
 }
 
-// pids.max
+// SetProcLimit pids.max
 func (c *CgroupV2) SetProcLimit(l uint64) error {
 	return c.WriteUint("pids.max", l)
 }

@@ -8,6 +8,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 
 	"golang.org/x/sys/unix"
 )
@@ -17,6 +18,9 @@ import (
 type Builder struct {
 	Prefix string
 	Type   CgroupType
+
+	v2initOnce sync.Once
+	v2initErr  error
 
 	CPU     bool
 	CPUSet  bool
@@ -43,7 +47,7 @@ func (t CgroupType) String() string {
 	}
 }
 
-// NewBuilder return a dumb builder without any sub-cgroup
+// NewBuilder return a dumb builder without any controller
 func NewBuilder(prefix string) *Builder {
 	return &Builder{
 		Prefix: prefix,
@@ -60,8 +64,9 @@ func (b *Builder) DetectType() *Builder {
 	}
 	if st.Type == unix.CGROUP2_SUPER_MAGIC {
 		b.Type = CgroupTypeV2
+	} else {
+		b.Type = CgroupTypeV1
 	}
-	b.Type = CgroupTypeV1
 	return b
 }
 
@@ -102,7 +107,7 @@ func (b *Builder) WithPids() *Builder {
 
 // FilterByEnv reads /proc/cgroups and filter out non-exists ones
 func (b *Builder) FilterByEnv() (*Builder, error) {
-	m, err := GetAllSubCgroup()
+	m, err := b.getAvailableController()
 	if err != nil {
 		return b, err
 	}
@@ -114,9 +119,17 @@ func (b *Builder) FilterByEnv() (*Builder, error) {
 	return b, nil
 }
 
-// String prints the build properties
-func (b *Builder) String() string {
-	s := make([]string, 0, 3)
+func (b *Builder) getAvailableController() (map[string]bool, error) {
+	switch b.Type {
+	case CgroupTypeV1:
+		return GetAvailableControllerV1()
+	case CgroupTypeV2:
+		return GetAvailableControllerV2()
+	}
+	return nil, os.ErrInvalid
+}
+
+func (b *Builder) loopControllerNames(f func(name string)) {
 	for _, t := range []struct {
 		name    string
 		enabled bool
@@ -128,9 +141,22 @@ func (b *Builder) String() string {
 		{"pids", b.Pids},
 	} {
 		if t.enabled {
-			s = append(s, t.name)
+			f(t.name)
 		}
 	}
+}
+
+func (b *Builder) controllerNames() []string {
+	s := make([]string, 0, 5)
+	b.loopControllerNames(func(name string) {
+		s = append(s, name)
+	})
+	return s
+}
+
+// String prints the build properties
+func (b *Builder) String() string {
+	s := b.controllerNames()
 	return fmt.Sprintf("cgroup builder(%v): [%s]", b.Type, strings.Join(s, ", "))
 }
 
@@ -171,40 +197,48 @@ func (b *Builder) Random(pattern string) (Cgroup, error) {
 }
 
 func (b *Builder) buildV2(name string) (cg Cgroup, err error) {
-	var s []string
-	for _, t := range []struct {
-		name    string
-		enabled bool
-	}{
-		{"cpu", b.CPU},
-		{"cpuset", b.CPUSet},
-		{"cpuacct", b.CPUAcct},
-		{"memory", b.Memory},
-		{"pids", b.Pids},
-	} {
-		if t.enabled {
-			s = append(s, t.name)
-		}
-	}
-	controlMsg := []byte("+" + strings.Join(s, " +"))
-
 	// make prefix if not exist
-	prefix := path.Join(basePath, b.Prefix)
-	if err := os.Mkdir(prefix, dirPerm); err == nil {
-		if err := writeFile(path.Join(prefix, cgroupControl), controlMsg, filePerm); err != nil {
-			return nil, err
-		}
+	if err := b.ensurePrefixV2Once(); err != nil {
+		return nil, err
 	}
+
+	p := path.Join(basePath, b.Prefix, name)
+	defer func() {
+		if err != nil {
+			remove(p)
+		}
+	}()
 
 	// make dir
-	p := path.Join(basePath, b.Prefix, name)
 	if err := os.Mkdir(p, dirPerm); err != nil {
 		return nil, err
 	}
-	if err := writeFile(path.Join(p, cgroupControl), controlMsg, filePerm); err != nil {
-		return nil, err
-	}
 	return &CgroupV2{p}, nil
+}
+
+func (b *Builder) ensurePrefixV2Once() error {
+	b.v2initOnce.Do(func() {
+		b.v2initErr = b.ensurePrefixV2()
+	})
+	return b.v2initErr
+}
+
+func (b *Builder) ensurePrefixV2() error {
+	s := b.controllerNames()
+	controlMsg := []byte("+" + strings.Join(s, " +"))
+
+	// start from base dir
+	entries := strings.Split(b.Prefix, "/")
+	current := basePath
+	for _, e := range entries {
+		current += e
+		if err := os.Mkdir(current, dirPerm); err == nil {
+			if err := writeFile(path.Join(current, cgroupSubtreeControl), controlMsg, filePerm); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (b *Builder) buildV1(name string) (cg Cgroup, err error) {
@@ -235,7 +269,7 @@ func (b *Builder) buildV1(name string) (cg Cgroup, err error) {
 		}
 
 		var path string
-		path, err = CreateV1SubCgroupPathName(c.name, b.Prefix, name)
+		path, err = CreateV1ControllerPathName(c.name, b.Prefix, name)
 		*c.cg = NewV1Controller(path)
 		if errors.Is(err, os.ErrExist) {
 			// do not ignore first time error, which means collapse

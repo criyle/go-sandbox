@@ -4,8 +4,10 @@ const (
 	// systemd mounted cgroups
 	basePath        = "/sys/fs/cgroup"
 	cgroupProcs     = "cgroup.procs"
-	cgroupControl   = "cgroup.subtree_control"
 	procCgroupsPath = "/proc/cgroups"
+
+	cgroupSubtreeControl = "cgroup.subtree_control"
+	cgroupControllers    = "cgroup.controllers"
 
 	filePerm = 0644
 	dirPerm  = 0755

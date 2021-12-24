@@ -3,6 +3,7 @@ package cgroup
 import (
 	"bufio"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -14,8 +15,8 @@ type Info struct {
 	Enabled    bool
 }
 
-// GetCgroupInfo read /proc/cgroups and return the result
-func GetCgroupInfo() (map[string]Info, error) {
+// GetCgroupV1Info read /proc/cgroups and return the result
+func GetCgroupV1Info() (map[string]Info, error) {
 	f, err := os.Open(procCgroupsPath)
 	if err != nil {
 		return nil, err
@@ -57,9 +58,9 @@ func GetCgroupInfo() (map[string]Info, error) {
 	return rt, nil
 }
 
-// GetAllSubCgroup reads /proc/cgroups and get all available sub-cgroup as set
-func GetAllSubCgroup() (map[string]bool, error) {
-	info, err := GetCgroupInfo()
+// GetAvailableControllerV1 reads /proc/cgroups and get all available controller as set
+func GetAvailableControllerV1() (map[string]bool, error) {
+	info, err := GetCgroupV1Info()
 	if err != nil {
 		return nil, err
 	}
@@ -72,4 +73,18 @@ func GetAllSubCgroup() (map[string]bool, error) {
 		rt[k] = true
 	}
 	return rt, nil
+}
+
+// GetAvailableControllerV2 reads /sys/fs/cgroup/cgroup.controllers to get all controller
+func GetAvailableControllerV2() (map[string]bool, error) {
+	c, err := readFile(path.Join(basePath, cgroupControllers))
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]bool)
+	f := strings.Fields(string(c))
+	for _, v := range f {
+		m[v] = true
+	}
+	return m, nil
 }

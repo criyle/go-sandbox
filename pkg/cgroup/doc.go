@@ -2,7 +2,7 @@
 // under systemd defined mount path (i.e.,sys/fs/cgroup) including v1 and
 // v2 implementation.
 //
-// Available sub-systems:
+// Available cgroup controller:
 //  cpu
 //  cpuset
 //  cpuacct
