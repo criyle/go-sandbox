@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-
-	"golang.org/x/sys/unix"
 )
 
 // Builder builds cgroup directories
@@ -53,21 +51,6 @@ func NewBuilder(prefix string) *Builder {
 		Prefix: prefix,
 		Type:   CgroupTypeV1,
 	}
-}
-
-func (b *Builder) DetectType() *Builder {
-	// if /sys/fs/cgroup is mounted as CGROUPV2 or TMPFS (V1)
-	var st unix.Statfs_t
-	if err := unix.Statfs(basePath, &st); err != nil {
-		// ignore errors
-		return b
-	}
-	if st.Type == unix.CGROUP2_SUPER_MAGIC {
-		b.Type = CgroupTypeV2
-	} else {
-		b.Type = CgroupTypeV1
-	}
-	return b
 }
 
 func (b *Builder) WithType(t CgroupType) *Builder {
@@ -231,7 +214,7 @@ func (b *Builder) ensurePrefixV2() error {
 	entries := strings.Split(b.Prefix, "/")
 	current := basePath
 	for _, e := range entries {
-		current += e
+		current += "/" + e
 		if err := os.Mkdir(current, dirPerm); err == nil {
 			if err := writeFile(path.Join(current, cgroupSubtreeControl), controlMsg, filePerm); err != nil {
 				return err

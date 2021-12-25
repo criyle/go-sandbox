@@ -7,6 +7,8 @@ import (
 	"path"
 	"strings"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 // EnsureDirExists creates directories if the path not exists
@@ -28,6 +30,67 @@ func CreateV1ControllerPath(controller, prefix string) (string, error) {
 func CreateV1ControllerPathName(controller, prefix, name string) (string, error) {
 	p := path.Join(basePath, controller, prefix, name)
 	return p, EnsureDirExists(p)
+}
+
+const initPath = "init"
+
+// EnableV2Nesting migrates all process in the container to nested /init path
+// and enables all available controllers in the root cgroup
+func EnableV2Nesting() error {
+	if DetectType() != CgroupTypeV2 {
+		return nil
+	}
+
+	p, err := readFile(path.Join(basePath, cgroupProcs))
+	if err != nil {
+		return err
+	}
+	procs := strings.Split(string(p), "\n")
+	if len(procs) == 0 {
+		return nil
+	}
+
+	// mkdir init
+	if err := os.Mkdir(path.Join(basePath, initPath), dirPerm); err != nil && !errors.Is(err, os.ErrExist) {
+		return err
+	}
+	// move all process into init cgroup
+	procFile, err := os.OpenFile(path.Join(basePath, initPath, cgroupProcs), os.O_RDWR, filePerm)
+	if err != nil {
+		return err
+	}
+	for _, v := range procs {
+		procFile.WriteString(v)
+	}
+	procFile.Close()
+
+	a, err := GetAvailableControllerV2()
+	if err != nil {
+		return err
+	}
+	s := make([]string, 0, len(a))
+	for k := range a {
+		s = append(s, k)
+	}
+	controlMsg := []byte("+" + strings.Join(s, " +"))
+	if err := writeFile(path.Join(basePath, cgroupSubtreeControl), controlMsg, filePerm); err != nil {
+		return err
+	}
+	return nil
+}
+
+// DetectType detects current mounted cgroup type in systemd default path
+func DetectType() CgroupType {
+	// if /sys/fs/cgroup is mounted as CGROUPV2 or TMPFS (V1)
+	var st unix.Statfs_t
+	if err := unix.Statfs(basePath, &st); err != nil {
+		// ignore errors, defalting to CgroupV1
+		return CgroupTypeV1
+	}
+	if st.Type == unix.CGROUP2_SUPER_MAGIC {
+		return CgroupTypeV2
+	}
+	return CgroupTypeV1
 }
 
 func remove(name string) error {

@@ -185,8 +185,12 @@ func start() (*runner.Result, error) {
 	}
 
 	if useCGroup {
+		t := cgroup.DetectType()
+		if t == cgroup.CgroupTypeV2 {
+			cgroup.EnableV2Nesting()
+		}
 		b, err := cgroup.NewBuilder("runprog").
-			DetectType().
+			WithType(t).
 			WithCPUAcct().
 			WithMemory().
 			WithPids().
