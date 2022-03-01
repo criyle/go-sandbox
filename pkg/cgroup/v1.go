@@ -43,7 +43,7 @@ func (c *CgroupV1) Destroy() error {
 	return err1
 }
 
-func (c *CgroupV1) SetCPUBandwidth(period, quota uint64) error {
+func (c *CgroupV1) SetCPUBandwidth(quota, period uint64) error {
 	if err := c.SetCPUCfsQuota(quota); err != nil {
 		return err
 	}
