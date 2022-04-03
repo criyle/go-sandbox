@@ -74,6 +74,9 @@ func main() {
 
 	rt, err := start()
 	debug(rt, err)
+	if e, ok := err.(syscall.Errno); ok {
+		debug("errno", int(e))
+	}
 
 	if rt == nil {
 		rt = &runner.Result{
@@ -194,8 +197,8 @@ func start() (*runner.Result, error) {
 		case wstatus.Exited():
 			if status := wstatus.ExitStatus(); status != 0 {
 				result.Status = runner.StatusNonzeroExitStatus
-				return &result, nil
 			}
+			return &result, nil
 
 		case wstatus.Signaled():
 			sig := wstatus.Signal()

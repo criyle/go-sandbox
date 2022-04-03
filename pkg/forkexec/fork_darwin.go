@@ -1,7 +1,6 @@
 package forkexec
 
 import (
-	"log"
 	"syscall"
 	"unsafe"
 
@@ -84,7 +83,7 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 		unix.Close(p[0])
 		return 0, syscall.Errno(err1)
 	}
-	r1, _, err1 = syscall3(funcPC(libc_read_trampoline), uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+	r1, _, err1 = syscall3(libc_read_trampoline_addr, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 	// child returned error code
 	if r1 != unsafe.Sizeof(err2) || err2 != 0 || err1 != 0 {
 		err = handlePipeError(r1, err2)
@@ -98,13 +97,13 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 		}
 	}
 	// otherwise, ack child (err1 == 0)
-	r1, _, err1 = syscall3(funcPC(libc_write_trampoline), uintptr(p[0]), uintptr(unsafe.Pointer(&err1)), uintptr(unsafe.Sizeof(err1)))
+	r1, _, err1 = syscall3(libc_write_trampoline_addr, uintptr(p[0]), uintptr(unsafe.Pointer(&err1)), uintptr(unsafe.Sizeof(err1)))
 	if err1 != 0 {
 		goto fail
 	}
 
 	// if read anything mean child failed after sync (close_on_exec so it should not block)
-	r1, _, err1 = syscall3(funcPC(libc_read_trampoline), uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+	r1, _, err1 = syscall3(libc_read_trampoline_addr, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 	unix.Close(p[0])
 	if r1 != 0 || err1 != 0 {
 		err = handlePipeError(r1, err2)
@@ -122,7 +121,6 @@ failAfterClose:
 
 // check pipe error
 func handlePipeError(r1 uintptr, errno syscall.Errno) error {
-	log.Println(r1, errno, int(errno))
 	if r1 == unsafe.Sizeof(errno) {
 		return syscall.Errno(errno)
 	}

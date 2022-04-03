@@ -8,3 +8,5 @@ env*.sh
 # Test Files
 /runprog
 /test
+
+.vscode
