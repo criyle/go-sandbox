@@ -137,6 +137,10 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 		nextfd++
 	}
 	if r.ExecFile > 0 && int(r.ExecFile) < nextfd {
+		// Avoid fd rewrite
+		for nextfd == pipe {
+			nextfd++
+		}
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, r.ExecFile, uintptr(nextfd), syscall.O_CLOEXEC)
 		if err1 != 0 {
 			return pipe, LocDup3, 0, err1

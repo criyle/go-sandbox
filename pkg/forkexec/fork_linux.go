@@ -87,9 +87,9 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 		syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 	}
 
-	r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&childErr)), uintptr(unsafe.Sizeof(childErr)))
+	n, err := readChildErr(p[0], &childErr)
 	// child returned error code
-	if (r1 != unsafe.Sizeof(err2) && r1 != unsafe.Sizeof(childErr)) || childErr.Err != 0 || err1 != 0 {
+	if (n != int(unsafe.Sizeof(err2)) && n != int(unsafe.Sizeof(childErr))) || childErr.Err != 0 || err != nil {
 		childErr.Err = handlePipeError(r1, childErr.Err)
 		goto fail
 	}
@@ -107,16 +107,16 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 	if r.Ptrace || r.StopBeforeSeccomp {
 		// let's wait it in another goroutine to avoid SIGPIPE
 		go func() {
-			syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&childErr)), uintptr(unsafe.Sizeof(childErr)))
+			readChildErr(p[0], &childErr)
 			unix.Close(p[0])
 		}()
 		return int(pid), nil
 	}
 
 	// if read anything mean child failed after sync (close_on_exec so it should not block)
-	r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(p[0]), uintptr(unsafe.Pointer(&childErr)), uintptr(unsafe.Sizeof(childErr)))
+	n, err = readChildErr(p[0], &childErr)
 	unix.Close(p[0])
-	if r1 != 0 || err1 != 0 {
+	if n != 0 || err != nil {
 		childErr.Err = handlePipeError(r1, childErr.Err)
 		goto failAfterClose
 	}
@@ -131,6 +131,26 @@ failAfterClose:
 		return 0, err
 	}
 	return 0, childErr
+}
+
+func readChildErr(fd int, childErr *ChildError) (n int, err error) {
+	for {
+		n, err = readlen(fd, (*byte)(unsafe.Pointer(childErr)), int(unsafe.Sizeof(*childErr)))
+		if err != syscall.EINTR {
+			break
+		}
+	}
+	return
+}
+
+// https://cs.opensource.google/go/go/+/refs/tags/go1.18.1:src/syscall/zsyscall_linux_amd64.go;l=944
+func readlen(fd int, p *byte, np int) (n int, err error) {
+	r0, _, e1 := syscall.Syscall(syscall.SYS_READ, uintptr(fd), uintptr(unsafe.Pointer(p)), uintptr(np))
+	n = int(r0)
+	if e1 != 0 {
+		err = syscall.Errno(e1)
+	}
+	return
 }
 
 // check pipe error
