@@ -291,12 +291,6 @@ func start() (*runner.Result, error) {
 	}
 
 	if runt == "container" {
-		root, err := os.MkdirTemp("", "dm")
-		if err != nil {
-			return nil, fmt.Errorf("cannot make temp root for container namespace: %v", err)
-		}
-		defer os.RemoveAll(root)
-
 		var credG container.CredGenerator
 		if cred {
 			credG = newCredGen()
@@ -312,7 +306,7 @@ func start() (*runner.Result, error) {
 		}
 
 		b := container.Builder{
-			Root:          root,
+			TmpRoot:       "dm",
 			Mounts:        mb.Mounts,
 			Stderr:        stderr,
 			CredGenerator: credG,

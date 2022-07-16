@@ -24,6 +24,9 @@ type Builder struct {
 	// Root is container root mount path, empty uses current work path
 	Root string
 
+	// TmpRoot defines the tmp dir pattern if not nil. Temp directory will be created as container root dir
+	TmpRoot string
+
 	// Mounts defines container mount points, empty uses default mounts
 	Mounts []mount.Mount
 
@@ -142,6 +145,12 @@ func (b *Builder) Build() (Environment, error) {
 
 	// container root directory on the host
 	root := b.Root
+	if b.TmpRoot != "" {
+		if root, err = os.MkdirTemp(b.Root, b.TmpRoot); err != nil {
+			return nil, fmt.Errorf("container: failed to make tmp container root at %s %v", b.Root, err)
+		}
+		defer os.Remove(root)
+	}
 	if root == "" {
 		if root, err = os.Getwd(); err != nil {
 			return nil, fmt.Errorf("container: failed to get work directory %v", err)
