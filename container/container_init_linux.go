@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -76,6 +77,9 @@ func Init() (err error) {
 		fmt.Fprintf(os.Stderr, "container_exit\n")
 		os.Exit(0)
 	}()
+
+	// ignore any signal that kills the init process
+	ignoreSignals()
 
 	// limit container resource usage
 	runtime.GOMAXPROCS(containerMaxProc)
@@ -355,4 +359,13 @@ func maskPath(path string) error {
 		return err
 	}
 	return nil
+}
+
+func ignoreSignals() {
+	// signals that cause run-time panic
+	signal.Ignore(syscall.SIGBUS, syscall.SIGFPE, syscall.SIGSEGV)
+	// signals that cause the program to exit
+	signal.Ignore(syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM)
+	// signals that cause the program to exit with a stack dump
+	signal.Ignore(syscall.SIGQUIT, syscall.SIGILL, syscall.SIGTRAP, syscall.SIGABRT, syscall.SIGSTKFLT, syscall.SIGSYS)
 }
