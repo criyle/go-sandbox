@@ -17,7 +17,7 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 		cred     *syscall.Credential
 	)
 	if cmd == nil {
-		return c.sendErrorReply("execve: no parameter provided")
+		return c.sendErrorReply("handle: no parameter provided")
 	}
 	if len(msg.Fds) > 0 {
 		files = intSliceToUintptr(msg.Fds)
@@ -30,10 +30,18 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 	// if fexecve, then the first fd must be executable
 	if cmd.FdExec {
 		if len(files) == 0 {
-			return fmt.Errorf("execve: expected fexecve fd")
+			return c.sendErrorReply("handle: expected fexecve fd")
 		}
 		execFile = files[0]
 		files = files[1:]
+	}
+
+	if len(cmd.Argv) > 0 {
+		exePath, err := lookPath(cmd.Argv[0], cmd.Env)
+		if err != nil {
+			return c.sendErrorReply("handle: %s: %v", cmd.Argv[0], err)
+		}
+		cmd.Argv[0] = exePath
 	}
 
 	syncFunc := func(pid int) error {

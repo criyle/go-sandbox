@@ -75,10 +75,16 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) runner.Result
 		return errResult("execve: recvReply %v", err)
 	}
 	// if sync function did not involved
-	if rep.Error != nil || msg.Cred == nil {
+	if rep.Error != nil {
+		return errResult("execve: %v", rep.Error)
+	}
+	// if pid not received
+	if msg.Cred == nil {
 		// tell kill function to exit and sync
 		c.execveSyncKill()
-		return errResult("execve: no pid received or error %v", rep.Error)
+		// tell err exec function to exit and sync
+		c.execveSyncKill()
+		return errResult("execve: no pid received")
 	}
 	if param.SyncFunc != nil {
 		if err := param.SyncFunc(int(msg.Cred.Pid)); err != nil {

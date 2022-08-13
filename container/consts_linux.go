@@ -4,7 +4,6 @@ type cmdType int8
 
 const (
 	cmdPing cmdType = iota + 1
-	cmdCopyIn
 	cmdOpen
 	cmdDelete
 	cmdReset
