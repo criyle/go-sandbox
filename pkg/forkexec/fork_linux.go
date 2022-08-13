@@ -61,7 +61,6 @@ func (r *Runner) Start() (int, error) {
 
 func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error) {
 	var (
-		r1          uintptr
 		err2        syscall.Errno
 		err         error
 		unshareUser = r.CloneFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
@@ -90,7 +89,7 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 	n, err := readChildErr(p[0], &childErr)
 	// child returned error code
 	if (n != int(unsafe.Sizeof(err2)) && n != int(unsafe.Sizeof(childErr))) || childErr.Err != 0 || err != nil {
-		childErr.Err = handlePipeError(r1, childErr.Err)
+		childErr.Err = handlePipeError(n, childErr.Err)
 		goto fail
 	}
 
@@ -117,7 +116,7 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 	n, err = readChildErr(p[0], &childErr)
 	unix.Close(p[0])
 	if n != 0 || err != nil {
-		childErr.Err = handlePipeError(r1, childErr.Err)
+		childErr.Err = handlePipeError(n, childErr.Err)
 		goto failAfterClose
 	}
 	return int(pid), nil
@@ -154,8 +153,8 @@ func readlen(fd int, p *byte, np int) (n int, err error) {
 }
 
 // check pipe error
-func handlePipeError(r1 uintptr, errno syscall.Errno) syscall.Errno {
-	if r1 >= unsafe.Sizeof(errno) {
+func handlePipeError(r1 int, errno syscall.Errno) syscall.Errno {
+	if uintptr(r1) >= unsafe.Sizeof(errno) {
 		return syscall.Errno(errno)
 	}
 	return syscall.EPIPE
