@@ -1,8 +1,12 @@
 package container
 
 import (
+	"bufio"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
 )
@@ -23,6 +27,11 @@ func (c *containerServer) handleConf(conf *confCmd) error {
 		if c.ContainerGID == 0 {
 			c.ContainerGID = containerGID
 		}
+		env, err := readDotEnv()
+		if err != nil {
+			return err
+		}
+		c.defaultEnv = env
 	}
 	return c.sendReply(reply{}, unixsocket.Msg{})
 }
@@ -67,4 +76,29 @@ func (c *containerServer) handleReset() error {
 		}
 	}
 	return c.sendReply(reply{}, unixsocket.Msg{})
+}
+
+// readDotEnv attempts to read /.env file and save as default environment variables
+func readDotEnv() ([]string, error) {
+	f, err := os.Open("/.env")
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+	}
+	defer f.Close()
+
+	var ret []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if len(line) == 0 || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if !strings.Contains(line, "=") {
+			return nil, fmt.Errorf("dotenv: invalid line %s", line)
+		}
+		ret = append(ret, line)
+	}
+	return ret, nil
 }

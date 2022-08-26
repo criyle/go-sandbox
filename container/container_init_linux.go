@@ -17,6 +17,7 @@ import (
 type containerServer struct {
 	socket *socket
 	containerConfig
+	defaultEnv []string
 
 	done     chan struct{}
 	err      error

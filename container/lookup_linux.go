@@ -54,7 +54,8 @@ func lookPath(name string, env []string) (string, error) {
 func findPath(env []string) ([]string, error) {
 	// find PATH=
 	const pathPrefix = "PATH="
-	for _, s := range env {
+	for i := len(env) - 1; i >= 0; i-- {
+		s := env[i]
 		if strings.HasPrefix(s, pathPrefix) {
 			return filepath.SplitList(s[len(pathPrefix):]), nil
 		}

@@ -36,8 +36,12 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 		files = files[1:]
 	}
 
+	var env []string
+	env = append(env, c.defaultEnv...)
+	env = append(env, cmd.Env...)
+
 	if len(cmd.Argv) > 0 {
-		exePath, err := lookPath(cmd.Argv[0], cmd.Env)
+		exePath, err := lookPath(cmd.Argv[0], env)
 		if err != nil {
 			return c.sendErrorReply("handle: %s: %v", cmd.Argv[0], err)
 		}
@@ -80,7 +84,7 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 
 	r := forkexec.Runner{
 		Args:       cmd.Argv,
-		Env:        cmd.Env,
+		Env:        env,
 		ExecFile:   execFile,
 		RLimits:    cmd.RLimits,
 		Files:      files,
