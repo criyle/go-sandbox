@@ -54,6 +54,11 @@ func ensureMountTargetExists(source, target string) error {
 	}
 	if isFile {
 		if err := syscall.Mknod(target, 0755, 0); err != nil {
+			// double check if file exists
+			f, err1 := os.Lstat(target)
+			if err1 == nil && f.Mode().IsRegular() {
+				return nil
+			}
 			return err
 		}
 	}
