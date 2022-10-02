@@ -8,14 +8,9 @@ import (
 )
 
 // Reference to src/syscall/exec_linux.go
+//
 //go:norace
 func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, hostname, domainname, pivotRoot *byte, p [2]int) (r1 uintptr, err1 syscall.Errno) {
-	var (
-		loc        ErrorLocation
-		idx, pipe  int
-		childError ChildError
-	)
-
 	// similar to exec_linux, avoid side effect by shuffling around
 	fd, nextfd := prepareFds(r.Files)
 
@@ -39,33 +34,16 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	afterForkInChild()
 	// Notice: cannot call any GO functions beyond this point
 
-	pipe, loc, idx, err1 = forkAndExecInChild1(r, argv0, argv, env, workdir, hostname, domainname, pivotRoot, fd, nextfd, p)
-
-	// send error code on pipe
-	childError.Err = err1
-	childError.Location = loc
-	childError.Index = idx
-
-	// send error code on pipe
-	syscall.RawSyscall(unix.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&childError)), unsafe.Sizeof(childError))
-	for {
-		syscall.RawSyscall(syscall.SYS_EXIT, uintptr(err1), 0, 0)
-	}
-	// cannot reach this point
-}
-
-//go:nosplit
-func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hostname, domainname, pivotRoot *byte, fd []int, nextfd int, p [2]int) (pipe int, loc ErrorLocation, idx int, err1 syscall.Errno) {
-	pipe = p[1]
+	pipe := p[1]
 	var (
-		r1, pid     uintptr
+		pid         uintptr
 		err2        syscall.Errno
 		unshareUser = r.CloneFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
 	)
 
 	// Close write end of pipe
 	if _, _, err1 = syscall.RawSyscall(syscall.SYS_CLOSE, uintptr(p[0]), 0, 0); err1 != 0 {
-		return pipe, LocCloseWrite, 0, err1
+		childExitError(pipe, LocCloseWrite, err1)
 	}
 
 	// If usernamespace is unshared, uid map and gid map is required to create folders
@@ -76,22 +54,22 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 	if unshareUser {
 		r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), unsafe.Sizeof(err2))
 		if err1 != 0 {
-			return pipe, LocUnshareUserRead, 0, err1
+			childExitError(pipe, LocUnshareUserRead, err1)
 		}
 		if r1 != unsafe.Sizeof(err2) {
 			err1 = syscall.EINVAL
-			return pipe, LocUnshareUserRead, 0, err1
+			childExitError(pipe, LocUnshareUserRead, err1)
 		}
 		if err2 != 0 {
 			err1 = err2
-			return pipe, LocUnshareUserRead, 0, err1
+			childExitError(pipe, LocUnshareUserRead, err1)
 		}
 	}
 
 	// Get pid of child
 	pid, _, err1 = syscall.RawSyscall(syscall.SYS_GETPID, 0, 0, 0)
 	if err1 != 0 {
-		return pipe, LocGetPid, 0, err1
+		childExitError(pipe, LocGetPid, err1)
 	}
 
 	// keep capabilities through set_uid / set_gid calls (make sure we can use unshare cgroup), later dropped
@@ -99,7 +77,7 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_SECUREBITS,
 			_SECURE_KEEP_CAPS_LOCKED|_SECURE_NO_SETUID_FIXUP|_SECURE_NO_SETUID_FIXUP_LOCKED, 0)
 		if err1 != 0 {
-			return pipe, LocKeepCapability, 0, err1
+			childExitError(pipe, LocKeepCapability, err1)
 		}
 	}
 
@@ -113,16 +91,16 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 		if !(r.GIDMappings != nil && !r.GIDMappingsEnableSetgroups && ngroups == 0) && !cred.NoSetGroups {
 			_, _, err1 = syscall.RawSyscall(unix.SYS_SETGROUPS, ngroups, groups, 0)
 			if err1 != 0 {
-				return pipe, LocSetGroups, 0, err1
+				childExitError(pipe, LocSetGroups, err1)
 			}
 		}
 		_, _, err1 = syscall.RawSyscall(unix.SYS_SETGID, uintptr(cred.Gid), 0, 0)
 		if err1 != 0 {
-			return pipe, LocSetGid, 0, err1
+			childExitError(pipe, LocSetGid, err1)
 		}
 		_, _, err1 = syscall.RawSyscall(unix.SYS_SETUID, uintptr(cred.Uid), 0, 0)
 		if err1 != 0 {
-			return pipe, LocSetUid, 0, err1
+			childExitError(pipe, LocSetUid, err1)
 		}
 	}
 
@@ -131,7 +109,7 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 	if pipe < nextfd {
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(pipe), uintptr(nextfd), syscall.O_CLOEXEC)
 		if err1 != 0 {
-			return pipe, LocDup3, 0, err1
+			childExitError(pipe, LocDup3, err1)
 		}
 		pipe = nextfd
 		nextfd++
@@ -143,7 +121,7 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 		}
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, r.ExecFile, uintptr(nextfd), syscall.O_CLOEXEC)
 		if err1 != 0 {
-			return pipe, LocDup3, 0, err1
+			childExitError(pipe, LocDup3, err1)
 		}
 		r.ExecFile = uintptr(nextfd)
 		nextfd++
@@ -156,7 +134,7 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 			}
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(fd[i]), uintptr(nextfd), syscall.O_CLOEXEC)
 			if err1 != 0 {
-				return pipe, LocDup3, 0, err1
+				childExitError(pipe, LocDup3, err1)
 			}
 			// Set up close on exec
 			fd[i] = nextfd
@@ -173,40 +151,39 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 			// dup2(i, i) will not clear close on exec flag, need to reset the flag
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_FCNTL, uintptr(fd[i]), syscall.F_SETFD, 0)
 			if err1 != 0 {
-				return pipe, LocFcntl, 0, err1
+				childExitError(pipe, LocFcntl, err1)
 			}
 			continue
 		}
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(fd[i]), uintptr(i), 0)
 		if err1 != 0 {
-			return pipe, LocDup3, 0, err1
+			childExitError(pipe, LocDup3, err1)
 		}
 	}
 
 	// Set the session ID
 	_, _, err1 = syscall.RawSyscall(syscall.SYS_SETSID, 0, 0, 0)
 	if err1 != 0 {
-		return pipe, LocSetSid, 0, err1
+		childExitError(pipe, LocSetSid, err1)
 	}
 
 	// Set the controlling TTY
 	if r.CTTY {
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_IOCTL, uintptr(0), uintptr(syscall.TIOCSCTTY), 1)
 		if err1 != 0 {
-			return pipe, LocIoctl, 0, err1
+			childExitError(pipe, LocIoctl, err1)
 		}
 	}
 
 	// Mount file system
 	{
-		loc = LocMount
 		// If mount point is unshared, mark root as private to avoid propagate
 		// outside to the original mount namespace
 		if r.CloneFlags&syscall.CLONE_NEWNS == syscall.CLONE_NEWNS {
 			_, _, err1 = syscall.RawSyscall6(syscall.SYS_MOUNT, uintptr(unsafe.Pointer(&none[0])),
 				uintptr(unsafe.Pointer(&slash[0])), 0, syscall.MS_REC|syscall.MS_PRIVATE, 0, 0)
 			if err1 != 0 {
-				return pipe, LocMountRoot, 0, err1
+				childExitError(pipe, LocMountRoot, err1)
 			}
 		}
 
@@ -217,30 +194,30 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 				uintptr(unsafe.Pointer(pivotRoot)), uintptr(unsafe.Pointer(&tmpfs[0])), 0,
 				uintptr(unsafe.Pointer(&empty[0])), 0)
 			if err1 != 0 {
-				return pipe, LocMountTmpfs, 0, err1
+				childExitError(pipe, LocMountTmpfs, err1)
 			}
 
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_CHDIR, uintptr(unsafe.Pointer(pivotRoot)), 0, 0)
 			if err1 != 0 {
-				return pipe, LocMountChdir, 0, err1
+				childExitError(pipe, LocMountChdir, err1)
 			}
 		}
 
 		// performing mounts
 		for i, m := range r.Mounts {
 			// mkdirs(target)
-			for i, p := range m.Prefixes {
+			for j, p := range m.Prefixes {
 				// if target mount point is a file, mknod(target)
-				if i == len(m.Prefixes)-1 && m.MakeNod {
+				if j == len(m.Prefixes)-1 && m.MakeNod {
 					_, _, err1 = syscall.RawSyscall(syscall.SYS_MKNODAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(p)), 0755)
 					if err1 != 0 && err1 != syscall.EEXIST {
-						return pipe, LocMountMkdir, 0, err1
+						childExitErrorWithIndex(pipe, LocMountMkdir, i, err1)
 					}
 					break
 				}
 				_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIRAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(p)), 0755)
 				if err1 != 0 && err1 != syscall.EEXIST {
-					return pipe, LocMountMkdir, 0, err1
+					childExitErrorWithIndex(pipe, LocMountMkdir, i, err1)
 				}
 			}
 			// mount(source, target, fsType, flags, data)
@@ -248,7 +225,7 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 				uintptr(unsafe.Pointer(m.Target)), uintptr(unsafe.Pointer(m.FsType)), uintptr(m.Flags),
 				uintptr(unsafe.Pointer(m.Data)), 0)
 			if err1 != 0 {
-				return pipe, LocMount, i, err1
+				childExitErrorWithIndex(pipe, LocMount, i, err1)
 			}
 			// bind mount is not respect ro flag so that read-only bind mount needs remount
 			if m.Flags&bindRo == bindRo {
@@ -256,7 +233,7 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 					uintptr(unsafe.Pointer(m.Target)), uintptr(unsafe.Pointer(m.FsType)),
 					uintptr(m.Flags|syscall.MS_REMOUNT), uintptr(unsafe.Pointer(m.Data)), 0)
 				if err1 != 0 {
-					return pipe, LocMount, i, err1
+					childExitErrorWithIndex(pipe, LocMount, i, err1)
 				}
 			}
 		}
@@ -266,25 +243,25 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 			// mkdir("old_root")
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIRAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(&oldRoot[0])), 0755)
 			if err1 != 0 {
-				return
+				childExitError(pipe, LocPivotRoot, err1)
 			}
 
 			// pivot_root(root, "old_root")
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_PIVOT_ROOT, uintptr(unsafe.Pointer(pivotRoot)), uintptr(unsafe.Pointer(&oldRoot[0])), 0)
 			if err1 != 0 {
-				return
+				childExitError(pipe, LocPivotRoot, err1)
 			}
 
 			// umount("old_root", MNT_DETACH)
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_UMOUNT2, uintptr(unsafe.Pointer(&oldRoot[0])), syscall.MNT_DETACH, 0)
 			if err1 != 0 {
-				return
+				childExitError(pipe, LocPivotRoot, err1)
 			}
 
 			// rmdir("old_root")
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_UNLINKAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(&oldRoot[0])), uintptr(unix.AT_REMOVEDIR))
 			if err1 != 0 {
-				return
+				childExitError(pipe, LocPivotRoot, err1)
 			}
 
 			// mount("tmpfs", "/", "tmpfs", MS_BIND | MS_REMOUNT | MS_RDONLY | MS_NOATIME | MS_NOSUID, nil)
@@ -293,7 +270,7 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 				uintptr(syscall.MS_BIND|syscall.MS_REMOUNT|syscall.MS_RDONLY|syscall.MS_NOATIME|syscall.MS_NOSUID),
 				uintptr(unsafe.Pointer(&empty[0])), 0)
 			if err1 != 0 {
-				return
+				childExitError(pipe, LocPivotRoot, err1)
 			}
 		}
 	}
@@ -314,7 +291,7 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 	if workdir != nil {
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_CHDIR, uintptr(unsafe.Pointer(workdir)), 0, 0)
 		if err1 != 0 {
-			return pipe, LocChdir, 0, err1
+			childExitError(pipe, LocChdir, err1)
 		}
 	}
 
@@ -323,7 +300,7 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 		// prlimit instead of setrlimit to avoid 32-bit limitation (linux > 3.2)
 		_, _, err1 = syscall.RawSyscall6(syscall.SYS_PRLIMIT64, 0, uintptr(rlim.Res), uintptr(unsafe.Pointer(&rlim.Rlim)), 0, 0, 0)
 		if err1 != 0 {
-			return pipe, LocSetRlimit, i, err1
+			childExitErrorWithIndex(pipe, LocSetRlimit, i, err1)
 		}
 	}
 
@@ -331,7 +308,7 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 	if r.NoNewPrivs || r.Seccomp != nil {
 		_, _, err1 = syscall.RawSyscall6(syscall.SYS_PRCTL, unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0, 0)
 		if err1 != 0 {
-			return pipe, LocSetNoNewPrivs, 0, err1
+			childExitError(pipe, LocSetNoNewPrivs, err1)
 		}
 	}
 
@@ -341,11 +318,11 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_SECUREBITS,
 			_SECURE_KEEP_CAPS_LOCKED|_SECURE_NO_SETUID_FIXUP|_SECURE_NO_SETUID_FIXUP_LOCKED|_SECURE_NOROOT|_SECURE_NOROOT_LOCKED, 0)
 		if err1 != 0 {
-			return pipe, LocDropCapability, 0, err1
+			childExitError(pipe, LocDropCapability, err1)
 		}
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_CAPSET, uintptr(unsafe.Pointer(&dropCapHeader)), uintptr(unsafe.Pointer(&dropCapData)), 0)
 		if err1 != 0 {
-			return pipe, LocSetCap, 0, err1
+			childExitError(pipe, LocSetCap, err1)
 		}
 	}
 
@@ -354,12 +331,12 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 		{
 			r1, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 			if r1 == 0 || err1 != 0 {
-				return pipe, LocSyncWrite, 0, err1
+				childExitError(pipe, LocSyncWrite, err1)
 			}
 
 			r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 			if r1 == 0 || err1 != 0 {
-				return pipe, LocSyncRead, 0, err1
+				childExitError(pipe, LocSyncRead, err1)
 			}
 
 			// unshare cgroup namespace
@@ -372,11 +349,11 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 					_, _, err1 = syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_SECUREBITS,
 						_SECURE_KEEP_CAPS_LOCKED|_SECURE_NO_SETUID_FIXUP|_SECURE_NO_SETUID_FIXUP_LOCKED|_SECURE_NOROOT|_SECURE_NOROOT_LOCKED, 0)
 					if err1 != 0 {
-						return pipe, LocKeepCapability, 0, err1
+						childExitError(pipe, LocKeepCapability, err1)
 					}
 					_, _, err1 = syscall.RawSyscall(syscall.SYS_CAPSET, uintptr(unsafe.Pointer(&dropCapHeader)), uintptr(unsafe.Pointer(&dropCapData)), 0)
 					if err1 != 0 {
-						return pipe, LocSetCap, 0, err1
+						childExitError(pipe, LocSetCap, err1)
 					}
 				}
 
@@ -384,14 +361,14 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 					// Load seccomp filter
 					_, _, err1 = syscall.RawSyscall(unix.SYS_SECCOMP, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, uintptr(unsafe.Pointer(r.Seccomp)))
 					if err1 != 0 {
-						return pipe, LocSeccomp, 0, err1
+						childExitError(pipe, LocSeccomp, err1)
 					}
 				}
 			}
 		}
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_PTRACE, uintptr(syscall.PTRACE_TRACEME), 0, 0)
 		if err1 != 0 {
-			return pipe, LocPtraceMe, 0, err1
+			childExitError(pipe, LocPtraceMe, err1)
 		}
 	}
 
@@ -402,7 +379,7 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 		// Stop to wait for ptrace tracer
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_KILL, pid, uintptr(syscall.SIGSTOP), 0)
 		if err1 != 0 {
-			return pipe, LocStop, 0, err1
+			childExitError(pipe, LocStop, err1)
 		}
 	}
 
@@ -416,7 +393,7 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 		// Load seccomp filter
 		_, _, err1 = syscall.RawSyscall(unix.SYS_SECCOMP, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, uintptr(unsafe.Pointer(r.Seccomp)))
 		if err1 != 0 {
-			return pipe, LocSeccomp, 0, err1
+			childExitError(pipe, LocSeccomp, err1)
 		}
 	}
 
@@ -425,12 +402,12 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 		{
 			r1, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 			if r1 == 0 || err1 != 0 {
-				return pipe, LocSyncWrite, 0, err1
+				childExitError(pipe, LocSyncWrite, err1)
 			}
 
 			r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 			if r1 == 0 || err1 != 0 {
-				return pipe, LocSyncRead, 0, err1
+				childExitError(pipe, LocSyncRead, err1)
 			}
 
 			// unshare cgroup namespace
@@ -443,11 +420,11 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 					_, _, err1 = syscall.RawSyscall(syscall.SYS_PRCTL, syscall.PR_SET_SECUREBITS,
 						_SECURE_KEEP_CAPS_LOCKED|_SECURE_NO_SETUID_FIXUP|_SECURE_NO_SETUID_FIXUP_LOCKED|_SECURE_NOROOT|_SECURE_NOROOT_LOCKED, 0)
 					if err1 != 0 {
-						return pipe, LocKeepCapability, 0, err1
+						childExitError(pipe, LocKeepCapability, err1)
 					}
 					_, _, err1 = syscall.RawSyscall(syscall.SYS_CAPSET, uintptr(unsafe.Pointer(&dropCapHeader)), uintptr(unsafe.Pointer(&dropCapData)), 0)
 					if err1 != 0 {
-						return pipe, LocSetCap, 0, err1
+						childExitError(pipe, LocSetCap, err1)
 					}
 				}
 
@@ -455,7 +432,7 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 					// Load seccomp filter
 					_, _, err1 = syscall.RawSyscall(unix.SYS_SECCOMP, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, uintptr(unsafe.Pointer(r.Seccomp)))
 					if err1 != 0 {
-						return pipe, LocSeccomp, 0, err1
+						childExitError(pipe, LocSeccomp, err1)
 					}
 				}
 			}
@@ -466,7 +443,7 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 	if r.Ptrace && r.Seccomp == nil {
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_PTRACE, uintptr(syscall.PTRACE_TRACEME), 0, 0)
 		if err1 != 0 {
-			return pipe, LocPtraceMe, 0, err1
+			childExitError(pipe, LocPtraceMe, err1)
 		}
 	}
 
@@ -502,5 +479,37 @@ func forkAndExecInChild1(r *Runner, argv0 *byte, argv, env []*byte, workdir, hos
 				uintptr(unsafe.Pointer(&argv[0])), uintptr(unsafe.Pointer(&env[0])))
 		}
 	}
-	return pipe, LocExecve, 0, err1
+	childExitError(pipe, LocExecve, err1)
+	return
+}
+
+//go:nosplit
+func childExitError(pipe int, loc ErrorLocation, err syscall.Errno) {
+	// send error code on pipe
+	childError := ChildError{
+		Err:      err,
+		Location: loc,
+	}
+
+	// send error code on pipe
+	syscall.RawSyscall(unix.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&childError)), unsafe.Sizeof(childError))
+	for {
+		syscall.RawSyscall(syscall.SYS_EXIT, uintptr(err), 0, 0)
+	}
+}
+
+//go:nosplit
+func childExitErrorWithIndex(pipe int, loc ErrorLocation, idx int, err syscall.Errno) {
+	// send error code on pipe
+	childError := ChildError{
+		Err:      err,
+		Location: loc,
+		Index:    idx,
+	}
+
+	// send error code on pipe
+	syscall.RawSyscall(unix.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&childError)), unsafe.Sizeof(childError))
+	for {
+		syscall.RawSyscall(syscall.SYS_EXIT, uintptr(err), 0, 0)
+	}
 }
