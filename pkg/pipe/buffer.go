@@ -13,9 +13,9 @@ import (
 // at most max bytes to a buffer
 type Buffer struct {
 	W      *os.File
-	Max    int64
 	Buffer *bytes.Buffer
 	Done   <-chan struct{}
+	Max    int64
 }
 
 // NewPipe create a pipe with a goroutine to copy its read-end to writer

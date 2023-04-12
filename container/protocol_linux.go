@@ -13,10 +13,11 @@ import (
 
 // cmd is the control message send into container
 type cmd struct {
-	OpenCmd   []OpenCmd  // open argument
 	DeleteCmd *deleteCmd // delete argument
 	ExecCmd   *execCmd   // execve argument
 	ConfCmd   *confCmd   // to set configuration
+
+	OpenCmd []OpenCmd // open argument
 
 	Cmd cmdType // type of the cmd
 }
@@ -74,8 +75,8 @@ type reply struct {
 
 // errorReply stores error returned back from container
 type errorReply struct {
-	Msg   string
 	Errno *syscall.Errno
+	Msg   string
 }
 
 // execReply stores execve result

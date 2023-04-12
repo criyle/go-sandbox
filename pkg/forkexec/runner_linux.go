@@ -31,21 +31,6 @@ type Runner struct {
 	// seccomp syscall filter applied to child
 	Seccomp *syscall.SockFprog
 
-	// ptrace controls child process to call ptrace(PTRACE_TRACEME)
-	// runtime.LockOSThread is required for tracer to call ptrace syscalls
-	Ptrace bool
-
-	// no_new_privs calls prctl(PR_SET_NO_NEW_PRIVS) to 0 to disable calls to
-	// setuid processes. It is automatically enabled when seccomp filter is provided
-	NoNewPrivs bool
-
-	// stop before seccomp calls kill(getpid(), SIGSTOP) to wait for tracer to continue
-	// right before the calls to seccomp. It is automatically enabled when seccomp
-	// filter and ptrace are provided since kill might not be available after
-	// seccomp and execve might be traced by ptrace
-	// cannot stop after seccomp since kill might not be allowed by seccomp filter
-	StopBeforeSeccomp bool
-
 	// clone unshare flag to create linux namespace, effective when clone child
 	// since unshare syscall does not join the new pid group
 	CloneFlags uintptr
@@ -72,18 +57,9 @@ type Runner struct {
 	// HostName and DomainName to be set after unshare UTS & user (CAP_SYS_ADMIN)
 	HostName, DomainName string
 
-	// drop_caps calls cap_set(self, 0) to drop all capabilities
-	// from effective, permitted, inheritable capability sets before execve
-	// it should avoid calls to set ambient capabilities
-	DropCaps bool
-
 	// UidMappings / GidMappings for unshared user namespaces, no-op if mapping is null
 	UIDMappings []syscall.SysProcIDMap
 	GIDMappings []syscall.SysProcIDMap
-
-	// GidMappingsEnableSetgroups allows / disallows setgroups syscall.
-	// deny if GIDMappings is nil
-	GIDMappingsEnableSetgroups bool
 
 	// Credential holds user and group identities to be assumed
 	// by a child process started by StartProcess.
@@ -94,6 +70,30 @@ type Runner struct {
 	// parent will signal child to stop and report the error
 	// SyncFunc is called right before execve, thus it could track cpu more accurately
 	SyncFunc func(int) error
+
+	// ptrace controls child process to call ptrace(PTRACE_TRACEME)
+	// runtime.LockOSThread is required for tracer to call ptrace syscalls
+	Ptrace bool
+
+	// no_new_privs calls prctl(PR_SET_NO_NEW_PRIVS) to 0 to disable calls to
+	// setuid processes. It is automatically enabled when seccomp filter is provided
+	NoNewPrivs bool
+
+	// stop before seccomp calls kill(getpid(), SIGSTOP) to wait for tracer to continue
+	// right before the calls to seccomp. It is automatically enabled when seccomp
+	// filter and ptrace are provided since kill might not be available after
+	// seccomp and execve might be traced by ptrace
+	// cannot stop after seccomp since kill might not be allowed by seccomp filter
+	StopBeforeSeccomp bool
+
+	// GidMappingsEnableSetgroups allows / disallows setgroups syscall.
+	// deny if GIDMappings is nil
+	GIDMappingsEnableSetgroups bool
+
+	// drop_caps calls cap_set(self, 0) to drop all capabilities
+	// from effective, permitted, inheritable capability sets before execve
+	// it should avoid calls to set ambient capabilities
+	DropCaps bool
 
 	// UnshareCgroupAfterSync specifies whether to unshare cgroup namespace after
 	// sync (the syncFunc might be add the child to the cgroup)
