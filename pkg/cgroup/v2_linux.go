@@ -48,9 +48,9 @@ func (c *CgroupV2) MemoryUsage() (uint64, error) {
 	return c.ReadUint("memory.current")
 }
 
-// MemoryMaxUsage not exist, use rusage.max_rss instead
+// MemoryMaxUsage reads memory.peak
 func (c *CgroupV2) MemoryMaxUsage() (uint64, error) {
-	return 0, os.ErrNotExist
+	return c.ReadUint("memory.peak")
 }
 
 // SetCPUBandwidth set cpu.max quota period
