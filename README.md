@@ -183,6 +183,8 @@ type Environment interface {
 
 ## Kernel Versions
 
+- 5.19: `memory.peak` in cgroup v2
+- 4.15: cgroup v2
 - 4.14: SECCOMP_RET_KILL_PROCESS 
 - 4.6: CLONE_NEWCGROUP
 - 3.19: execveat()
