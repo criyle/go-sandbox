@@ -223,7 +223,7 @@ func start() (*runner.Result, error) {
 	if memfile {
 		fin, err := os.Open(args[0])
 		if err != nil {
-			return nil, fmt.Errorf("filed to open args[0]: %v", err)
+			return nil, fmt.Errorf("failed to open args[0]: %v", err)
 		}
 		execf, err := memfd.DupToMemfd("run_program", fin)
 		if err != nil {
