@@ -7,20 +7,110 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 )
 
+// CgroupV2 provides cgroup interface for v2
 type CgroupV2 struct {
-	path string
+	path        string
+	subtreeOnce sync.Once
+	subtreeErr  error
+	existing    bool
 }
 
 var _ Cgroup = &CgroupV2{}
 
-func (c *CgroupV2) AddProc(pid int) error {
-	return c.WriteUint(cgroupProcs, uint64(pid))
+func (c *CgroupV2) String() string {
+	ct, _ := getAvailableControllerV2path(path.Join(c.path, cgroupControllers))
+	return "v2(" + c.path + ")" + ct.String()
+}
+
+func (c *CgroupV2) AddProc(pids ...int) error {
+	return AddProcesses(path.Join(c.path, cgroupProcs), pids)
+}
+
+func (c *CgroupV2) Processes() ([]int, error) {
+	return ReadProcesses(path.Join(c.path, cgroupProcs))
+}
+
+// New creates a sub-cgroup based on the existing one
+func (c *CgroupV2) New(name string) (Cgroup, error) {
+	if err := c.enableSubtreeControl(); err != nil {
+		return nil, err
+	}
+	v2 := &CgroupV2{
+		path: path.Join(c.path, name),
+	}
+	if err := os.Mkdir(v2.path, dirPerm); err != nil {
+		if !os.IsExist(err) {
+			return nil, err
+		}
+		v2.existing = true
+	}
+	return v2, nil
+}
+
+// Nest creates a sub-cgroup, moves current process into that cgroup
+func (c *CgroupV2) Nest(name string) (Cgroup, error) {
+	v2 := &CgroupV2{
+		path: path.Join(c.path, name),
+	}
+	if err := os.Mkdir(v2.path, dirPerm); err != nil {
+		if !os.IsExist(err) {
+			return nil, err
+		}
+		v2.existing = true
+	}
+	p, err := c.Processes()
+	if err != nil {
+		return nil, err
+	}
+	if err := v2.AddProc(p...); err != nil {
+		return nil, err
+	}
+	if err := c.enableSubtreeControl(); err != nil {
+		return nil, err
+	}
+	return v2, nil
+}
+
+func (c *CgroupV2) enableSubtreeControl() error {
+	c.subtreeOnce.Do(func() {
+		ct, err := getAvailableControllerV2path(path.Join(c.path, cgroupControllers))
+		if err != nil {
+			c.subtreeErr = err
+			return
+		}
+		ect, err := getAvailableControllerV2path(path.Join(c.path, cgroupSubtreeControl))
+		if err != nil {
+			c.subtreeErr = err
+			return
+		}
+		if ect.Contains(ct) {
+			return
+		}
+		s := ct.Names()
+		controlMsg := []byte("+" + strings.Join(s, " +"))
+		c.subtreeErr = writeFile(path.Join(c.path, cgroupSubtreeControl), controlMsg, filePerm)
+	})
+	return c.subtreeErr
+}
+
+// Random creates a sub-cgroup based on the existing one but the name is randomly generated
+func (c *CgroupV2) Random(pattern string) (Cgroup, error) {
+	return randomBuild(pattern, c.New)
 }
 
 func (c *CgroupV2) Destroy() error {
-	return remove(c.path)
+	if !c.existing {
+		return remove(c.path)
+	}
+	return nil
+}
+
+// Existing returns true if the cgroup was opened rather than created
+func (c *CgroupV2) Existing() bool {
+	return c.existing
 }
 
 // CPUUsage reads cpu.stat usage_usec

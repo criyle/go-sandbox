@@ -2,9 +2,12 @@ package cgroup
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
+	"math/rand"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -19,16 +22,9 @@ func EnsureDirExists(path string) error {
 	return os.ErrExist
 }
 
-// CreateSubCgroupPath creates path for controller with given group and prefix
+// CreateV1ControllerPath create path for controller with given group, prefix
 func CreateV1ControllerPath(controller, prefix string) (string, error) {
-	base := path.Join(basePath, controller, prefix)
-	EnsureDirExists(base)
-	return os.MkdirTemp(base, "")
-}
-
-// CreateV1ControllerPathName create path for controller with given group, prefix and name
-func CreateV1ControllerPathName(controller, prefix, name string) (string, error) {
-	p := path.Join(basePath, controller, prefix, name)
+	p := path.Join(basePath, controller, prefix)
 	return p, EnsureDirExists(p)
 }
 
@@ -60,21 +56,46 @@ func EnableV2Nesting() error {
 		return err
 	}
 	for _, v := range procs {
-		procFile.WriteString(v)
+		if _, err := procFile.WriteString(v); err != nil {
+			continue
+			//return err
+		}
 	}
 	procFile.Close()
+	return nil
+}
 
-	a, err := GetAvailableControllerV2()
+// ReadProcesses reads cgroup.procs file and return pids individually
+func ReadProcesses(path string) ([]int, error) {
+	content, err := readFile(path)
+	if err != nil {
+		return nil, err
+	}
+	procs := strings.Split(string(content), "\n")
+	rt := make([]int, len(procs))
+	for i, x := range procs {
+		if len(x) == 0 {
+			continue
+		}
+		rt[i], err = strconv.Atoi(x)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return rt, nil
+}
+
+// Add Processes add processes into cgroup.procs file
+func AddProcesses(path string, procs []int) error {
+	f, err := os.OpenFile(path, os.O_RDWR, filePerm)
 	if err != nil {
 		return err
 	}
-	s := make([]string, 0, len(a))
-	for k := range a {
-		s = append(s, k)
-	}
-	controlMsg := []byte("+" + strings.Join(s, " +"))
-	if err := writeFile(path.Join(basePath, cgroupSubtreeControl), controlMsg, filePerm); err != nil {
-		return err
+	defer f.Close()
+	for _, p := range procs {
+		if _, err := f.WriteString(strconv.Itoa(p)); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -132,4 +153,32 @@ func writeFile(p string, content []byte, perm fs.FileMode) error {
 		err = os.WriteFile(p, content, filePerm)
 	}
 	return err
+}
+
+func nextRandom() string {
+	return strconv.Itoa(int(rand.Int31()))
+}
+
+// randomBuild creates a cgroup with random directory, similar to os.MkdirTemp
+func randomBuild(pattern string, build func(string) (Cgroup, error)) (Cgroup, error) {
+	prefix, suffix, err := prefixAndSuffix(pattern)
+	if err != nil {
+		return nil, fmt.Errorf("cgroup.builder: random %v", err)
+	}
+
+	try := 0
+	for {
+		name := prefix + nextRandom() + suffix
+		cg, err := build(name)
+		if err == nil {
+			return cg, nil
+		}
+		if errors.Is(err, os.ErrExist) || cg.Existing() {
+			if try++; try < 10000 {
+				continue
+			}
+			return nil, fmt.Errorf("cgroup.builder: tried 10000 times but failed")
+		}
+		return nil, fmt.Errorf("cgroup.builder: random %v", err)
+	}
 }

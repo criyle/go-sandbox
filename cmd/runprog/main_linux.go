@@ -189,14 +189,11 @@ func start() (*runner.Result, error) {
 		if t == cgroup.CgroupTypeV2 {
 			cgroup.EnableV2Nesting()
 		}
-		b, err := cgroup.NewBuilder("runprog").
-			WithType(t).
-			WithCPUAcct().
-			WithMemory().
-			WithPids().
-			WithCPUSet().
-			WithCPU().
-			FilterByEnv()
+		ct, err := cgroup.GetAvailableController()
+		if err != nil {
+			return nil, err
+		}
+		b, err := cgroup.New("runprog", ct)
 		if err != nil {
 			return nil, err
 		}

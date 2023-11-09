@@ -6,13 +6,21 @@ import (
 )
 
 func BenchmarkCgroup(b *testing.B) {
-	builder, err := NewBuilder("benchmark").WithCPU().WithCPUSet().WithCPUAcct().WithMemory().WithPids().FilterByEnv()
+	if err := EnableV2Nesting(); err != nil {
+		b.Fatal(err)
+	}
+	ct, err := GetAvailableControllerV2()
 	if err != nil {
 		b.Fatal(err)
 	}
+	builder, err := New("benchmark", ct)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer builder.Destroy()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cg, err := builder.Build("test")
+		cg, err := builder.New("test")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -40,11 +48,22 @@ func TestCgroupAll(t *testing.T) {
 	if os.Getuid() != 0 {
 		t.Skip("no root privilege")
 	}
-	builder, err := NewBuilder("test").WithCPU().WithCPUSet().WithCPUAcct().WithMemory().WithPids().FilterByEnv()
+	if err := EnableV2Nesting(); err != nil {
+		t.Fatal(err)
+	}
+	ct, err := GetAvailableControllerV2()
 	if err != nil {
 		t.Fatal(err)
 	}
-	cg, err := builder.Build("test")
+	builder, err := New("benchmark", ct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer builder.Destroy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cg, err := builder.New("test")
 	if err != nil {
 		t.Fatal(err)
 	}

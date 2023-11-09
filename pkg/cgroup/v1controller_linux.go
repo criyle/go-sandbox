@@ -63,3 +63,7 @@ func (c *v1controller) ReadFile(name string) ([]byte, error) {
 	p := path.Join(c.path, name)
 	return readFile(p)
 }
+
+func (c *v1controller) AddProc(pids ...int) error {
+	return AddProcesses(path.Join(c.path, cgroupProcs), pids)
+}

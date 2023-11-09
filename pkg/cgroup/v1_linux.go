@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 )
 
 var _ Cgroup = &CgroupV1{}
@@ -20,27 +22,135 @@ type CgroupV1 struct {
 	pids    *v1controller
 
 	all []*v1controller
+
+	existing bool
+}
+
+func (c *CgroupV1) String() string {
+	names := make([]string, 0, numberOfControllers)
+	for _, v := range []struct {
+		now  *v1controller
+		name string
+	}{
+		{c.cpu, CPU},
+		{c.cpuset, CPUSet},
+		{c.cpuacct, CPUAcct},
+		{c.memory, Memory},
+		{c.pids, Pids},
+	} {
+		if v.now == nil {
+			continue
+		}
+		names = append(names, v.name)
+	}
+	return "v1(" + c.prefix + ")[" + strings.Join(names, ", ") + "]"
 }
 
 // AddProc writes cgroup.procs to all controller
-func (c *CgroupV1) AddProc(pid int) error {
+func (c *CgroupV1) AddProc(pids ...int) error {
 	for _, s := range c.all {
-		if err := s.WriteUint(cgroupProcs, uint64(pid)); err != nil {
+		if err := s.AddProc(pids...); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Destroy removes dir for controller, errors are ignored if remove one failed
+// Processes lists all existing process pid from the cgroup
+func (c *CgroupV1) Processes() ([]int, error) {
+	if len(c.all) == 0 {
+		return nil, os.ErrInvalid
+	}
+	return ReadProcesses(path.Join(c.all[0].path, cgroupProcs))
+}
+
+// New creates a sub-cgroup based on the existing one
+func (c *CgroupV1) New(name string) (cg Cgroup, err error) {
+	v1 := &CgroupV1{
+		prefix: path.Join(c.prefix, name),
+	}
+	defer func() {
+		if err != nil {
+			for _, v := range v1.all {
+				remove(v.path)
+			}
+		}
+	}()
+	for _, v := range []struct {
+		now *v1controller
+		new **v1controller
+	}{
+		{c.cpu, &v1.cpu},
+		{c.cpuset, &v1.cpuset},
+		{c.cpuacct, &v1.cpuacct},
+		{c.memory, &v1.memory},
+		{c.pids, &v1.pids},
+	} {
+		if v.now == nil {
+			continue
+		}
+		p := path.Join(v.now.path, name)
+		*v.new = &v1controller{path: p}
+		err = EnsureDirExists(p)
+		if os.IsExist(err) {
+			err = nil
+			if len(v1.all) == 0 {
+				v1.existing = true
+			}
+			continue
+		}
+		if err != nil {
+			return
+		}
+		v1.all = append(v1.all, *v.new)
+	}
+	// init cpu set before use, otherwise it is not functional
+	if v1.cpuset != nil {
+		if err = initCpuset(v1.cpuset.path); err != nil {
+			return
+		}
+	}
+	return v1, nil
+}
+
+// Random creates a sub-cgroup based on the existing one but the name is randomly generated
+func (c *CgroupV1) Random(pattern string) (Cgroup, error) {
+	return randomBuild(pattern, c.New)
+}
+
+// Nest creates a sub-cgroup, moves current process into that cgroup
+func (c *CgroupV1) Nest(name string) (Cgroup, error) {
+	v1, err := c.New(name)
+	if err != nil {
+		return nil, err
+	}
+	p, err := c.Processes()
+	if err != nil {
+		return nil, err
+	}
+	if err := v1.AddProc(p...); err != nil {
+		return nil, err
+	}
+	return v1, nil
+}
+
+// Destroy removes dir for controllers recursively, errors are ignored if remove one failed
 func (c *CgroupV1) Destroy() error {
 	var err1 error
 	for _, s := range c.all {
+		if c.existing {
+			continue
+		}
 		if err := remove(s.path); err != nil {
 			err1 = err
 		}
 	}
 	return err1
+}
+
+// Existing returns true if the cgroup was opened rather than created
+func (c *CgroupV1) Existing() bool {
+	return c.existing
 }
 
 func (c *CgroupV1) SetCPUBandwidth(quota, period uint64) error {
