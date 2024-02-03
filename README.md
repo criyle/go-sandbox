@@ -41,8 +41,8 @@ Default file access syscall check:
 
 ### linux namespace + cgroup
 
-1. Unshare & bind mount rootfs based on hostfs (elimilated ptrace)
-2. Use Linux Control Groups to limit & acct CPU & memory (elimilate wait4.rusage)
+1. Unshare & bind mount rootfs based on hostfs (eliminated ptrace)
+2. Use Linux Control Groups to limit & acct CPU & memory (eliminated wait4.rusage)
 3. Container tech with execveat memfd, sethostname, setdomainname
 
 ## Design
@@ -156,7 +156,7 @@ type Environment interface {
 - seccomp: provides seccomp type definition
   - libseccomp: provides utility function that wrappers libseccomp
 - forkexec: fork-exec provides mount, unshare, ptrace, seccomp, capset before exec
-- memfd: read regular file and creates a seaed memfd for its contents
+- memfd: read regular file and creates a sealed memfd for its contents
 - unixsocket: send / recv oob msg from a unix socket
 - cgroup: creates cgroup directories and collects resource usage / limits
 - mount: provides utility function that wrappers mount syscall

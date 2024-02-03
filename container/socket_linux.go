@@ -8,7 +8,7 @@ import (
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
 )
 
-// 16k buffsize
+// 16k buffer size
 const bufferSize = 16 << 10
 
 type socket struct {
@@ -17,18 +17,18 @@ type socket struct {
 	buff []byte
 
 	decoder  *gob.Decoder
-	recvBuff bufferRotater
+	recvBuff bufferRotator
 
 	encoder  *gob.Encoder
 	sendBuff bytes.Buffer
 }
 
-// bufferRotater replace the underlying Buffers to avoid allocation
-type bufferRotater struct {
+// bufferRotator replace the underlying Buffers to avoid allocation
+type bufferRotator struct {
 	*bytes.Buffer
 }
 
-func (b *bufferRotater) Rotate(buffer *bytes.Buffer) {
+func (b *bufferRotator) Rotate(buffer *bytes.Buffer) {
 	b.Buffer = buffer
 }
 

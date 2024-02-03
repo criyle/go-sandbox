@@ -105,7 +105,7 @@ func DetectType() CgroupType {
 	// if /sys/fs/cgroup is mounted as CGROUPV2 or TMPFS (V1)
 	var st unix.Statfs_t
 	if err := unix.Statfs(basePath, &st); err != nil {
-		// ignore errors, defalting to CgroupV1
+		// ignore errors, defaulting to CgroupV1
 		return CgroupTypeV1
 	}
 	if st.Type == unix.CGROUP2_SUPER_MAGIC {

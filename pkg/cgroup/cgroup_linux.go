@@ -36,7 +36,7 @@ type Cgroup interface {
 	// SetCPUBandwidth sets the cpu bandwidth. Times in ns
 	SetCPUBandwidth(quota, period uint64) error
 
-	// SetCpusetCpus sets the availabile cpu to use (cpuset.cpus).
+	// SetCpusetCpus sets the available cpu to use (cpuset.cpus).
 	SetCPUSet([]byte) error
 
 	// SetMemoryLimit sets memory.limit_in_bytes

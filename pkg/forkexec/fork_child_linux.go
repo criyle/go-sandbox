@@ -238,7 +238,7 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 			}
 		}
 
-		// pivit_root
+		// pivot_root
 		if pivotRoot != nil {
 			// mkdir("old_root")
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_MKDIRAT, uintptr(_AT_FDCWD), uintptr(unsafe.Pointer(&oldRoot[0])), 0755)
@@ -462,7 +462,7 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	// Fix potential ETXTBSY but with caution (max 50 attempt)
 	// The ETXTBSY happens when we copy the executable into container, another goroutine
 	// forks but not execve yet (time consuming for setting up mounting points), the forked
-	// process is still holding the fd of the copyied executable fd. However, we don't
+	// process is still holding the fd of the copied executable fd. However, we don't
 	// want to have different logic to lock the container creation
 	for range [50]struct{}{} {
 		if err1 != syscall.ETXTBSY {

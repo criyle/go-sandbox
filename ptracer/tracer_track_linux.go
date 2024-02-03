@@ -34,7 +34,7 @@ func (t *Tracer) trace(c context.Context, pgid int) (result runner.Result) {
 	cc, cancel := context.WithCancel(c)
 	defer cancel()
 
-	// handle cancelation
+	// handle cancellation
 	go func() {
 		<-cc.Done()
 		killAll(pgid)

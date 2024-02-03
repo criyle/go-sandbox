@@ -21,7 +21,7 @@ type Runner struct {
 	// POSIX Resource limit set by set rlimit
 	RLimits []rlimit.RLimit
 
-	// file disriptors map for new process, from 0 to len - 1
+	// file descriptors map for new process, from 0 to len - 1
 	Files []uintptr
 
 	// work path set by chdir(dir) (current working directory for child)
@@ -65,7 +65,7 @@ type Runner struct {
 	// by a child process started by StartProcess.
 	Credential *syscall.Credential
 
-	// Parent and child process with sync sataus through a socket pair.
+	// Parent and child process with sync status through a socket pair.
 	// SyncFunc will invoke with the child pid. If SyncFunc return some error,
 	// parent will signal child to stop and report the error
 	// SyncFunc is called right before execve, thus it could track cpu more accurately

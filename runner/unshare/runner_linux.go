@@ -19,7 +19,7 @@ type Runner struct {
 	// workdir is the current dir after unshare mount namespaces
 	WorkDir string
 
-	// file disriptors for new process, from 0 to len - 1
+	// file descriptors for new process, from 0 to len - 1
 	Files []uintptr
 
 	// Resource limit set by set rlimit

@@ -6,7 +6,7 @@ import (
 )
 
 // Size stores number of byte for the object. E.g. Memory.
-// Maximun size is bounded by 64-bit limit
+// Maximum size is bounded by 64-bit limit
 type Size uint64
 
 // String stringer interface for print

@@ -8,7 +8,7 @@ type TraceAction int
 const (
 	// TraceAllow does not do anything
 	TraceAllow TraceAction = iota
-	// TraceBan skippes the syscall and set the return code specified by SetReturnCode
+	// TraceBan skips the syscall and set the return code specified by SetReturnCode
 	TraceBan
 	// TraceKill referred as dangerous action have been detected
 	TraceKill

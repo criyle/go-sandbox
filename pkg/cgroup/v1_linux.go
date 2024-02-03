@@ -264,7 +264,7 @@ func copyCgroupPropertyFromParent(path, name string) error {
 	if len(bytes.TrimSpace(b)) > 0 {
 		return nil
 	}
-	// otherwise copy from parent, first to ensure it is empty by recurssion
+	// otherwise copy from parent, first to ensure it is empty by recursion
 	if err := copyCgroupPropertyFromParent(filepath.Dir(path), name); err != nil {
 		return err
 	}

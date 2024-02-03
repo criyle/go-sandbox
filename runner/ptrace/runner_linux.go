@@ -20,7 +20,7 @@ type Runner struct {
 	// fexecve
 	ExecFile uintptr
 
-	// file disriptors for new process, from 0 to len - 1
+	// file descriptors for new process, from 0 to len - 1
 	Files []uintptr
 
 	// Resource limit set by set rlimit
@@ -45,7 +45,7 @@ type Runner struct {
 	SyncFunc func(pid int) error
 }
 
-// BanRet defines the return value for a syscall ban acction
+// BanRet defines the return value for a syscall ban action
 var BanRet = syscall.EACCES
 
 // Handler defines the action when a file access encountered
