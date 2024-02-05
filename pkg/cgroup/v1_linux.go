@@ -9,10 +9,10 @@ import (
 	"strings"
 )
 
-var _ Cgroup = &CgroupV1{}
+var _ Cgroup = &V1{}
 
-// CgroupV1 is the combination of v1 controllers
-type CgroupV1 struct {
+// V1 is the combination of v1 controllers
+type V1 struct {
 	prefix string
 
 	cpu     *v1controller
@@ -26,7 +26,7 @@ type CgroupV1 struct {
 	existing bool
 }
 
-func (c *CgroupV1) String() string {
+func (c *V1) String() string {
 	names := make([]string, 0, numberOfControllers)
 	for _, v := range []struct {
 		now  *v1controller
@@ -47,7 +47,7 @@ func (c *CgroupV1) String() string {
 }
 
 // AddProc writes cgroup.procs to all controller
-func (c *CgroupV1) AddProc(pids ...int) error {
+func (c *V1) AddProc(pids ...int) error {
 	for _, s := range c.all {
 		if err := s.AddProc(pids...); err != nil {
 			return err
@@ -57,7 +57,7 @@ func (c *CgroupV1) AddProc(pids ...int) error {
 }
 
 // Processes lists all existing process pid from the cgroup
-func (c *CgroupV1) Processes() ([]int, error) {
+func (c *V1) Processes() ([]int, error) {
 	if len(c.all) == 0 {
 		return nil, os.ErrInvalid
 	}
@@ -65,8 +65,8 @@ func (c *CgroupV1) Processes() ([]int, error) {
 }
 
 // New creates a sub-cgroup based on the existing one
-func (c *CgroupV1) New(name string) (cg Cgroup, err error) {
-	v1 := &CgroupV1{
+func (c *V1) New(name string) (cg Cgroup, err error) {
+	v1 := &V1{
 		prefix: path.Join(c.prefix, name),
 	}
 	defer func() {
@@ -114,12 +114,12 @@ func (c *CgroupV1) New(name string) (cg Cgroup, err error) {
 }
 
 // Random creates a sub-cgroup based on the existing one but the name is randomly generated
-func (c *CgroupV1) Random(pattern string) (Cgroup, error) {
+func (c *V1) Random(pattern string) (Cgroup, error) {
 	return randomBuild(pattern, c.New)
 }
 
 // Nest creates a sub-cgroup, moves current process into that cgroup
-func (c *CgroupV1) Nest(name string) (Cgroup, error) {
+func (c *V1) Nest(name string) (Cgroup, error) {
 	v1, err := c.New(name)
 	if err != nil {
 		return nil, err
@@ -135,7 +135,7 @@ func (c *CgroupV1) Nest(name string) (Cgroup, error) {
 }
 
 // Destroy removes dir for controllers recursively, errors are ignored if remove one failed
-func (c *CgroupV1) Destroy() error {
+func (c *V1) Destroy() error {
 	var err1 error
 	for _, s := range c.all {
 		if c.existing {
@@ -149,11 +149,12 @@ func (c *CgroupV1) Destroy() error {
 }
 
 // Existing returns true if the cgroup was opened rather than created
-func (c *CgroupV1) Existing() bool {
+func (c *V1) Existing() bool {
 	return c.existing
 }
 
-func (c *CgroupV1) SetCPUBandwidth(quota, period uint64) error {
+// SetCPUBandwidth set cpu quota via cfs interface
+func (c *V1) SetCPUBandwidth(quota, period uint64) error {
 	if err := c.SetCPUCfsQuota(quota); err != nil {
 		return err
 	}
@@ -161,72 +162,72 @@ func (c *CgroupV1) SetCPUBandwidth(quota, period uint64) error {
 }
 
 // SetCPUSet set cpuset.cpus
-func (c *CgroupV1) SetCPUSet(b []byte) error {
+func (c *V1) SetCPUSet(b []byte) error {
 	return c.cpuset.WriteFile("cpuset.cpus", b)
 }
 
-// CpuacctUsage read cpuacct.usage in ns
-func (c *CgroupV1) CPUUsage() (uint64, error) {
+// CPUUsage read cpuacct.usage in ns
+func (c *V1) CPUUsage() (uint64, error) {
 	return c.cpuacct.ReadUint("cpuacct.usage")
 }
 
 // MemoryUsage read memory.usage_in_bytes
-func (c *CgroupV1) MemoryUsage() (uint64, error) {
+func (c *V1) MemoryUsage() (uint64, error) {
 	return c.memory.ReadUint("memory.usage_in_bytes")
 }
 
 // MemoryMaxUsage read memory.max_usage_in_bytes
-func (c *CgroupV1) MemoryMaxUsage() (uint64, error) {
+func (c *V1) MemoryMaxUsage() (uint64, error) {
 	return c.memory.ReadUint("memory.max_usage_in_bytes")
 }
 
 // SetMemoryLimit write memory.limit_in_bytes
-func (c *CgroupV1) SetMemoryLimit(i uint64) error {
+func (c *V1) SetMemoryLimit(i uint64) error {
 	return c.memory.WriteUint("memory.limit_in_bytes", i)
 }
 
 // SetProcLimit write pids.max
-func (c *CgroupV1) SetProcLimit(i uint64) error {
+func (c *V1) SetProcLimit(i uint64) error {
 	return c.pids.WriteUint("pids.max", i)
 }
 
 // SetCpuacctUsage write cpuacct.usage in ns
-func (c *CgroupV1) SetCpuacctUsage(i uint64) error {
+func (c *V1) SetCpuacctUsage(i uint64) error {
 	return c.cpuacct.WriteUint("cpuacct.usage", i)
 }
 
 // SetMemoryMaxUsageInBytes write cpuacct.usage in ns
-func (c *CgroupV1) SetMemoryMaxUsageInBytes(i uint64) error {
+func (c *V1) SetMemoryMaxUsageInBytes(i uint64) error {
 	return c.memory.WriteUint("memory.max_usage_in_bytes", i)
 }
 
 // MemoryMemswMaxUsageInBytes read memory.memsw.max_usage_in_bytes
-func (c *CgroupV1) MemoryMemswMaxUsageInBytes() (uint64, error) {
+func (c *V1) MemoryMemswMaxUsageInBytes() (uint64, error) {
 	return c.memory.ReadUint("memory.memsw.max_usage_in_bytes")
 }
 
 // SetMemoryMemswLimitInBytes write memory.memsw.limit_in_bytes
-func (c *CgroupV1) SetMemoryMemswLimitInBytes(i uint64) error {
+func (c *V1) SetMemoryMemswLimitInBytes(i uint64) error {
 	return c.memory.WriteUint("memory.memsw.limit_in_bytes", i)
 }
 
 // SetCPUCfsPeriod set cpu.cfs_period_us in us
-func (c *CgroupV1) SetCPUCfsPeriod(p uint64) error {
+func (c *V1) SetCPUCfsPeriod(p uint64) error {
 	return c.cpu.WriteUint("cpu.cfs_period_us", p)
 }
 
 // SetCPUCfsQuota set cpu.cfs_quota_us in us
-func (c *CgroupV1) SetCPUCfsQuota(p uint64) error {
+func (c *V1) SetCPUCfsQuota(p uint64) error {
 	return c.cpu.WriteUint("cpu.cfs_quota_us", p)
 }
 
 // SetCpusetMems set cpuset.mems
-func (c *CgroupV1) SetCpusetMems(b []byte) error {
+func (c *V1) SetCpusetMems(b []byte) error {
 	return c.cpuset.WriteFile("cpuset.mems", b)
 }
 
 // FindMemoryStatProperty find certain property from memory.stat
-func (c *CgroupV1) FindMemoryStatProperty(prop string) (uint64, error) {
+func (c *V1) FindMemoryStatProperty(prop string) (uint64, error) {
 	content, err := c.memory.ReadFile("memory.stat")
 	if err != nil {
 		return 0, err

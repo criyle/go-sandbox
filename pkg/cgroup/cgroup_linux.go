@@ -55,17 +55,18 @@ type Cgroup interface {
 	Random(string) (Cgroup, error)
 }
 
+// DetectedCgroupType defines the current cgroup type of the system
 var DetectedCgroupType = DetectType()
 
 // New creates a new cgroup with provided prefix, it opens existing one if existed
 func New(prefix string, ct *Controllers) (Cgroup, error) {
-	if DetectedCgroupType == CgroupTypeV1 {
+	if DetectedCgroupType == TypeV1 {
 		return newV1(prefix, ct)
 	}
 	return newV2(prefix, ct)
 }
 
-func loopV1Controllers(ct *Controllers, v1 *CgroupV1, f func(string, **v1controller) error) error {
+func loopV1Controllers(ct *Controllers, v1 *V1, f func(string, **v1controller) error) error {
 	for _, c := range []struct {
 		available bool
 		name      string
@@ -88,7 +89,7 @@ func loopV1Controllers(ct *Controllers, v1 *CgroupV1, f func(string, **v1control
 }
 
 func newV1(prefix string, ct *Controllers) (cg Cgroup, err error) {
-	v1 := &CgroupV1{
+	v1 := &V1{
 		prefix: prefix,
 	}
 	// if failed, remove potential created directory
@@ -102,7 +103,7 @@ func newV1(prefix string, ct *Controllers) (cg Cgroup, err error) {
 
 	if err = loopV1Controllers(ct, v1, func(name string, cg **v1controller) error {
 		path, err := CreateV1ControllerPath(name, prefix)
-		*cg = NewV1Controller(path)
+		*cg = newV1Controller(path)
 		if errors.Is(err, os.ErrExist) {
 			if len(v1.all) == 0 {
 				v1.existing = true
@@ -128,7 +129,7 @@ func newV1(prefix string, ct *Controllers) (cg Cgroup, err error) {
 }
 
 func newV2(prefix string, ct *Controllers) (cg Cgroup, err error) {
-	v2 := &CgroupV2{
+	v2 := &V2{
 		path: path.Join(basePath, prefix),
 	}
 	if _, err := os.Stat(v2.path); err == nil {
@@ -176,21 +177,21 @@ func newV2(prefix string, ct *Controllers) (cg Cgroup, err error) {
 
 // OpenExisting opens a existing cgroup with provided prefix
 func OpenExisting(prefix string, ct *Controllers) (Cgroup, error) {
-	if DetectedCgroupType == CgroupTypeV1 {
+	if DetectedCgroupType == TypeV1 {
 		return openExistingV1(prefix, ct)
 	}
 	return openExistingV2(prefix, ct)
 }
 
 func openExistingV1(prefix string, ct *Controllers) (cg Cgroup, err error) {
-	v1 := &CgroupV1{
+	v1 := &V1{
 		prefix:   prefix,
 		existing: true,
 	}
 
 	if err = loopV1Controllers(ct, v1, func(name string, cg **v1controller) error {
 		p := path.Join(basePath, name, prefix)
-		*cg = NewV1Controller(p)
+		*cg = newV1Controller(p)
 		// os.IsNotExist
 		if _, err := os.Stat(p); err != nil {
 			return err
@@ -218,7 +219,7 @@ func openExistingV2(prefix string, ct *Controllers) (cg Cgroup, err error) {
 	if !ect.Contains(ct) {
 		return nil, fmt.Errorf("openCgroupV2: requesting %v controllers but %v found", ct, ect)
 	}
-	return &CgroupV2{
+	return &V2{
 		path:     path.Join(basePath, prefix),
 		existing: true,
 	}, nil

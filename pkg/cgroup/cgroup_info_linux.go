@@ -11,6 +11,7 @@ import (
 
 const numberOfControllers = 5
 
+// Controllers defines enabled controller of a cgroup
 type Controllers struct {
 	CPU     bool
 	CPUSet  bool
@@ -19,6 +20,7 @@ type Controllers struct {
 	Pids    bool
 }
 
+// Set changes the enabled status of a specific controller
 func (c *Controllers) Set(ct string, value bool) {
 	switch ct {
 	case CPU:
@@ -34,6 +36,7 @@ func (c *Controllers) Set(ct string, value bool) {
 	}
 }
 
+// Intersect reset the specific controller if it is not enabled in the other
 func (c *Controllers) Intersect(o *Controllers) {
 	c.CPU = c.CPU && o.CPU
 	c.CPUSet = c.CPUSet && o.CPUSet
@@ -48,6 +51,7 @@ func (c *Controllers) Contains(o *Controllers) bool {
 		(c.Memory || !o.Memory) && (c.Pids || !o.Pids)
 }
 
+// Names returns a list of string of all enabled container names
 func (c *Controllers) Names() []string {
 	names := make([]string, 0, numberOfControllers)
 	for _, v := range []struct {
@@ -121,6 +125,7 @@ func GetCgroupV1Info() (map[string]Info, error) {
 	return rt, nil
 }
 
+// GetCurrentCgroupPrefix returns the cgroup prefix of current process
 func GetCurrentCgroupPrefix() (string, error) {
 	c, err := os.ReadFile(procSelfCgroup)
 	if err != nil {
@@ -134,15 +139,17 @@ func GetCurrentCgroupPrefix() (string, error) {
 	return f[2][1:], nil
 }
 
+// GetAvailableController returns available cgroup controller in the system
 func GetAvailableController() (*Controllers, error) {
-	if DetectedCgroupType == CgroupTypeV1 {
+	if DetectedCgroupType == TypeV1 {
 		return GetAvailableControllerV1()
 	}
 	return GetAvailableControllerV2()
 }
 
+// GetAvailableControllerWithPrefix returns available cgroup controller within the cgroup prefix
 func GetAvailableControllerWithPrefix(prefix string) (*Controllers, error) {
-	if DetectedCgroupType == CgroupTypeV1 {
+	if DetectedCgroupType == TypeV1 {
 		return GetAvailableControllerV1()
 	}
 	return getAvailableControllerV2(prefix)

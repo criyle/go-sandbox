@@ -1,5 +1,6 @@
 package cgroup
 
+// Cgroup constants
 const (
 	// systemd mounted cgroups
 	basePath        = "/sys/fs/cgroup"
@@ -20,18 +21,20 @@ const (
 	Pids    = "pids"
 )
 
-type CgroupType int
+// Type defines the version of cgroup
+type Type int
 
+// Type enum for cgroup
 const (
-	CgroupTypeV1 = iota + 1
-	CgroupTypeV2
+	TypeV1 = iota + 1
+	TypeV2
 )
 
-func (t CgroupType) String() string {
+func (t Type) String() string {
 	switch t {
-	case CgroupTypeV1:
+	case TypeV1:
 		return "v1"
-	case CgroupTypeV2:
+	case TypeV2:
 		return "v2"
 	default:
 		return "invalid"

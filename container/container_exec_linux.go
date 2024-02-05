@@ -101,7 +101,11 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 	// starts the runner, error is handled same as wait4 to make communication equal
 	pid, err := r.Start()
 	if err != nil {
-		c.sendErrorReply("execve: start: %v", err)
+		s := "<nil>"
+		if len(cmd.Argv) > 0 {
+			s = cmd.Argv[0]
+		}
+		c.sendErrorReply("start: %s: %v", s, err)
 		c.recvCmd()
 		return c.sendReply(reply{}, unixsocket.Msg{})
 	}

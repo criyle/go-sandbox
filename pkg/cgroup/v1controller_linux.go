@@ -15,8 +15,8 @@ type v1controller struct {
 // ErrNotInitialized returned when trying to read from not initialized cgroup
 var ErrNotInitialized = errors.New("cgroup was not initialized")
 
-// NewV1Controller creates a cgroup accessor with given path (path needs to be created in advance)
-func NewV1Controller(p string) *v1controller {
+// newV1Controller creates a cgroup accessor with given path (path needs to be created in advance)
+func newV1Controller(p string) *v1controller {
 	return &v1controller{path: p}
 }
 

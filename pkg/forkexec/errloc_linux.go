@@ -5,14 +5,17 @@ import (
 	"syscall"
 )
 
+// ErrorLocation defines the location where child process failed to exec
 type ErrorLocation int
 
+// ChildError defines the specific error and location where it failed
 type ChildError struct {
 	Err      syscall.Errno
 	Location ErrorLocation
 	Index    int
 }
 
+// Location constants
 const (
 	LocClone ErrorLocation = iota + 1
 	LocCloseWrite

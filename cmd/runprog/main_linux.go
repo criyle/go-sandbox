@@ -186,7 +186,7 @@ func start() (*runner.Result, error) {
 
 	if useCGroup {
 		t := cgroup.DetectType()
-		if t == cgroup.CgroupTypeV2 {
+		if t == cgroup.TypeV2 {
 			cgroup.EnableV2Nesting()
 		}
 		ct, err := cgroup.GetAvailableController()

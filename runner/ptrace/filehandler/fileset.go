@@ -133,14 +133,6 @@ func GetExtraSet(extra, raw []string) []string {
 	return rt
 }
 
-// basename return path with last "/"
-func basename(path string) string {
-	if p := strings.LastIndex(path, "/"); p >= 0 {
-		return path[:p+1]
-	}
-	return path
-}
-
 // dirname return path without last "/"
 func dirname(path string) string {
 	if p := strings.LastIndex(path, "/"); p >= 0 {

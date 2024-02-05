@@ -33,7 +33,7 @@ const initPath = "init"
 // EnableV2Nesting migrates all process in the container to nested /init path
 // and enables all available controllers in the root cgroup
 func EnableV2Nesting() error {
-	if DetectType() != CgroupTypeV2 {
+	if DetectType() != TypeV2 {
 		return nil
 	}
 
@@ -85,7 +85,7 @@ func ReadProcesses(path string) ([]int, error) {
 	return rt, nil
 }
 
-// Add Processes add processes into cgroup.procs file
+// AddProcesses add processes into cgroup.procs file
 func AddProcesses(path string, procs []int) error {
 	f, err := os.OpenFile(path, os.O_RDWR, filePerm)
 	if err != nil {
@@ -101,17 +101,17 @@ func AddProcesses(path string, procs []int) error {
 }
 
 // DetectType detects current mounted cgroup type in systemd default path
-func DetectType() CgroupType {
+func DetectType() Type {
 	// if /sys/fs/cgroup is mounted as CGROUPV2 or TMPFS (V1)
 	var st unix.Statfs_t
 	if err := unix.Statfs(basePath, &st); err != nil {
 		// ignore errors, defaulting to CgroupV1
-		return CgroupTypeV1
+		return TypeV1
 	}
 	if st.Type == unix.CGROUP2_SUPER_MAGIC {
-		return CgroupTypeV2
+		return TypeV2
 	}
-	return CgroupTypeV1
+	return TypeV1
 }
 
 func remove(name string) error {
