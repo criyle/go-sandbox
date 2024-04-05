@@ -310,7 +310,7 @@ func (c *containerServer) sendReplyFiles(rep reply, msg unixsocket.Msg, fileToCl
 	case <-c.done:
 		return c.err
 
-	case c.sendCh <- sendReply{Reply: rep, Msg: msg}:
+	case c.sendCh <- sendReply{Reply: rep, Msg: msg, FileToClose: fileToClose}:
 		return nil
 	}
 }

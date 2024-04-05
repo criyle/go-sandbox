@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"math/rand"
+	"math/rand/v2"
 	"os"
 	"path"
 	"strconv"
@@ -148,15 +148,15 @@ func readFile(p string) ([]byte, error) {
 }
 
 func writeFile(p string, content []byte, perm fs.FileMode) error {
-	err := os.WriteFile(p, content, filePerm)
+	err := os.WriteFile(p, content, perm)
 	for err != nil && errors.Is(err, syscall.EINTR) {
-		err = os.WriteFile(p, content, filePerm)
+		err = os.WriteFile(p, content, perm)
 	}
 	return err
 }
 
 func nextRandom() string {
-	return strconv.Itoa(int(rand.Int31()))
+	return strconv.Itoa(int(rand.Int32()))
 }
 
 // randomBuild creates a cgroup with random directory, similar to os.MkdirTemp
