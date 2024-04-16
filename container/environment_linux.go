@@ -59,6 +59,10 @@ type Builder struct {
 	// DomainName set container domainname (default: go-sandbox)
 	DomainName string
 
+	// InitCommand defines command that runs after the initialization of the container
+	// to do additional setups (for example, loopback network)
+	InitCommand []string
+
 	// ContainerUID & ContainerGID set the container uid / gid mapping
 	ContainerUID int
 	ContainerGID int
@@ -178,6 +182,7 @@ func (b *Builder) Build() (Environment, error) {
 		Mounts:        mounts,
 		SymbolicLinks: links,
 		MaskPaths:     maskPaths,
+		InitCommand:   b.InitCommand,
 		Cred:          b.CredGenerator != nil,
 		ContainerUID:  b.ContainerUID,
 		ContainerGID:  b.ContainerGID,

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -237,7 +238,17 @@ func initContainer(c containerConfig) error {
 	if err := syscall.Sethostname([]byte(c.HostName)); err != nil {
 		return err
 	}
-	return os.Chdir(c.WorkDir)
+	if err := os.Chdir(c.WorkDir); err != nil {
+		return err
+	}
+	if len(c.InitCommand) > 0 {
+		cm := exec.Command(c.InitCommand[0], c.InitCommand[1:]...)
+		if output, err := cm.CombinedOutput(); err != nil {
+			os.Stderr.Write(output)
+			return err
+		}
+	}
+	return nil
 }
 
 func initFileSystem(c containerConfig) error {
