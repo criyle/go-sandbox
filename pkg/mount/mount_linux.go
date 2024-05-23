@@ -66,19 +66,19 @@ func ensureMountTargetExists(source, target string) error {
 }
 
 func (m Mount) String() string {
+	flag := "rw"
+	if m.Flags&syscall.MS_RDONLY == syscall.MS_RDONLY {
+		flag = "ro"
+	}
 	switch {
 	case m.Flags&syscall.MS_BIND == syscall.MS_BIND:
-		flag := "rw"
-		if m.Flags&syscall.MS_RDONLY == syscall.MS_RDONLY {
-			flag = "ro"
-		}
 		return fmt.Sprintf("bind[%s:%s:%s]", m.Source, m.Target, flag)
 
 	case m.FsType == "tmpfs":
 		return fmt.Sprintf("tmpfs[%s]", m.Target)
 
 	case m.FsType == "proc":
-		return "proc[ro]"
+		return fmt.Sprintf("proc[%s]", flag)
 
 	default:
 		return fmt.Sprintf("mount[%s,%s:%s:%x,%s]", m.FsType, m.Source, m.Target, m.Flags, m.Data)

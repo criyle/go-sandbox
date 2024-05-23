@@ -66,13 +66,13 @@ func isBindMountFileOrNotExists(m Mount) (bool, error) {
 	return false, nil
 }
 
-// WithMounts add mounts to builder
+// WithMounts adds mounts to builder
 func (b *Builder) WithMounts(m []Mount) *Builder {
 	b.Mounts = append(b.Mounts, m...)
 	return b
 }
 
-// WithMount add single mount to builder
+// WithMount adds single mount to builder
 func (b *Builder) WithMount(m Mount) *Builder {
 	b.Mounts = append(b.Mounts, m)
 	return b
@@ -92,7 +92,7 @@ func (b *Builder) WithBind(source, target string, readonly bool) *Builder {
 	return b
 }
 
-// WithTmpfs add a tmpfs mount to builder
+// WithTmpfs adds a tmpfs mount to builder
 func (b *Builder) WithTmpfs(target, data string) *Builder {
 	b.Mounts = append(b.Mounts, Mount{
 		Source: "tmpfs",
@@ -104,13 +104,22 @@ func (b *Builder) WithTmpfs(target, data string) *Builder {
 	return b
 }
 
-// WithProc add proc file system
+// WithProc adds proc file system mounted read-only
 func (b *Builder) WithProc() *Builder {
+	return b.WithProcRW(false)
+}
+
+// WithProcRW adds proc file system, possibly read-write
+func (b *Builder) WithProcRW(canWrite bool) *Builder {
+	var flags uintptr = unix.MS_NOSUID | unix.MS_NODEV | unix.MS_NOEXEC
+	if !canWrite {
+		flags |= unix.MS_RDONLY
+	}
 	b.Mounts = append(b.Mounts, Mount{
 		Source: "proc",
 		Target: "proc",
 		FsType: "proc",
-		Flags:  unix.MS_NOSUID | unix.MS_NODEV | unix.MS_NOEXEC | unix.MS_RDONLY,
+		Flags:  flags,
 	})
 	return b
 }
