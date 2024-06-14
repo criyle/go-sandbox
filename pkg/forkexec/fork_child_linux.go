@@ -356,14 +356,6 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 						childExitError(pipe, LocSetCap, err1)
 					}
 				}
-
-				if r.Seccomp != nil {
-					// Load seccomp filter
-					_, _, err1 = syscall.RawSyscall(unix.SYS_SECCOMP, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, uintptr(unsafe.Pointer(r.Seccomp)))
-					if err1 != 0 {
-						childExitError(pipe, LocSeccomp, err1)
-					}
-				}
 			}
 		}
 		_, _, err1 = syscall.RawSyscall(syscall.SYS_PTRACE, uintptr(syscall.PTRACE_TRACEME), 0, 0)
