@@ -10,3 +10,4 @@ env*.sh
 /test
 
 .vscode
+runprog
