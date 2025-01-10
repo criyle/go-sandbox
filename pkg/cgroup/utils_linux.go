@@ -173,7 +173,7 @@ func randomBuild(pattern string, build func(string) (Cgroup, error)) (Cgroup, er
 		if err == nil {
 			return cg, nil
 		}
-		if errors.Is(err, os.ErrExist) || cg.Existing() {
+		if errors.Is(err, os.ErrExist) || (cg != nil && cg.Existing()) {
 			if try++; try < 10000 {
 				continue
 			}
