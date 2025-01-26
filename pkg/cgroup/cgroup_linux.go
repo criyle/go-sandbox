@@ -130,7 +130,8 @@ func newV1(prefix string, ct *Controllers) (cg Cgroup, err error) {
 
 func newV2(prefix string, ct *Controllers) (cg Cgroup, err error) {
 	v2 := &V2{
-		path: path.Join(basePath, prefix),
+		path:    path.Join(basePath, prefix),
+		control: ct,
 	}
 	if _, err := os.Stat(v2.path); err == nil {
 		v2.existing = true
@@ -221,6 +222,7 @@ func openExistingV2(prefix string, ct *Controllers) (cg Cgroup, err error) {
 	}
 	return &V2{
 		path:     path.Join(basePath, prefix),
+		control:  ect,
 		existing: true,
 	}, nil
 }

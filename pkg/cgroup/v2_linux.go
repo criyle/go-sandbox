@@ -13,6 +13,7 @@ import (
 // V2 provides cgroup interface for v2
 type V2 struct {
 	path        string
+	control     *Controllers
 	subtreeOnce sync.Once
 	subtreeErr  error
 	existing    bool
@@ -41,7 +42,8 @@ func (c *V2) New(name string) (Cgroup, error) {
 		return nil, err
 	}
 	v2 := &V2{
-		path: path.Join(c.path, name),
+		path:    path.Join(c.path, name),
+		control: c.control,
 	}
 	if err := os.Mkdir(v2.path, dirPerm); err != nil {
 		if !os.IsExist(err) {
@@ -55,7 +57,8 @@ func (c *V2) New(name string) (Cgroup, error) {
 // Nest creates a sub-cgroup, moves current process into that cgroup
 func (c *V2) Nest(name string) (Cgroup, error) {
 	v2 := &V2{
-		path: path.Join(c.path, name),
+		path:    path.Join(c.path, name),
+		control: c.control,
 	}
 	if err := os.Mkdir(v2.path, dirPerm); err != nil {
 		if !os.IsExist(err) {
@@ -138,32 +141,50 @@ func (c *V2) CPUUsage() (uint64, error) {
 
 // MemoryUsage reads memory.current
 func (c *V2) MemoryUsage() (uint64, error) {
+	if !c.control.Memory {
+		return 0, ErrNotInitialized
+	}
 	return c.ReadUint("memory.current")
 }
 
 // MemoryMaxUsage reads memory.peak
 func (c *V2) MemoryMaxUsage() (uint64, error) {
+	if !c.control.Memory {
+		return 0, ErrNotInitialized
+	}
 	return c.ReadUint("memory.peak")
 }
 
 // SetCPUBandwidth set cpu.max quota period
 func (c *V2) SetCPUBandwidth(quota, period uint64) error {
+	if !c.control.CPU {
+		return ErrNotInitialized
+	}
 	content := strconv.FormatUint(quota, 10) + " " + strconv.FormatUint(period, 10)
 	return c.WriteFile("cpu.max", []byte(content))
 }
 
 // SetCPUSet sets cpuset.cpus
 func (c *V2) SetCPUSet(content []byte) error {
+	if !c.control.CPUSet {
+		return ErrNotInitialized
+	}
 	return c.WriteFile("cpuset.cpus", content)
 }
 
 // SetMemoryLimit memory.max
 func (c *V2) SetMemoryLimit(l uint64) error {
+	if !c.control.Memory {
+		return ErrNotInitialized
+	}
 	return c.WriteUint("memory.max", l)
 }
 
 // SetProcLimit pids.max
 func (c *V2) SetProcLimit(l uint64) error {
+	if !c.control.Pids {
+		return ErrNotInitialized
+	}
 	return c.WriteUint("pids.max", l)
 }
 
