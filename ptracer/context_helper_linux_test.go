@@ -66,61 +66,66 @@ func createTestProcess(t *testing.T) (int, func()) {
 	return cmd.Process.Pid, cleanup
 }
 
-// TestVmRead tests the vmRead function
-func TestVmRead(t *testing.T) {
-	pid, cleanup := createTestProcess(t)
-	defer cleanup()
-
-	// create test data
-	testData := []byte("Hello, World!")
-	buff := make([]byte, len(testData))
-
-	// get process memory maps
+// findReadableMemoryRegion finds a readable memory region in the process's address space
+func findReadableMemoryRegion(t *testing.T, pid int, minSize int) uintptr {
 	maps, err := os.ReadFile(fmt.Sprintf("/proc/%d/maps", pid))
 	if err != nil {
 		t.Fatalf("Failed to read process maps: %v", err)
 	}
 
-	// parse memory maps to find a readable address
-	var addr uintptr
 	for _, line := range bytes.Split(maps, []byte{'\n'}) {
 		if len(line) == 0 {
 			continue
 		}
-		if bytes.Contains(line, []byte("r-x")) { // find a readable segment
-			var start uint64
-			fmt.Sscanf(string(line), "%x-", &start)
-			addr = uintptr(start)
-			break
+		if bytes.Contains(line, []byte("r-x")) {
+			// Parse address range: start-end
+			var start, end uint64
+			_, err := fmt.Sscanf(string(line), "%x-%x", &start, &end)
+			if err != nil {
+				continue
+			}
+			
+			// Calculate region size
+			size := end - start
+			if size >= uint64(minSize) {
+				return uintptr(start)
+			}
 		}
 	}
 
-	if addr == 0 {
-		t.Fatal("Failed to find readable memory region")
-	}
+	t.Fatalf("Failed to find readable memory region with minimum size %d", minSize)
+	return 0
+}
 
-	// test reading
-	n, err := vmRead(pid, addr, buff)
+// TestVmRead tests the vmRead function
+func TestVmRead(t *testing.T) {
+	pid, cleanup := createTestProcess(t)
+	defer cleanup()
+
+	buff := make([]byte, 100)
+	// Ensure the found memory region is large enough
+	baseAddr := findReadableMemoryRegion(t, pid, len(buff))
+
+	n, err := vmRead(pid, baseAddr, buff)
 	if err != nil {
-		t.Fatalf("vmRead failed: %v", err)
+		t.Errorf("vmRead() error = %v", err)
 	}
 	if n == 0 {
 		t.Error("vmRead returned 0 bytes")
 	}
 }
 
-// TestVmReadStr tests the vmReadStr function
-func TestVmReadStr(t *testing.T) {
-	pid, cleanup := createTestProcess(t)
-	defer cleanup()
+// vmReadStrTestCase defines a test case for vmReadStr
+type vmReadStrTestCase struct {
+	name      string
+	buffSize  int
+	addrAlign uintptr // address alignment, used to test different alignment scenarios
+	wantErr   bool
+}
 
-	// test cases
-	testCases := []struct {
-		name      string
-		buffSize  int
-		addrAlign uintptr // address alignment, used to test different alignment scenarios
-		wantErr   bool
-	}{
+// getVmReadStrTestCases returns test cases for vmReadStr testing
+func getVmReadStrTestCases() []vmReadStrTestCase {
+	return []vmReadStrTestCase{
 		{
 			name:      "small_buffer_aligned",
 			buffSize:  10,
@@ -158,53 +163,42 @@ func TestVmReadStr(t *testing.T) {
 			wantErr:   false,
 		},
 	}
+}
+
+// TestVmReadStr tests the vmReadStr function
+func TestVmReadStr(t *testing.T) {
+	pid, cleanup := createTestProcess(t)
+	defer cleanup()
+
+	testCases := getVmReadStrTestCases()
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			buff := make([]byte, tc.buffSize)
 			
-			// get a readable memory address
-			maps, err := os.ReadFile(fmt.Sprintf("/proc/%d/maps", pid))
-			if err != nil {
-				t.Fatalf("Failed to read process maps: %v", err)
-			}
+			// Ensure the found memory region is large enough
+			baseAddr := findReadableMemoryRegion(t, pid, tc.buffSize)
 
-			var baseAddr uintptr
-			for _, line := range bytes.Split(maps, []byte{'\n'}) {
-				if len(line) == 0 {
-					continue
-				}
-				if bytes.Contains(line, []byte("r-x")) {
-					var start uint64
-					fmt.Sscanf(string(line), "%x-", &start)
-					baseAddr = uintptr(start)
-					break
-				}
-			}
-
-			if baseAddr == 0 {
-				t.Fatal("Failed to find readable memory region")
-			}
-
-			// use test case specified alignment offset
+			// Use test case specified alignment offset
 			testAddr := baseAddr + tc.addrAlign
 
-			// record buffer content before reading
+			// Record buffer content before reading
 			originalBuff := make([]byte, len(buff))
 			copy(originalBuff, buff)
 
-			err = vmReadStr(pid, testAddr, buff)
+			err := vmReadStr(pid, testAddr, buff)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("vmReadStr() error = %v, wantErr %v", err, tc.wantErr)
 			}
 
-			// verify if actual reading occurred
+			// Verify reading results
 			if !bytes.Equal(buff, originalBuff) {
-				// at least some data was read
+				// For vmReadStr, we only care that some data was read
+				// and that the function completed without error
 				t.Logf("Data was read successfully for case: %s", tc.name)
 			}
 
-			// special case: check buffer size smaller than distance to boundary
+			// Special case: check buffer size smaller than distance to boundary
 			if tc.name == "buffer_smaller_than_to_boundary" {
 				distToBoundary := pageSize - int(testAddr%uintptr(pageSize))
 				if distToBoundary > len(buff) {
