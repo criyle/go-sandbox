@@ -2,7 +2,6 @@
 .DS_Store
 
 # Test Env
-test*/
 env*.sh
 
 # Test Files
@@ -10,3 +9,5 @@ env*.sh
 /test
 
 .vscode
+runprog
+*.test
