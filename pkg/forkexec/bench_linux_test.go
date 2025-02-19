@@ -20,10 +20,33 @@ var (
 )
 
 func BenchmarkStdFork(b *testing.B) {
+	f := openNull(b)
+	defer f.Close()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			pid, err := syscall.ForkExec("/bin/echo", nil, &syscall.ProcAttr{
-				Env: []string{"PATH=/bin"},
+				Env:   []string{"PATH=/bin"},
+				Files: []uintptr{f.Fd(), f.Fd(), f.Fd()},
+			})
+			if err != nil {
+				b.Fatal(err)
+			}
+			wait4(pid, b)
+		}
+	})
+}
+
+func BenchmarkStdForkUser(b *testing.B) {
+	f := openNull(b)
+	defer f.Close()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			pid, err := syscall.ForkExec("/bin/echo", nil, &syscall.ProcAttr{
+				Env:   []string{"PATH=/bin"},
+				Files: []uintptr{f.Fd(), f.Fd(), f.Fd()},
+				Sys: &syscall.SysProcAttr{
+					Cloneflags: syscall.CLONE_NEWUSER,
+				},
 			})
 			if err != nil {
 				b.Fatal(err)
