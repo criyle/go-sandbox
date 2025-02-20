@@ -185,6 +185,8 @@ type Environment interface {
 
 - 6.1: `pids.peak` in cgroup v2
 - 5.19: `memory.peak` in cgroup v2
+- 5.7: `clone3` with `CLONE_INTO_CGROUP`
+- 5.3: `clone3`
 - 4.15: cgroup v2 (also need support in the Linux distribution)
 - 4.14: SECCOMP_RET_KILL_PROCESS 
 - 4.6: CLONE_NEWCGROUP

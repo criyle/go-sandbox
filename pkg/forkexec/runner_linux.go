@@ -61,6 +61,9 @@ type Runner struct {
 	UIDMappings []syscall.SysProcIDMap
 	GIDMappings []syscall.SysProcIDMap
 
+	// CgroupFd to use when clone3 with CLONE_INTO_CGROUP with kernel >=5.7 and cgroup v2
+	CgroupFd uintptr
+
 	// Credential holds user and group identities to be assumed
 	// by a child process started by StartProcess.
 	Credential *syscall.Credential

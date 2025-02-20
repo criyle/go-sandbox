@@ -1,6 +1,7 @@
 package forkexec
 
 import (
+	"runtime"
 	"syscall"
 	"unsafe"
 
@@ -11,8 +12,20 @@ import (
 //
 //go:norace
 func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, hostname, domainname, pivotRoot *byte, p [2]int) (r1 uintptr, err1 syscall.Errno) {
+	var (
+		clone3 *cloneArgs
+	)
 	// similar to exec_linux, avoid side effect by shuffling around
 	fd, nextfd := prepareFds(r.Files)
+
+	// use clone3 if cgroupFd specified
+	if r.CgroupFd > 0 {
+		clone3 = &cloneArgs{
+			flags:      uint64(r.CloneFlags) | unix.CLONE_INTO_CGROUP,
+			exitSignal: uint64(syscall.SIGCHLD),
+			cgroup:     uint64(r.CgroupFd),
+		}
+	}
 
 	// Acquire the fork lock so that no other threads
 	// create new fds that are not yet close-on-exec
@@ -24,7 +37,16 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	beforeFork()
 
 	// UnshareFlags (new namespaces) is activated by clone syscall
-	r1, _, err1 = syscall.RawSyscall6(syscall.SYS_CLONE, uintptr(syscall.SIGCHLD)|(r.CloneFlags&UnshareFlags), 0, 0, 0, 0, 0)
+	if clone3 != nil {
+		r1, _, err1 = syscall.RawSyscall6(unix.SYS_CLONE3, uintptr(unsafe.Pointer(clone3)), unsafe.Sizeof(*clone3), 0, 0, 0, 0)
+	} else {
+		if runtime.GOARCH == "s390x" {
+			// On Linux/s390, the first two arguments of clone(2) are swapped.
+			r1, _, err1 = syscall.RawSyscall6(syscall.SYS_CLONE, 0, uintptr(syscall.SIGCHLD)|(r.CloneFlags&UnshareFlags), 0, 0, 0, 0)
+		} else {
+			r1, _, err1 = syscall.RawSyscall6(syscall.SYS_CLONE, uintptr(syscall.SIGCHLD)|(r.CloneFlags&UnshareFlags), 0, 0, 0, 0, 0)
+		}
+	}
 	if err1 != 0 || r1 != 0 {
 		// in parent process, immediate return
 		return
