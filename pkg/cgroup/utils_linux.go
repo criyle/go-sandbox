@@ -116,7 +116,9 @@ func DetectType() Type {
 
 func remove(name string) error {
 	if name != "" {
-		return os.Remove(name)
+		// os.Remove tried to Unlink, then Rmdir. Since we only delete directories, use
+		// Rmdir directly
+		return syscall.Rmdir(name)
 	}
 	return nil
 }
