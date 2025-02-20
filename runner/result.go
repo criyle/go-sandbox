@@ -11,8 +11,9 @@ type Result struct {
 	ExitStatus int    // exit status (signal number if signalled)
 	Error      string // potential detailed error message (for program runner error)
 
-	Time   time.Duration // used user CPU time  (underlying type int64 in ns)
-	Memory Size          // used user memory    (underlying type uint64 in bytes)
+	Time     time.Duration // used user CPU time  (underlying type int64 in ns)
+	Memory   Size          // used user memory    (underlying type uint64 in bytes)
+	ProcPeak uint64        // maximum processes
 
 	// metrics for the program runner
 	SetUpTime   time.Duration

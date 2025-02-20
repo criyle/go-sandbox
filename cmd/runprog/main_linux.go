@@ -426,6 +426,9 @@ func start() (*runner.Result, error) {
 		if memory > 0 {
 			rt.Memory = runner.Size(memory)
 		}
+		if procPeak > 0 {
+			rt.ProcPeak = procPeak
+		}
 		debug("cgroup:", rt)
 	}
 	return &rt, nil
