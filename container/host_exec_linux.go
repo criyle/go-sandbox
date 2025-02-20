@@ -36,6 +36,10 @@ type ExecveParam struct {
 
 	// SyncFunc calls with pid just before execve (for attach the process to cgroups)
 	SyncFunc func(pid int) error
+
+	// SyncAfterExec makes syncFunc sync after the start of the execution
+	// Thus, since pid is not guarantee to be exist (may exit early), it is not passed
+	SyncAfterExec bool
 }
 
 // Execve runs process inside container. It accepts context cancelation as time limit exceeded.
@@ -55,12 +59,13 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) runner.Result
 		Fds: files,
 	}
 	execCmd := &execCmd{
-		Argv:    param.Args,
-		Env:     param.Env,
-		RLimits: param.RLimits,
-		Seccomp: param.Seccomp,
-		FdExec:  param.ExecFile > 0,
-		CTTY:    param.CTTY,
+		Argv:      param.Args,
+		Env:       param.Env,
+		RLimits:   param.RLimits,
+		Seccomp:   param.Seccomp,
+		FdExec:    param.ExecFile > 0,
+		CTTY:      param.CTTY,
+		SyncAfter: param.SyncAfterExec,
 	}
 	cm := cmd{
 		Cmd:     cmdExecve,
@@ -76,6 +81,7 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) runner.Result
 	}
 	// if sync function did not involved
 	if rep.Error != nil {
+		c.execveSyncKill()
 		return errResult("execve: %v", rep.Error)
 	}
 	// if pid not received

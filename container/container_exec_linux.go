@@ -48,7 +48,7 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 		cmd.Argv[0] = exePath
 	}
 
-	syncFunc := func(pid int) error {
+	syncPid := func(pid int) error {
 		msg := unixsocket.Msg{
 			Cred: &syscall.Ucred{
 				Pid: int32(pid),
@@ -67,6 +67,10 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 			return fmt.Errorf("syncFunc: received kill")
 		}
 		return nil
+	}
+	var syncFunc func(pid int) error
+	if !cmd.SyncAfter {
+		syncFunc = syncPid
 	}
 
 	if c.Cred {
@@ -108,6 +112,11 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 		c.sendErrorReply("start: %s: %v", s, err)
 		c.recvCmd()
 		return c.sendReply(reply{}, unixsocket.Msg{})
+	}
+	if cmd.SyncAfter {
+		if err := syncPid(1); err != nil {
+			syscall.Kill(-1, syscall.SIGKILL)
+		}
 	}
 	return c.handleExecveStarted(pid)
 }

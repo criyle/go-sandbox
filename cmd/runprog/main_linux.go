@@ -325,13 +325,14 @@ func start() (*runner.Result, error) {
 		r = &containerRunner{
 			Environment: m,
 			ExecveParam: container.ExecveParam{
-				Args:     args,
-				Env:      []string{pathEnv},
-				Files:    fds,
-				ExecFile: execFile,
-				RLimits:  rlims.PrepareRLimit(),
-				Seccomp:  filter,
-				SyncFunc: syncFunc,
+				Args:          args,
+				Env:           []string{pathEnv},
+				Files:         fds,
+				ExecFile:      execFile,
+				RLimits:       rlims.PrepareRLimit(),
+				Seccomp:       filter,
+				SyncFunc:      syncFunc,
+				SyncAfterExec: cg == nil,
 			},
 		}
 	} else if runt == "ns" {

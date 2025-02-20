@@ -36,12 +36,13 @@ type deleteCmd struct {
 
 // execCmd stores execve parameter
 type execCmd struct {
-	Argv    []string        // execve argv
-	Env     []string        // execve env
-	RLimits []rlimit.RLimit // execve posix rlimit
-	Seccomp seccomp.Filter  // seccomp filter
-	FdExec  bool            // if use fexecve (fd[0] as exec)
-	CTTY    bool            // if set CTTY
+	Argv      []string        // execve argv
+	Env       []string        // execve env
+	RLimits   []rlimit.RLimit // execve posix rlimit
+	Seccomp   seccomp.Filter  // seccomp filter
+	FdExec    bool            // if use fexecve (fd[0] as exec)
+	CTTY      bool            // if set CTTY
+	SyncAfter bool            // if sync function calls after execve returns
 }
 
 // confCmd stores conf parameter
