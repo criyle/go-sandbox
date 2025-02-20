@@ -18,14 +18,20 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	// similar to exec_linux, avoid side effect by shuffling around
 	fd, nextfd := prepareFds(r.Files)
 
+	flag := r.CloneFlags & UnshareFlags
+	if r.SyncFunc == nil && !(r.StopBeforeSeccomp || (r.Seccomp != nil && r.Ptrace)) && flag|syscall.CLONE_NEWUSER != syscall.CLONE_NEWUSER {
+		flag |= syscall.CLONE_VM | syscall.CLONE_VFORK
+	}
+
 	// use clone3 if cgroupFd specified
 	if r.CgroupFd > 0 {
 		clone3 = &cloneArgs{
-			flags:      uint64(r.CloneFlags) | unix.CLONE_INTO_CGROUP,
+			flags:      uint64(flag) | unix.CLONE_INTO_CGROUP,
 			exitSignal: uint64(syscall.SIGCHLD),
 			cgroup:     uint64(r.CgroupFd),
 		}
 	}
+	flag |= uintptr(syscall.SIGCHLD)
 
 	// Acquire the fork lock so that no other threads
 	// create new fds that are not yet close-on-exec
@@ -42,9 +48,9 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	} else {
 		if runtime.GOARCH == "s390x" {
 			// On Linux/s390, the first two arguments of clone(2) are swapped.
-			r1, _, err1 = syscall.RawSyscall6(syscall.SYS_CLONE, 0, uintptr(syscall.SIGCHLD)|(r.CloneFlags&UnshareFlags), 0, 0, 0, 0)
+			r1, _, err1 = syscall.RawSyscall6(syscall.SYS_CLONE, 0, flag, 0, 0, 0, 0)
 		} else {
-			r1, _, err1 = syscall.RawSyscall6(syscall.SYS_CLONE, uintptr(syscall.SIGCHLD)|(r.CloneFlags&UnshareFlags), 0, 0, 0, 0, 0)
+			r1, _, err1 = syscall.RawSyscall6(syscall.SYS_CLONE, flag, 0, 0, 0, 0, 0)
 		}
 	}
 	if err1 != 0 || r1 != 0 {
