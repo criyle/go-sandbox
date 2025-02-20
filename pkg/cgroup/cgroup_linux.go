@@ -33,6 +33,9 @@ type Cgroup interface {
 	// MemoryMaxUsageInBytes reads max total memory usage. Not exist in cgroup v2 with kernel version < 5.19
 	MemoryMaxUsage() (uint64, error)
 
+	// ProcessPeak reads maximum number of process ever existed in cgroup. Not exist in cgroup v1 or kernel < 6.1
+	ProcessPeak() (uint64, error)
+
 	// SetCPUBandwidth sets the cpu bandwidth. Times in ns
 	SetCPUBandwidth(quota, period uint64) error
 

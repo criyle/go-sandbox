@@ -183,8 +183,9 @@ type Environment interface {
 
 ## Kernel Versions
 
+- 6.1: `pids.peak` in cgroup v2
 - 5.19: `memory.peak` in cgroup v2
-- 4.15: cgroup v2
+- 4.15: cgroup v2 (also need support in the Linux distribution)
 - 4.14: SECCOMP_RET_KILL_PROCESS 
 - 4.6: CLONE_NEWCGROUP
 - 3.19: execveat()

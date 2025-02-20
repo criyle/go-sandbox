@@ -417,7 +417,11 @@ func start() (*runner.Result, error) {
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return nil, fmt.Errorf("cgroup memory: %v", err)
 		}
-		debug("cgroup: cpu: ", cpu, " memory: ", memory)
+		procPeak, err := cg.ProcessPeak()
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("cgroup pid: %v", err)
+		}
+		debug("cgroup: cpu: ", cpu, " memory: ", memory, " procPeak: ", procPeak)
 		rt.Time = time.Duration(cpu)
 		if memory > 0 {
 			rt.Memory = runner.Size(memory)

@@ -155,6 +155,14 @@ func (c *V2) MemoryMaxUsage() (uint64, error) {
 	return c.ReadUint("memory.peak")
 }
 
+// ProcessPeak reads pids.peak
+func (c *V2) ProcessPeak() (uint64, error) {
+	if !c.control.Pids {
+		return 0, ErrNotInitialized
+	}
+	return c.ReadUint("pids.peak")
+}
+
 // SetCPUBandwidth set cpu.max quota period
 func (c *V2) SetCPUBandwidth(quota, period uint64) error {
 	if !c.control.CPU {

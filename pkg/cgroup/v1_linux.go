@@ -181,6 +181,11 @@ func (c *V1) MemoryMaxUsage() (uint64, error) {
 	return c.memory.ReadUint("memory.max_usage_in_bytes")
 }
 
+// ProcessPeak implements Cgroup.
+func (c *V1) ProcessPeak() (uint64, error) {
+	return 0, ErrNotInitialized
+}
+
 // SetMemoryLimit write memory.limit_in_bytes
 func (c *V1) SetMemoryLimit(i uint64) error {
 	return c.memory.WriteUint("memory.limit_in_bytes", i)
