@@ -21,6 +21,10 @@ type V2 struct {
 
 var _ Cgroup = &V2{}
 
+func (c *V2) Open() (*os.File, error) {
+	return os.OpenFile(c.path, 0, dirPerm)
+}
+
 func (c *V2) String() string {
 	ct, _ := getAvailableControllerV2path(path.Join(c.path, cgroupControllers))
 	return "v2(" + c.path + ")" + ct.String()

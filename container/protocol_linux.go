@@ -41,6 +41,7 @@ type execCmd struct {
 	RLimits   []rlimit.RLimit // execve posix rlimit
 	Seccomp   seccomp.Filter  // seccomp filter
 	FdExec    bool            // if use fexecve (fd[0] as exec)
+	FdCgroup  bool            // if use cgroupFd
 	CTTY      bool            // if set CTTY
 	SyncAfter bool            // if sync function calls after execve returns
 }

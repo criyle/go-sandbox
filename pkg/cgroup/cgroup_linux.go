@@ -56,6 +56,9 @@ type Cgroup interface {
 
 	// Random creates a sub-cgroup based on the existing one but the name is randomly generated
 	Random(string) (Cgroup, error)
+
+	// Open opens the cgroup directory on V2 (used for clone3)
+	Open() (*os.File, error)
 }
 
 // DetectedCgroupType defines the current cgroup type of the system

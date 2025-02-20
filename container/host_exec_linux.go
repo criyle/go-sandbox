@@ -25,6 +25,9 @@ type ExecveParam struct {
 	// ExecFile specifies file descriptor for executable file using fexecve
 	ExecFile uintptr
 
+	// CgroupFD specifies file descriptor for cgroup V2
+	CgroupFD uintptr
+
 	// RLimits specifies POSIX Resource limit through setrlimit
 	RLimits []rlimit.RLimit
 
@@ -53,6 +56,9 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) runner.Result
 	var files []int
 	if param.ExecFile > 0 {
 		files = append(files, int(param.ExecFile))
+	}
+	if param.CgroupFD > 0 {
+		files = append(files, int(param.CgroupFD))
 	}
 	files = append(files, uintptrSliceToInt(param.Files)...)
 	msg := unixsocket.Msg{

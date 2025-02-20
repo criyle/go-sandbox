@@ -14,6 +14,7 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 	var (
 		files    []uintptr
 		execFile uintptr
+		cgroupFd uintptr
 		cred     *syscall.Credential
 	)
 	if cmd == nil {
@@ -33,6 +34,14 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 			return c.sendErrorReply("handle: expected fexecve fd")
 		}
 		execFile = files[0]
+		files = files[1:]
+	}
+	// if cgroupFd, then the cgroupFd follows
+	if cmd.FdCgroup {
+		if len(files) == 0 {
+			return c.sendErrorReply("handle: expected cgroup fd")
+		}
+		cgroupFd = files[0]
 		files = files[1:]
 	}
 
@@ -99,8 +108,9 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 		Credential: cred,
 		CTTY:       cmd.CTTY,
 		Seccomp:    seccomp,
+		CgroupFd:   cgroupFd,
 
-		UnshareCgroupAfterSync: c.UnshareCgroup,
+		UnshareCgroupAfterSync: c.UnshareCgroup && !cmd.SyncAfter,
 	}
 	// starts the runner, error is handled same as wait4 to make communication equal
 	pid, err := r.Start()

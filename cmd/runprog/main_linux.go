@@ -35,6 +35,7 @@ var (
 	timeLimit, realTimeLimit, memoryLimit, outputLimit, stackLimit uint64
 	inputFileName, outputFileName, errorFileName, workPath, runt   string
 
+	useCGroupFd   bool
 	pType, result string
 	args          []string
 )
@@ -65,6 +66,7 @@ func main() {
 	flag.Var(&addRawReadable, "add-readable-raw", "Add a readable file (don't transform to its real path)")
 	flag.Var(&addRawWritable, "add-writable-raw", "Add a writable file (don't transform to its real path)")
 	flag.BoolVar(&useCGroup, "cgroup", false, "Use cgroup to colloct resource usage")
+	flag.BoolVar(&useCGroupFd, "cgroupfd", false, "Use cgroup FD to clone3 (cgroup v2 & kernel > 5.7)")
 	flag.BoolVar(&memfile, "memfd", false, "Use memfd as exec file")
 	flag.StringVar(&runt, "runner", "ptrace", "Runner for the program (ptrace, ns, container)")
 	flag.BoolVar(&cred, "cred", false, "Generate credential for containers (uid=10000)")
@@ -145,6 +147,8 @@ func start() (*runner.Result, error) {
 	var (
 		r        runner.Runner
 		cg       cgroup.Cgroup
+		cgDir    *os.File
+		cgroupFd uintptr
 		err      error
 		execFile uintptr
 		rt       runner.Result
@@ -205,6 +209,18 @@ func start() (*runner.Result, error) {
 		defer cg.Destroy()
 		if err = cg.SetMemoryLimit(memoryLimit << 20); err != nil {
 			return nil, err
+		}
+		debug("cgroup:", cg)
+		if useCGroupFd {
+			debug("use cgroup fd")
+			if t != cgroup.TypeV2 {
+				return nil, fmt.Errorf("use cgroup fd cannot be enabled without cgroup v2")
+			}
+			if cgDir, err = cg.Open(); err != nil {
+				return nil, err
+			}
+			defer cgDir.Close()
+			cgroupFd = cgDir.Fd()
 		}
 	}
 
@@ -332,7 +348,8 @@ func start() (*runner.Result, error) {
 				RLimits:       rlims.PrepareRLimit(),
 				Seccomp:       filter,
 				SyncFunc:      syncFunc,
-				SyncAfterExec: cg == nil,
+				CgroupFD:      cgroupFd,
+				SyncAfterExec: cg == nil || cgDir != nil,
 			},
 		}
 	} else if runt == "ns" {

@@ -26,6 +26,10 @@ type V1 struct {
 	existing bool
 }
 
+func (c *V1) Open() (*os.File, error) {
+	return nil, ErrNotInitialized
+}
+
 func (c *V1) String() string {
 	names := make([]string, 0, numberOfControllers)
 	for _, v := range []struct {
