@@ -65,6 +65,7 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 		err         error
 		unshareUser = r.CloneFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
 		childErr    ChildError
+		n           int
 	)
 
 	// sync with child
@@ -86,24 +87,24 @@ func syncWithChild(r *Runner, p [2]int, pid int, err1 syscall.Errno) (int, error
 		syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[0]), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
 	}
 
-	n, err := readChildErr(p[0], &childErr)
-	// child returned error code
-	if (n != int(unsafe.Sizeof(err2)) && n != int(unsafe.Sizeof(childErr))) || childErr.Err != 0 || err != nil {
-		childErr.Err = handlePipeError(n, childErr.Err)
-		goto fail
-	}
-
 	// if syncfunc return error, then fail child immediately
+	// only sync if there is a syncFunc
 	if r.SyncFunc != nil {
+		n, err = readChildErr(p[0], &childErr)
+		// child returned error code
+		if (n != int(unsafe.Sizeof(err2)) && n != int(unsafe.Sizeof(childErr))) || childErr.Err != 0 || err != nil {
+			childErr.Err = handlePipeError(n, childErr.Err)
+			goto fail
+		}
 		if err = r.SyncFunc(int(pid)); err != nil {
 			goto fail
 		}
+		// otherwise, ack child (err1 == 0)
+		syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[0]), uintptr(unsafe.Pointer(&err1)), uintptr(unsafe.Sizeof(err1)))
 	}
-	// otherwise, ack child (err1 == 0)
-	syscall.RawSyscall(syscall.SYS_WRITE, uintptr(p[0]), uintptr(unsafe.Pointer(&err1)), uintptr(unsafe.Sizeof(err1)))
 
 	// if stopped before execve by signal SIGSTOP or PTRACE_ME, then do not wait until execve
-	if r.Ptrace || r.StopBeforeSeccomp {
+	if r.StopBeforeSeccomp || (r.Seccomp != nil && r.Ptrace) {
 		// let's wait it in another goroutine to avoid SIGPIPE
 		go func() {
 			readChildErr(p[0], &childErr)

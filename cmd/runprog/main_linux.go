@@ -224,13 +224,14 @@ func start() (*runner.Result, error) {
 		}
 	}
 
-	syncFunc := func(pid int) error {
-		if cg != nil {
+	var syncFunc func(pid int) error
+	if cg != nil {
+		syncFunc = func(pid int) error {
 			if err := cg.AddProc(pid); err != nil {
 				return err
 			}
+			return nil
 		}
-		return nil
 	}
 
 	if memfile {

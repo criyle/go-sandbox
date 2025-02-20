@@ -351,14 +351,16 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	// Enable Ptrace & sync with parent (since ptrace_me is a blocking operation)
 	if r.Ptrace && r.Seccomp != nil {
 		{
-			r1, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
-			if r1 == 0 || err1 != 0 {
-				childExitError(pipe, LocSyncWrite, err1)
-			}
+			if r.SyncFunc != nil {
+				r1, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+				if r1 == 0 || err1 != 0 {
+					childExitError(pipe, LocSyncWrite, err1)
+				}
 
-			r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
-			if r1 == 0 || err1 != 0 {
-				childExitError(pipe, LocSyncRead, err1)
+				r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+				if r1 == 0 || err1 != 0 {
+					childExitError(pipe, LocSyncRead, err1)
+				}
 			}
 
 			// unshare cgroup namespace
@@ -414,14 +416,16 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	// Before exec, sync with parent through pipe (configured as close_on_exec)
 	if !r.Ptrace || r.Seccomp == nil {
 		{
-			r1, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
-			if r1 == 0 || err1 != 0 {
-				childExitError(pipe, LocSyncWrite, err1)
-			}
+			if r.SyncFunc != nil {
+				r1, _, err1 = syscall.RawSyscall(syscall.SYS_WRITE, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+				if r1 == 0 || err1 != 0 {
+					childExitError(pipe, LocSyncWrite, err1)
+				}
 
-			r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
-			if r1 == 0 || err1 != 0 {
-				childExitError(pipe, LocSyncRead, err1)
+				r1, _, err1 = syscall.RawSyscall(syscall.SYS_READ, uintptr(pipe), uintptr(unsafe.Pointer(&err2)), uintptr(unsafe.Sizeof(err2)))
+				if r1 == 0 || err1 != 0 {
+					childExitError(pipe, LocSyncRead, err1)
+				}
 			}
 
 			// unshare cgroup namespace
