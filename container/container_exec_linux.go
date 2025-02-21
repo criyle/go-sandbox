@@ -110,7 +110,7 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 		Seccomp:    seccomp,
 		CgroupFd:   cgroupFd,
 
-		UnshareCgroupAfterSync: c.UnshareCgroup && !cmd.SyncAfter,
+		UnshareCgroupAfterSync: c.UnshareCgroup,
 	}
 	// starts the runner, error is handled same as wait4 to make communication equal
 	pid, err := r.Start()

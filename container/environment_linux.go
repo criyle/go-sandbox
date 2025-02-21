@@ -250,7 +250,7 @@ func (b *Builder) startContainer() (*container, error) {
 				unix.CAP_SYS_ADMIN,
 				unix.CAP_SYS_RESOURCE,
 			},
-			Pdeathsig: syscall.SIGTERM,
+			Pdeathsig: syscall.SIGKILL,
 		},
 	}
 	if err = r.Start(); err != nil {

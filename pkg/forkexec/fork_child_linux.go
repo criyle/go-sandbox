@@ -5,22 +5,32 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/criyle/go-sandbox/pkg/rlimit"
 	"golang.org/x/sys/unix"
 )
 
 // Reference to src/syscall/exec_linux.go
 //
+//go:noinline
 //go:norace
+//go:nocheckptr
 func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, hostname, domainname, pivotRoot *byte, p [2]int) (r1 uintptr, err1 syscall.Errno) {
 	var (
-		clone3 *cloneArgs
+		clone3      *cloneArgs
+		pid         uintptr
+		err2        syscall.Errno
+		unshareUser = r.CloneFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
+		i           int
+		rlim        rlimit.RLimit
 	)
+	pipe := p[1]
+
 	// similar to exec_linux, avoid side effect by shuffling around
 	fd, nextfd := prepareFds(r.Files)
 
 	flag := r.CloneFlags & UnshareFlags
-	if r.SyncFunc == nil && !(r.StopBeforeSeccomp || (r.Seccomp != nil && r.Ptrace)) && flag|syscall.CLONE_NEWUSER != syscall.CLONE_NEWUSER {
-		flag |= syscall.CLONE_VM | syscall.CLONE_VFORK
+	if r.SyncFunc == nil && !(r.StopBeforeSeccomp || (r.Seccomp != nil && r.Ptrace)) && flag&syscall.CLONE_NEWUSER != syscall.CLONE_NEWUSER {
+		// flag |= syscall.CLONE_VM | syscall.CLONE_VFORK
 	}
 
 	// use clone3 if cgroupFd specified
@@ -61,13 +71,6 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	// In child process
 	afterForkInChild()
 	// Notice: cannot call any GO functions beyond this point
-
-	pipe := p[1]
-	var (
-		pid         uintptr
-		err2        syscall.Errno
-		unshareUser = r.CloneFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
-	)
 
 	// Close write end of pipe
 	if _, _, err1 = syscall.RawSyscall(syscall.SYS_CLOSE, uintptr(p[0]), 0, 0); err1 != 0 {
@@ -154,7 +157,7 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 		r.ExecFile = uintptr(nextfd)
 		nextfd++
 	}
-	for i := 0; i < len(fd); i++ {
+	for i = 0; i < len(fd); i++ {
 		if fd[i] >= 0 && fd[i] < int(i) {
 			// Avoid fd rewrite
 			for nextfd == pipe || (r.ExecFile > 0 && nextfd == int(r.ExecFile)) {
@@ -170,7 +173,7 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 		}
 	}
 	// Pass 2: fd[i] => i
-	for i := 0; i < len(fd); i++ {
+	for i = 0; i < len(fd); i++ {
 		if fd[i] == -1 {
 			syscall.RawSyscall(syscall.SYS_CLOSE, uintptr(i), 0, 0)
 			continue
@@ -324,7 +327,7 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	}
 
 	// Set limit
-	for i, rlim := range r.RLimits {
+	for i, rlim = range r.RLimits {
 		// prlimit instead of setrlimit to avoid 32-bit limitation (linux > 3.2)
 		_, _, err1 = syscall.RawSyscall6(syscall.SYS_PRLIMIT64, 0, uintptr(rlim.Res), uintptr(unsafe.Pointer(&rlim.Rlim)), 0, 0, 0)
 		if err1 != 0 {

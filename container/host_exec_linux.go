@@ -72,6 +72,7 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) runner.Result
 		FdExec:    param.ExecFile > 0,
 		CTTY:      param.CTTY,
 		SyncAfter: param.SyncAfterExec,
+		FdCgroup:  param.CgroupFD > 0,
 	}
 	cm := cmd{
 		Cmd:     cmdExecve,
