@@ -66,6 +66,9 @@ type Builder struct {
 	// ContainerUID & ContainerGID set the container uid / gid mapping
 	ContainerUID int
 	ContainerGID int
+
+	// UnshareCgroupBeforeExec calls unshare cgroup before execution
+	UnshareCgroupBeforeExec bool
 }
 
 // SymbolicLink defines symlinks to be created after mount
@@ -186,7 +189,7 @@ func (b *Builder) Build() (Environment, error) {
 		Cred:          b.CredGenerator != nil,
 		ContainerUID:  b.ContainerUID,
 		ContainerGID:  b.ContainerGID,
-		UnshareCgroup: b.CloneFlags&unix.CLONE_NEWCGROUP == unix.CLONE_NEWCGROUP,
+		UnshareCgroup: b.UnshareCgroupBeforeExec,
 	}); err != nil {
 		c.Destroy()
 		return nil, err
