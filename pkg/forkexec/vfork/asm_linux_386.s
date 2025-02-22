@@ -4,6 +4,10 @@
 
 #include "textflag.h"
 
+// See ../runtime/sys_linux_386.s for the reason why we always use int 0x80
+// instead of the glibc-specific "CALL 0x10(GS)".
+#define INVOKE_SYSCALL	INT	$0x80
+
 // func RawVforkSyscall(trap, a1, a2, a3 uintptr) (r1, err uintptr)
 TEXT ·RawVforkSyscall(SB),NOSPLIT|NOFRAME,$0-24
 	MOVL	trap+0(FP), AX	// syscall entry

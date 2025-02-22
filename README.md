@@ -13,8 +13,9 @@ Notice: Only works on Linux since ptrace, unshare, cgroup are available only on 
 ## Build & Install
 
 - install latest go compiler from [golang/download](https://golang.org/dl/)
-- install libseccomp library: (for Ubuntu) `apt install libseccomp-dev`
-- build & install: `go install github.com/criyle/go-sandbox/...`
+- download repository: `git clone githuc.com/criyle/go-sandbox`
+- build: `go build ./cmd/runprog` 
+- or install directly: `go install github.com/criyle/go-sandbox/cmd/runprog@latest`
 
 ## Technologies
 
@@ -44,6 +45,12 @@ Default file access syscall check:
 1. Unshare & bind mount rootfs based on hostfs (eliminated ptrace)
 2. Use Linux Control Groups to limit & acct CPU & memory (eliminated wait4.rusage)
 3. Container tech with execveat memfd, sethostname, setdomainname
+
+### prefork containers
+
+Utilize the linux namespace + cgroup but create container in advance to reduce the duplicated effort of creating mount points. See Pre-forked container protocol and environment for design details.
+
+On kernel >= 5.7 with cgroup v2, the new `clone3(CLONE_INTO_CGROUP)` with `vfork` is available to reduce the resource consumption of create new address spaces as well.
 
 ## Design
 
