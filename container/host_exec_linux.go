@@ -88,7 +88,6 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) runner.Result
 	}
 	// if sync function did not involved
 	if rep.Error != nil {
-		c.execveSyncKill()
 		return errResult("execve: %v", rep.Error)
 	}
 	// if pid not received
@@ -102,8 +101,6 @@ func (c *container) Execve(ctx context.Context, param ExecveParam) runner.Result
 	if param.SyncFunc != nil {
 		if err := param.SyncFunc(int(msg.Cred.Pid)); err != nil {
 			// tell sync function to exit and recv error
-			c.execveSyncKill()
-			// tell kill function to exit and sync
 			c.execveSyncKill()
 			return errResult("execve: syncfunc failed %v", err)
 		}

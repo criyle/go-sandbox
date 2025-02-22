@@ -51,16 +51,74 @@ func BenchmarkContainer(b *testing.B) {
 	})
 }
 
-func TestContainerSuccess(t *testing.T) {
-	t.Parallel()
-	m := getEnv(t, nil)
-	r := m.Execve(context.TODO(), ExecveParam{
-		Args: []string{"/bin/true"},
-		Env:  []string{"PATH=/bin"},
-	})
-	if r.Status != runner.StatusNormal {
-		t.Fatal(r.Status, r.Error, r)
-	}
+type testCase struct {
+	name     string
+	param    ExecveParam
+	expected runner.Status
+}
+
+var err error = errors.New("test error")
+
+var successParam = ExecveParam{
+	Args: []string{"/bin/true"},
+	Env:  []string{"PATH=/bin"},
+}
+
+var tests []testCase = []testCase{
+	{
+		name:     "Success",
+		param:    successParam,
+		expected: runner.StatusNormal,
+	},
+	{
+		name: "SuccessWithSync",
+		param: ExecveParam{
+			Args:     []string{"/bin/true"},
+			Env:      []string{"PATH=/bin"},
+			SyncFunc: func(p int) error { return nil },
+		},
+		expected: runner.StatusNormal,
+	},
+	{
+		name: "NotExists",
+		param: ExecveParam{
+			Args: []string{"not_exists"},
+			Env:  []string{"PATH=/bin"},
+		},
+		expected: runner.StatusRunnerError,
+	},
+	{
+		name: "NotExistsWithSync",
+		param: ExecveParam{
+			Args:     []string{"not_exists"},
+			Env:      []string{"PATH=/bin"},
+			SyncFunc: func(p int) error { return nil },
+		},
+		expected: runner.StatusRunnerError,
+	},
+	{
+		name: "SyncFuncFail",
+		param: ExecveParam{
+			Args: []string{"/bin/true"},
+			Env:  []string{"PATH=/bin"},
+			SyncFunc: func(pid int) error {
+				return err
+			},
+		},
+		expected: runner.StatusRunnerError,
+	},
+	{
+		name: "SyncFuncFailAfterExec",
+		param: ExecveParam{
+			Args: []string{"/bin/true"},
+			Env:  []string{"PATH=/bin"},
+			SyncFunc: func(pid int) error {
+				return err
+			},
+			SyncAfterExec: true,
+		},
+		expected: runner.StatusRunnerError,
+	},
 }
 
 type credgen struct{}
@@ -77,41 +135,31 @@ func TestContainerSetCred(t *testing.T) {
 	if os.Getpid() != 1 {
 		t.Skip("root required for this test")
 	}
-	m := getEnv(t, credgen{})
-	r := m.Execve(context.TODO(), ExecveParam{
-		Args: []string{"/bin/true"},
-		Env:  []string{"PATH=/bin"},
-	})
+	runTest(t, successParam, runner.StatusNormal, credgen{})
+}
+
+func runTest(t *testing.T, param ExecveParam, expected runner.Status, credGen CredGenerator) {
+	t.Parallel()
+	m := getEnv(t, credGen)
+	r := m.Execve(context.TODO(), param)
+	if r.Status != expected {
+		t.Fatal(r.Status, r.Error, r)
+	}
+	if err := m.Ping(); err != nil {
+		t.Fatal(err)
+	}
+	// can also success once more (no protocol mismatch)
+	r = m.Execve(context.TODO(), successParam)
 	if r.Status != runner.StatusNormal {
-		t.Fatal(r.Status, r.Error)
+		t.Fatal(r.Status, r.Error, r)
 	}
 }
 
-func TestContainerNotExists(t *testing.T) {
-	t.Parallel()
-	m := getEnv(t, nil)
-	r := m.Execve(context.TODO(), ExecveParam{
-		Args: []string{"not_exists"},
-		Env:  []string{"PATH=/bin"},
-	})
-	if r.Status != runner.StatusRunnerError {
-		t.Fatal(r.Status, r.Error)
-	}
-}
-
-func TestContainerSyncFuncFail(t *testing.T) {
-	t.Parallel()
-	m := getEnv(t, nil)
-	err := errors.New("test error")
-	r := m.Execve(context.TODO(), ExecveParam{
-		Args: []string{"/bin/true"},
-		Env:  []string{"PATH=/bin"},
-		SyncFunc: func(pid int) error {
-			return err
-		},
-	})
-	if r.Status != runner.StatusRunnerError {
-		t.Fatal(r.Status, r.Error)
+func TestCases(t *testing.T) {
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			runTest(t, c.param, c.expected, nil)
+		})
 	}
 }
 
