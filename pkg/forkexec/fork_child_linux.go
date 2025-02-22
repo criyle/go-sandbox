@@ -5,6 +5,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/criyle/go-sandbox/pkg/forkexec/vfork"
 	"github.com/criyle/go-sandbox/pkg/rlimit"
 	"golang.org/x/sys/unix"
 )
@@ -30,7 +31,7 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 
 	flag := r.CloneFlags & UnshareFlags
 	if r.SyncFunc == nil && !(r.StopBeforeSeccomp || (r.Seccomp != nil && r.Ptrace)) && flag&syscall.CLONE_NEWUSER != syscall.CLONE_NEWUSER {
-		// flag |= syscall.CLONE_VM | syscall.CLONE_VFORK
+		flag |= syscall.CLONE_VM | syscall.CLONE_VFORK
 	}
 
 	// use clone3 if cgroupFd specified
@@ -54,13 +55,13 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 
 	// UnshareFlags (new namespaces) is activated by clone syscall
 	if clone3 != nil {
-		r1, _, err1 = syscall.RawSyscall6(unix.SYS_CLONE3, uintptr(unsafe.Pointer(clone3)), unsafe.Sizeof(*clone3), 0, 0, 0, 0)
+		r1, err1 = vfork.RawVforkSyscall(unix.SYS_CLONE3, uintptr(unsafe.Pointer(clone3)), unsafe.Sizeof(*clone3), 0)
 	} else {
 		if runtime.GOARCH == "s390x" {
 			// On Linux/s390, the first two arguments of clone(2) are swapped.
-			r1, _, err1 = syscall.RawSyscall6(syscall.SYS_CLONE, 0, flag, 0, 0, 0, 0)
+			r1, err1 = vfork.RawVforkSyscall(syscall.SYS_CLONE, 0, flag, 0)
 		} else {
-			r1, _, err1 = syscall.RawSyscall6(syscall.SYS_CLONE, flag, 0, 0, 0, 0, 0)
+			r1, err1 = vfork.RawVforkSyscall(syscall.SYS_CLONE, flag, 0, 0)
 		}
 	}
 	if err1 != 0 || r1 != 0 {
