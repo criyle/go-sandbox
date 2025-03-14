@@ -432,13 +432,6 @@ func start() (*runner.Result, error) {
 			return nil, fmt.Errorf("cgroup cpu: %v", err)
 		} else {
 			rt.Time = time.Duration(cpu)
-			if rt.Status == runner.StatusTimeLimitExceeded || rt.Status == runner.StatusNormal {
-				if rt.Time > limit.TimeLimit {
-					rt.Status = runner.StatusTimeLimitExceeded
-				} else {
-					rt.Status = runner.StatusNormal
-				}
-			}
 		}
 		// max memory usage may not exist in cgroup v2
 		memory, err := cg.MemoryMaxUsage()
@@ -446,13 +439,6 @@ func start() (*runner.Result, error) {
 			return nil, fmt.Errorf("cgroup memory: %v", err)
 		} else if err == nil {
 			rt.Memory = runner.Size(memory)
-			if rt.Status == runner.StatusMemoryLimitExceeded || rt.Status == runner.StatusNormal {
-				if rt.Memory > limit.MemoryLimit {
-					rt.Status = runner.StatusMemoryLimitExceeded
-				} else {
-					rt.Status = runner.StatusNormal
-				}
-			}
 		}
 		procPeak, err := cg.ProcessPeak()
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -462,6 +448,20 @@ func start() (*runner.Result, error) {
 		}
 		debug("cgroup: cpu: ", cpu, " memory: ", memory, " procPeak: ", procPeak)
 		debug("cgroup:", rt)
+	}
+	if rt.Status == runner.StatusTimeLimitExceeded || rt.Status == runner.StatusNormal {
+		if rt.Time > limit.TimeLimit {
+			rt.Status = runner.StatusTimeLimitExceeded
+		} else {
+			rt.Status = runner.StatusNormal
+		}
+	}
+	if rt.Status == runner.StatusMemoryLimitExceeded || rt.Status == runner.StatusNormal {
+		if rt.Memory > limit.MemoryLimit {
+			rt.Status = runner.StatusMemoryLimitExceeded
+		} else {
+			rt.Status = runner.StatusNormal
+		}
 	}
 	return &rt, nil
 }
