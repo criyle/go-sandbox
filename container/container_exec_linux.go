@@ -124,6 +124,14 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 	if cmd.SyncAfter {
 		if err := syncPid(1); err != nil {
 			syscall.Kill(-1, syscall.SIGKILL)
+
+			c.waitPid <- pid
+			ret := <-c.waitPidResult
+			err := c.sendReply(convertReply(ret), unixsocket.Msg{})
+
+			c.waitAll <- struct{}{}
+			<-c.waitAllDone
+			return err
 		}
 	}
 	return c.handleExecveStarted(pid)
@@ -164,7 +172,7 @@ func (c *containerServer) handleExecveStarted(pid int) error {
 		}
 	}
 	<-c.waitAllDone
-	return c.sendReply(reply{}, unixsocket.Msg{})
+	return nil
 }
 
 func convertReply(ret waitPidResult) reply {

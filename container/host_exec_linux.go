@@ -45,7 +45,7 @@ type ExecveParam struct {
 	SyncAfterExec bool
 }
 
-// Execve runs process inside container. It accepts context cancelation as time limit exceeded.
+// Execve runs process inside container. It accepts context cancellation as time limit exceeded.
 func (c *container) Execve(ctx context.Context, param ExecveParam) runner.Result {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -122,13 +122,11 @@ func (c *container) waitForDone(ctx context.Context, sTime time.Time) runner.Res
 
 	case <-ctx.Done(): // cancel
 		c.sendCmd(cmd{Cmd: cmdKill}, unixsocket.Msg{}) // kill
-		reply, _, _ := c.recvReply()
-		_, _, err := c.recvReply()
+		reply, _, err := c.recvReply()
 		return convertReplyResult(reply, sTime, mTime, err)
 
 	case ret := <-c.recvCh: // result
-		c.sendCmd(cmd{Cmd: cmdKill}, unixsocket.Msg{}) // kill
-		_, _, err := c.recvReply()
+		err := c.sendCmd(cmd{Cmd: cmdKill}, unixsocket.Msg{}) // kill
 		return convertReplyResult(ret.Reply, sTime, mTime, err)
 	}
 }
