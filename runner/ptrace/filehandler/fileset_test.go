@@ -1,6 +1,9 @@
 package filehandler
 
-import "testing"
+import (
+	"maps"
+	"testing"
+)
 
 // Unit test for IsInSetSmart
 func TestFileSet_IsInSetSmart(t *testing.T) {
@@ -85,5 +88,68 @@ func TestFileSet_Add(t *testing.T) {
 	fs.Add("relative/path")
 	if !fs.Set["relative/path"] {
 		t.Errorf("Add(\"relative/path\") failed; expected path to be in the set")
+	}
+}
+
+// Unit test for AddRange method
+func TestFileSet_AddRange(t *testing.T) {
+	// Create a new FileSet
+	fs := NewFileSet()
+
+	// Test cases
+	tests := []struct {
+		name       string
+		paths      []string
+		workPath   string
+		expected   map[string]bool
+		systemRoot bool
+	}{
+		{
+			name:     "Add absolute paths",
+			paths:    []string{"/path/to/file", "/another/path"},
+			workPath: "/work/dir",
+			expected: map[string]bool{
+				"/path/to/file": true,
+				"/another/path": true,
+			},
+			systemRoot: false,
+		},
+		{
+			name:       "Add root directory",
+			paths:      []string{"/"},
+			workPath:   "/work/dir",
+			expected:   map[string]bool{},
+			systemRoot: true,
+		},
+		{
+			name:     "Add relative paths",
+			paths:    []string{"relative/path", "another/relative/path"},
+			workPath: "/work/dir",
+			expected: map[string]bool{
+				"/work/dir/relative/path/":         true,
+				"/work/dir/another/relative/path/": true,
+			},
+			systemRoot: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Reset the FileSet
+			fs = NewFileSet()
+
+			// Call AddRange
+			fs.AddRange(test.paths, test.workPath)
+
+			// Check SystemRoot
+			if fs.SystemRoot != test.systemRoot {
+				t.Errorf("SystemRoot = %v; expected %v", fs.SystemRoot, test.systemRoot)
+			}
+
+			// Check the Set
+			if !maps.Equal(fs.Set, test.expected) {
+				t.Errorf("Set = %v; expected %v", fs.Set, test.expected)
+			}
+		})
 	}
 }
