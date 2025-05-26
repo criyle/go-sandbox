@@ -2,7 +2,7 @@ package container
 
 import (
 	"os"
-	"path"
+	"path/filepath"
 	"syscall"
 )
 
@@ -54,10 +54,10 @@ func removeContents(dir string) error {
 	}
 
 	for _, name := range names {
-		err = os.RemoveAll(path.Join(dir, name))
+		err1 := os.RemoveAll(filepath.Join(dir, name))
 		if err != nil {
-			return err
+			err = err1
 		}
 	}
-	return nil
+	return err
 }

@@ -9,7 +9,7 @@ import (
 	"runtime"
 )
 
-var errNotImplemented = fmt.Errorf("memfd: unsupported on platform %s", runtime.GOOS)
+var errNotImplemented = fmt.Errorf("memfd: unsupported on platform: %s", runtime.GOOS)
 
 func New(name string) (*os.File, error) {
 	return nil, errNotImplemented

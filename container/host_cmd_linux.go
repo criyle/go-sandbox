@@ -24,7 +24,7 @@ func (c *container) Ping() error {
 		Cmd: cmdPing,
 	}
 	if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
-		return fmt.Errorf("ping: %v", err)
+		return fmt.Errorf("ping: %w", err)
 	}
 	// receive no error
 	return c.recvAckReply("ping")
@@ -40,7 +40,7 @@ func (c *container) conf(conf *containerConfig) error {
 		ConfCmd: &confCmd{Conf: *conf},
 	}
 	if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
-		return fmt.Errorf("conf: %v", err)
+		return fmt.Errorf("conf: %w", err)
 	}
 	return c.recvAckReply("conf")
 }
@@ -59,18 +59,18 @@ func (c *container) Open(p []OpenCmd) ([]*os.File, error) {
 		OpenCmd: p,
 	}
 	if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
-		return nil, fmt.Errorf("open: %v", err)
+		return nil, fmt.Errorf("open: %w", err)
 	}
 	reply, msg, err := c.recvReply()
 	if err != nil {
-		return nil, fmt.Errorf("open: %v", err)
+		return nil, fmt.Errorf("open: %w", err)
 	}
 	if reply.Error != nil {
 		return nil, fmt.Errorf("open: %v", reply.Error)
 	}
 	if len(msg.Fds) != len(p) {
 		closeFds(msg.Fds)
-		return nil, fmt.Errorf("open: unexpected number of fd %v / %v", len(msg.Fds), len(p))
+		return nil, fmt.Errorf("open: unexpected number of fds: got %d, want %d", len(msg.Fds), len(p))
 	}
 
 	ret := make([]*os.File, 0, len(p))
@@ -79,7 +79,7 @@ func (c *container) Open(p []OpenCmd) ([]*os.File, error) {
 		f := os.NewFile(uintptr(fd), p[i].Path)
 		if f == nil {
 			closeFds(msg.Fds)
-			return nil, fmt.Errorf("open: failed NewFile %v", fd)
+			return nil, fmt.Errorf("open: failed to create file for fd: %d", fd)
 		}
 		ret = append(ret, f)
 	}
@@ -96,7 +96,7 @@ func (c *container) Delete(p string) error {
 		DeleteCmd: &deleteCmd{Path: p},
 	}
 	if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
-		return fmt.Errorf("delete: %v", err)
+		return fmt.Errorf("delete: %w", err)
 	}
 	return c.recvAckReply("delete")
 }
@@ -110,7 +110,7 @@ func (c *container) Reset() error {
 		Cmd: cmdReset,
 	}
 	if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
-		return fmt.Errorf("reset: %v", err)
+		return fmt.Errorf("reset: %w", err)
 	}
 	return c.recvAckReply("reset")
 }

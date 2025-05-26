@@ -237,11 +237,11 @@ func start() (*runner.Result, error) {
 	if memfile {
 		fin, err := os.Open(args[0])
 		if err != nil {
-			return nil, fmt.Errorf("failed to open args[0]: %v", err)
+			return nil, fmt.Errorf("failed to open args[0]: %w", err)
 		}
 		execf, err := memfd.DupToMemfd("run_program", fin)
 		if err != nil {
-			return nil, fmt.Errorf("dup to memfd failed: %v", err)
+			return nil, fmt.Errorf("dup to memfd failed: %w", err)
 		}
 		fin.Close()
 		defer execf.Close()
@@ -252,7 +252,7 @@ func start() (*runner.Result, error) {
 	// open input / output / err files
 	files, err := prepareFiles(inputFileName, outputFileName, errorFileName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to prepare files: %v", err)
+		return nil, fmt.Errorf("failed to prepare files: %w", err)
 	}
 	defer closeFiles(files)
 
@@ -295,7 +295,7 @@ func start() (*runner.Result, error) {
 	if !unsafe || runt != "container" {
 		filter, err = builder.Build()
 		if err != nil {
-			return nil, fmt.Errorf("failed to create seccomp filter %v", err)
+			return nil, fmt.Errorf("failed to create seccomp filter: %w", err)
 		}
 	}
 
@@ -329,12 +329,12 @@ func start() (*runner.Result, error) {
 
 		m, err := b.Build()
 		if err != nil {
-			return nil, fmt.Errorf("failed to new container: %v", err)
+			return nil, fmt.Errorf("failed to new container: %w", err)
 		}
 		defer m.Destroy()
 		err = m.Ping()
 		if err != nil {
-			return nil, fmt.Errorf("failed to ping container: %v", err)
+			return nil, fmt.Errorf("failed to ping container: %w", err)
 		}
 		if unsafe {
 			filter = nil

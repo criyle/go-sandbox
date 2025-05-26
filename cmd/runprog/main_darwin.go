@@ -117,7 +117,7 @@ func start() (*runner.Result, error) {
 	if profilePath != "" {
 		c, err := os.ReadFile(profilePath)
 		if err != nil {
-			return nil, fmt.Errorf("profile: %v", err)
+			return nil, fmt.Errorf("profile: %w", err)
 		}
 		profile = string(c)
 	}

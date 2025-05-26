@@ -88,14 +88,14 @@ func Init() (err error) {
 
 	// ensure there's no fd leak to child process (e.g. VSCode leaks ptmx fd)
 	if err := closeOnExecAllFds(); err != nil {
-		return fmt.Errorf("container_init: failed to close_on_exec all fd %v", err)
+		return fmt.Errorf("container_init: failed to close on exec all fds: %w", err)
 	}
 
 	// new_container environment shared the socket at fd 3 (marked close_exec)
 	const defaultFd = 3
 	soc, err := unixsocket.NewSocket(defaultFd)
 	if err != nil {
-		return fmt.Errorf("container_init: failed to new socket %v", err)
+		return fmt.Errorf("container_init: failed to create new socket: %w", err)
 	}
 
 	// serve forever
@@ -197,10 +197,10 @@ func (c *containerServer) serve() error {
 	for {
 		cmd, msg, err := c.recvCmd()
 		if err != nil {
-			return fmt.Errorf("serve: recvCmd %v", err)
+			return fmt.Errorf("serve: recvCmd: %w", err)
 		}
 		if err := c.handleCmd(cmd, msg); err != nil {
-			return fmt.Errorf("serve: failed to execute cmd %v", err)
+			return fmt.Errorf("serve: failed to execute cmd: %w", err)
 		}
 	}
 }
@@ -255,53 +255,53 @@ func initFileSystem(c containerConfig) error {
 	// mount tmpfs as root
 	const tmpfs = "tmpfs"
 	if err := syscall.Mount(tmpfs, c.ContainerRoot, tmpfs, 0, ""); err != nil {
-		return fmt.Errorf("init_fs: mount / %v", err)
+		return fmt.Errorf("init_fs: mount /: %w", err)
 	}
 	// change dir to container root
 	if err := syscall.Chdir(c.ContainerRoot); err != nil {
-		return fmt.Errorf("init_fs: chdir %v", err)
+		return fmt.Errorf("init_fs: chdir: %w", err)
 	}
 	// performing mounts
 	for _, m := range c.Mounts {
 		if err := m.Mount(); err != nil {
-			return fmt.Errorf("init_fs: mount %v %v", m, err)
+			return fmt.Errorf("init_fs: mount %v: %w", m, err)
 		}
 	}
 	// pivot root
 	const oldRoot = "old_root"
 	if err := os.Mkdir(oldRoot, 0755); err != nil {
-		return fmt.Errorf("init_fs: mkdir(old_root) %v", err)
+		return fmt.Errorf("init_fs: mkdir old_root: %w", err)
 	}
 	if err := syscall.PivotRoot(c.ContainerRoot, oldRoot); err != nil {
-		return fmt.Errorf("init_fs: pivot_root(%s, %s) %v", c.ContainerRoot, oldRoot, err)
+		return fmt.Errorf("init_fs: pivot_root(%s, %s): %w", c.ContainerRoot, oldRoot, err)
 	}
 	if err := syscall.Unmount(oldRoot, syscall.MNT_DETACH); err != nil {
-		return fmt.Errorf("init_fs: unmount(old_root) %v", err)
+		return fmt.Errorf("init_fs: unmount old_root: %w", err)
 	}
 	if err := os.Remove(oldRoot); err != nil {
-		return fmt.Errorf("init_fs: unlink(old_root) %v", err)
+		return fmt.Errorf("init_fs: unlink old_root: %w", err)
 	}
 	// create symlinks
 	for _, l := range c.SymbolicLinks {
 		// ensure dir exists
 		dir := filepath.Dir(l.LinkPath)
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("init_fs: mkdir_all(%s) %v", dir, err)
+			return fmt.Errorf("init_fs: mkdir_all(%s): %w", dir, err)
 		}
 		if err := os.Symlink(l.Target, l.LinkPath); err != nil {
-			return fmt.Errorf("init_fs: symlink %v", err)
+			return fmt.Errorf("init_fs: symlink: %w", err)
 		}
 	}
 	// mask paths
 	for _, p := range c.MaskPaths {
 		if err := maskPath(p); err != nil {
-			return fmt.Errorf("init_fs: mask path %v", err)
+			return fmt.Errorf("init_fs: mask path: %w", err)
 		}
 	}
 	// readonly root
 	const remountFlag = syscall.MS_BIND | syscall.MS_REMOUNT | syscall.MS_RDONLY | syscall.MS_NOATIME | syscall.MS_NOSUID
 	if err := syscall.Mount(tmpfs, "/", tmpfs, remountFlag, ""); err != nil {
-		return fmt.Errorf("init_fs: readonly remount / %v", err)
+		return fmt.Errorf("init_fs: readonly remount /: %w", err)
 	}
 	return nil
 }
@@ -368,7 +368,7 @@ func maskPath(path string) error {
 			// otherwise, mount tmpfs to mask it
 			return syscall.Mount("tmpfs", path, "tmpfs", syscall.MS_RDONLY, "")
 		}
-		return err
+		return fmt.Errorf("mask path: %w", err)
 	}
 	return nil
 }

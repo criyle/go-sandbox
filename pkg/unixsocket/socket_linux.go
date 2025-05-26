@@ -45,19 +45,19 @@ func NewSocket(fd int) (*Socket, error) {
 
 	file := os.NewFile(uintptr(fd), "unix-socket")
 	if file == nil {
-		return nil, fmt.Errorf("NewSocket: %d is not a valid fd", fd)
+		return nil, fmt.Errorf("new socket: %d is not a valid fd", fd)
 	}
 	defer file.Close()
 
 	conn, err := net.FileConn(file)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new socket: fileconn: %w", err)
 	}
 
 	unixConn, ok := conn.(*net.UnixConn)
 	if !ok {
 		conn.Close()
-		return nil, fmt.Errorf("NewSocket: %d is not a valid unix socket connection", fd)
+		return nil, fmt.Errorf("new socket: %d is not a valid unix socket connection", fd)
 	}
 	return newSocket(unixConn), nil
 }
@@ -66,21 +66,21 @@ func NewSocket(fd int) (*Socket, error) {
 func NewSocketPair() (*Socket, *Socket, error) {
 	fd, err := syscall.Socketpair(syscall.AF_LOCAL, syscall.SOCK_SEQPACKET|syscall.SOCK_CLOEXEC, 0)
 	if err != nil {
-		return nil, nil, fmt.Errorf("NewSocketPair: failed to call socketpair %v", err)
+		return nil, nil, fmt.Errorf("new socket pair: socketpair: %w", err)
 	}
 
 	ins, err := NewSocket(fd[0])
 	if err != nil {
 		syscall.Close(fd[0])
 		syscall.Close(fd[1])
-		return nil, nil, fmt.Errorf("NewSocketPair: failed to call NewSocket on sender %v", err)
+		return nil, nil, fmt.Errorf("new socket pair: sender: %w", err)
 	}
 
 	outs, err := NewSocket(fd[1])
 	if err != nil {
 		ins.Close()
 		syscall.Close(fd[1])
-		return nil, nil, fmt.Errorf("NewSocketPair: failed to call NewSocket receiver %v", err)
+		return nil, nil, fmt.Errorf("new socket pair: receiver: %w", err)
 	}
 
 	return ins, outs, nil

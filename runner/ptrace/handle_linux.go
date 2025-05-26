@@ -3,7 +3,7 @@ package ptrace
 import (
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"syscall"
 
 	"github.com/criyle/go-sandbox/pkg/seccomp/libseccomp"
@@ -156,8 +156,8 @@ func getProcCwd(pid int) string {
 // built-in function did the dirty works to resolve relative paths
 func absPath(pid int, p string) string {
 	// if relative path
-	if !path.IsAbs(p) {
-		return path.Join(getProcCwd(pid), p)
+	if !filepath.IsAbs(p) {
+		return filepath.Join(getProcCwd(pid), p)
 	}
-	return path.Clean(p)
+	return filepath.Clean(p)
 }

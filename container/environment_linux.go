@@ -127,7 +127,7 @@ func (b *Builder) Build() (Environment, error) {
 	// avoid non cinit enabled executable running as container init process
 	if err = c.Ping(); err != nil {
 		c.Destroy()
-		return nil, fmt.Errorf("container: container init not responding to ping %v", err)
+		return nil, fmt.Errorf("container: init not responding to ping: %w", err)
 	}
 
 	// container mount points
@@ -154,13 +154,13 @@ func (b *Builder) Build() (Environment, error) {
 	root := b.Root
 	if b.TmpRoot != "" {
 		if root, err = os.MkdirTemp(b.Root, b.TmpRoot); err != nil {
-			return nil, fmt.Errorf("container: failed to make tmp container root at %s %v", b.Root, err)
+			return nil, fmt.Errorf("container: failed to make tmp container root at %s: %w", b.Root, err)
 		}
 		defer os.Remove(root)
 	}
 	if root == "" {
 		if root, err = os.Getwd(); err != nil {
-			return nil, fmt.Errorf("container: failed to get work directory %v", err)
+			return nil, fmt.Errorf("container: failed to get work directory: %w", err)
 		}
 	}
 	workDir := containerWD
@@ -206,14 +206,14 @@ func (b *Builder) startContainer() (*container, error) {
 	// prepare host <-> container unix socket
 	ins, outs, err := newPassCredSocketPair()
 	if err != nil {
-		return nil, fmt.Errorf("container: failed to create socket: %v", err)
+		return nil, fmt.Errorf("container: failed to create socket: %w", err)
 	}
 	defer outs.Close()
 
 	outf, err := outs.File()
 	if err != nil {
 		ins.Close()
-		return nil, fmt.Errorf("container: failed to dup container socket fd %v", err)
+		return nil, fmt.Errorf("container: failed to dup container socket fd: %w", err)
 	}
 	defer outf.Close()
 
@@ -258,7 +258,7 @@ func (b *Builder) startContainer() (*container, error) {
 	}
 	if err = r.Start(); err != nil {
 		ins.Close()
-		return nil, fmt.Errorf("container: failed to start container %v", err)
+		return nil, fmt.Errorf("container: failed to start container: %w", err)
 	}
 	c := &container{
 		process: r.Process,
@@ -386,10 +386,10 @@ func (b *Builder) getIDMapping(cred *syscall.Credential) ([]syscall.SysProcIDMap
 func (c *container) recvAckReply(name string) error {
 	reply, _, err := c.recvReply()
 	if err != nil {
-		return fmt.Errorf("%v: recvAck %v", name, err)
+		return fmt.Errorf("%s: recv ack: %w", name, err)
 	}
 	if reply.Error != nil {
-		return fmt.Errorf("%v: container error %v", name, reply.Error)
+		return fmt.Errorf("%s: container error: %v", name, reply.Error)
 	}
 	return nil
 }

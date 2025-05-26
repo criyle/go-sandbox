@@ -47,6 +47,9 @@ func (c *containerServer) handleOpen(open []OpenCmd) error {
 	for _, o := range open {
 		outFile, err := os.OpenFile(o.Path, o.Flag, o.Perm)
 		if err != nil {
+			for _, f := range fileToClose {
+				f.Close()
+			}
 			return c.sendErrorReply("open: %v", err)
 		}
 		fileToClose = append(fileToClose, outFile)
@@ -85,6 +88,7 @@ func readDotEnv() ([]string, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
 		}
+		return nil, fmt.Errorf("dotenv: open /.env: %w", err)
 	}
 	defer f.Close()
 
@@ -96,7 +100,7 @@ func readDotEnv() ([]string, error) {
 			continue
 		}
 		if !strings.Contains(line, "=") {
-			return nil, fmt.Errorf("dotenv: invalid line %s", line)
+			return nil, fmt.Errorf("dotenv: invalid line: %s", line)
 		}
 		ret = append(ret, line)
 	}

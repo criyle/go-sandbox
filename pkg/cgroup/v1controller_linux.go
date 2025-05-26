@@ -2,7 +2,7 @@ package cgroup
 
 import (
 	"errors"
-	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -50,7 +50,7 @@ func (c *v1controller) WriteFile(name string, content []byte) error {
 	if c == nil || c.path == "" {
 		return ErrNotInitialized
 	}
-	p := path.Join(c.path, name)
+	p := filepath.Join(c.path, name)
 	return writeFile(p, content, filePerm)
 }
 
@@ -60,10 +60,10 @@ func (c *v1controller) ReadFile(name string) ([]byte, error) {
 	if c == nil || c.path == "" {
 		return nil, nil
 	}
-	p := path.Join(c.path, name)
+	p := filepath.Join(c.path, name)
 	return readFile(p)
 }
 
 func (c *v1controller) AddProc(pids ...int) error {
-	return AddProcesses(path.Join(c.path, cgroupProcs), pids)
+	return AddProcesses(filepath.Join(c.path, cgroupProcs), pids)
 }

@@ -43,27 +43,27 @@ func newSocket(s *unixsocket.Socket) *socket {
 	return &soc
 }
 
-func (s *socket) RecvMsg(e interface{}) (msg unixsocket.Msg, err error) {
+func (s *socket) RecvMsg(e any) (msg unixsocket.Msg, err error) {
 	n, msg, err := s.Socket.RecvMsg(s.buff)
 	if err != nil {
-		return msg, fmt.Errorf("RecvMsg: %v", err)
+		return msg, fmt.Errorf("recv msg: %w", err)
 	}
 	s.recvBuff.Rotate(bytes.NewBuffer(s.buff[:n]))
 
 	if err := s.decoder.Decode(e); err != nil {
-		return msg, fmt.Errorf("RecvMsg: failed to decode %v", err)
+		return msg, fmt.Errorf("recv msg: decode: %w", err)
 	}
 	return msg, nil
 }
 
-func (s *socket) SendMsg(e interface{}, msg unixsocket.Msg) error {
+func (s *socket) SendMsg(e any, msg unixsocket.Msg) error {
 	s.sendBuff.Reset()
 	if err := s.encoder.Encode(e); err != nil {
-		return fmt.Errorf("SendMsg: failed to encode %v", err)
+		return fmt.Errorf("send msg: encode: %w", err)
 	}
 
 	if err := s.Socket.SendMsg(s.sendBuff.Bytes(), msg); err != nil {
-		return fmt.Errorf("SendMsg: failed to SendMsg %v", err)
+		return fmt.Errorf("send msg: %w", err)
 	}
 	return nil
 }

@@ -66,14 +66,14 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 			},
 		}
 		if err := c.sendReply(reply{}, msg); err != nil {
-			return fmt.Errorf("syncFunc: sendReply %v", err)
+			return fmt.Errorf("sync func: send reply: %w", err)
 		}
 		cmd, _, err := c.recvCmd()
 		if err != nil {
-			return fmt.Errorf("syncFunc: recvCmd %v", err)
+			return fmt.Errorf("sync func: recv cmd: %w", err)
 		}
 		if cmd.Cmd == cmdKill {
-			return fmt.Errorf("syncFunc: received kill")
+			return fmt.Errorf("sync func: received kill")
 		}
 		return nil
 	}
@@ -179,7 +179,7 @@ func convertReply(ret waitPidResult) reply {
 	if ret.Err != nil {
 		return reply{
 			Error: &errorReply{
-				Msg: fmt.Sprintf("execve: wait4 %v", ret.Err),
+				Msg: fmt.Sprintf("execve: wait4: %v", ret.Err),
 			},
 		}
 	}
@@ -229,7 +229,7 @@ func convertReply(ret waitPidResult) reply {
 	default:
 		return reply{
 			Error: &errorReply{
-				Msg: fmt.Sprintf("execve: unknown status %v", waitStatus),
+				Msg: fmt.Sprintf("execve: unknown status: %v", waitStatus),
 			},
 		}
 	}

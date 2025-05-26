@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 )
@@ -65,13 +64,13 @@ func (c *V1) Processes() ([]int, error) {
 	if len(c.all) == 0 {
 		return nil, os.ErrInvalid
 	}
-	return ReadProcesses(path.Join(c.all[0].path, cgroupProcs))
+	return ReadProcesses(filepath.Join(c.all[0].path, cgroupProcs))
 }
 
 // New creates a sub-cgroup based on the existing one
 func (c *V1) New(name string) (cg Cgroup, err error) {
 	v1 := &V1{
-		prefix: path.Join(c.prefix, name),
+		prefix: filepath.Join(c.prefix, name),
 	}
 	defer func() {
 		if err != nil {
@@ -93,7 +92,7 @@ func (c *V1) New(name string) (cg Cgroup, err error) {
 		if v.now == nil {
 			continue
 		}
-		p := path.Join(v.now.path, name)
+		p := filepath.Join(v.now.path, name)
 		*v.new = &v1controller{path: p}
 		err = EnsureDirExists(p)
 		if os.IsExist(err) {

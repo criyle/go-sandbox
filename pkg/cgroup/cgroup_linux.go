@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"strings"
 )
 
@@ -136,7 +136,7 @@ func newV1(prefix string, ct *Controllers) (cg Cgroup, err error) {
 
 func newV2(prefix string, ct *Controllers) (cg Cgroup, err error) {
 	v2 := &V2{
-		path:    path.Join(basePath, prefix),
+		path:    filepath.Join(basePath, prefix),
 		control: ct,
 	}
 	if _, err := os.Stat(v2.path); err == nil {
@@ -159,8 +159,8 @@ func newV2(prefix string, ct *Controllers) (cg Cgroup, err error) {
 		parent := current
 		current = current + "/" + e
 		// try mkdir if not exists
-		if _, err := os.Stat(path.Join(basePath, current)); os.IsNotExist(err) {
-			if err := os.Mkdir(path.Join(basePath, current), dirPerm); err != nil {
+		if _, err := os.Stat(filepath.Join(basePath, current)); os.IsNotExist(err) {
+			if err := os.Mkdir(filepath.Join(basePath, current), dirPerm); err != nil {
 				return nil, err
 			}
 		} else if err != nil {
@@ -175,7 +175,7 @@ func newV2(prefix string, ct *Controllers) (cg Cgroup, err error) {
 		if ect.Contains(ct) {
 			continue
 		}
-		if err := writeFile(path.Join(basePath, parent, cgroupSubtreeControl), controlMsg, filePerm); err != nil {
+		if err := writeFile(filepath.Join(basePath, parent, cgroupSubtreeControl), controlMsg, filePerm); err != nil {
 			return nil, err
 		}
 	}
@@ -197,7 +197,7 @@ func openExistingV1(prefix string, ct *Controllers) (cg Cgroup, err error) {
 	}
 
 	if err = loopV1Controllers(ct, v1, func(name string, cg **v1controller) error {
-		p := path.Join(basePath, name, prefix)
+		p := filepath.Join(basePath, name, prefix)
 		*cg = newV1Controller(p)
 		// os.IsNotExist
 		if _, err := os.Stat(p); err != nil {
@@ -224,10 +224,10 @@ func openExistingV2(prefix string, ct *Controllers) (cg Cgroup, err error) {
 		return nil, err
 	}
 	if !ect.Contains(ct) {
-		return nil, fmt.Errorf("openCgroupV2: requesting %v controllers but %v found", ct, ect)
+		return nil, fmt.Errorf("open cgroup v2: requesting %v controllers but %v found", ct, ect)
 	}
 	return &V2{
-		path:     path.Join(basePath, prefix),
+		path:     filepath.Join(basePath, prefix),
 		control:  ect,
 		existing: true,
 	}, nil

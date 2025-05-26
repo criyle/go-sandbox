@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -178,7 +178,7 @@ func GetAvailableControllerV2() (*Controllers, error) {
 }
 
 func getAvailableControllerV2(prefix string) (*Controllers, error) {
-	return getAvailableControllerV2path(path.Join(basePath, prefix, cgroupControllers))
+	return getAvailableControllerV2path(filepath.Join(basePath, prefix, cgroupControllers))
 }
 
 func getAvailableControllerV2path(p string) (*Controllers, error) {

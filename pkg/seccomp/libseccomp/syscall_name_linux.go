@@ -15,7 +15,7 @@ func ToSyscallName(sysno uint) (string, error) {
 	}
 	n, ok := info.SyscallNumbers[int(sysno)]
 	if !ok {
-		return "", fmt.Errorf("syscall no %d does not exits", sysno)
+		return "", fmt.Errorf("syscall number does not exist: %d", sysno)
 	}
 	return n, nil
 }

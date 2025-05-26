@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"math/rand/v2"
 	"os"
-	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -24,7 +24,7 @@ func EnsureDirExists(path string) error {
 
 // CreateV1ControllerPath create path for controller with given group, prefix
 func CreateV1ControllerPath(controller, prefix string) (string, error) {
-	p := path.Join(basePath, controller, prefix)
+	p := filepath.Join(basePath, controller, prefix)
 	return p, EnsureDirExists(p)
 }
 
@@ -37,7 +37,7 @@ func EnableV2Nesting() error {
 		return nil
 	}
 
-	p, err := readFile(path.Join(basePath, cgroupProcs))
+	p, err := readFile(filepath.Join(basePath, cgroupProcs))
 	if err != nil {
 		return err
 	}
@@ -47,11 +47,11 @@ func EnableV2Nesting() error {
 	}
 
 	// mkdir init
-	if err := os.Mkdir(path.Join(basePath, initPath), dirPerm); err != nil && !errors.Is(err, os.ErrExist) {
+	if err := os.Mkdir(filepath.Join(basePath, initPath), dirPerm); err != nil && !errors.Is(err, os.ErrExist) {
 		return err
 	}
 	// move all process into init cgroup
-	procFile, err := os.OpenFile(path.Join(basePath, initPath, cgroupProcs), os.O_RDWR, filePerm)
+	procFile, err := os.OpenFile(filepath.Join(basePath, initPath, cgroupProcs), os.O_RDWR, filePerm)
 	if err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func nextRandom() string {
 func randomBuild(pattern string, build func(string) (Cgroup, error)) (Cgroup, error) {
 	prefix, suffix, err := prefixAndSuffix(pattern)
 	if err != nil {
-		return nil, fmt.Errorf("cgroup.builder: random %v", err)
+		return nil, fmt.Errorf("cgroup.builder: random %w", err)
 	}
 
 	try := 0
@@ -181,6 +181,6 @@ func randomBuild(pattern string, build func(string) (Cgroup, error)) (Cgroup, er
 			}
 			return nil, fmt.Errorf("cgroup.builder: tried 10000 times but failed")
 		}
-		return nil, fmt.Errorf("cgroup.builder: random %v", err)
+		return nil, fmt.Errorf("cgroup.builder: random %w", err)
 	}
 }

@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"os"
-	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,18 +26,18 @@ func (c *V2) Open() (*os.File, error) {
 }
 
 func (c *V2) String() string {
-	ct, _ := getAvailableControllerV2path(path.Join(c.path, cgroupControllers))
+	ct, _ := getAvailableControllerV2path(filepath.Join(c.path, cgroupControllers))
 	return "v2(" + c.path + ")" + ct.String()
 }
 
 // AddProc adds processes into the cgroup
 func (c *V2) AddProc(pids ...int) error {
-	return AddProcesses(path.Join(c.path, cgroupProcs), pids)
+	return AddProcesses(filepath.Join(c.path, cgroupProcs), pids)
 }
 
 // Processes returns all processes within the cgroup
 func (c *V2) Processes() ([]int, error) {
-	return ReadProcesses(path.Join(c.path, cgroupProcs))
+	return ReadProcesses(filepath.Join(c.path, cgroupProcs))
 }
 
 // New creates a sub-cgroup based on the existing one
@@ -46,7 +46,7 @@ func (c *V2) New(name string) (Cgroup, error) {
 		return nil, err
 	}
 	v2 := &V2{
-		path:    path.Join(c.path, name),
+		path:    filepath.Join(c.path, name),
 		control: c.control,
 	}
 	if err := os.Mkdir(v2.path, dirPerm); err != nil {
@@ -61,7 +61,7 @@ func (c *V2) New(name string) (Cgroup, error) {
 // Nest creates a sub-cgroup, moves current process into that cgroup
 func (c *V2) Nest(name string) (Cgroup, error) {
 	v2 := &V2{
-		path:    path.Join(c.path, name),
+		path:    filepath.Join(c.path, name),
 		control: c.control,
 	}
 	if err := os.Mkdir(v2.path, dirPerm); err != nil {
@@ -85,12 +85,12 @@ func (c *V2) Nest(name string) (Cgroup, error) {
 
 func (c *V2) enableSubtreeControl() error {
 	c.subtreeOnce.Do(func() {
-		ct, err := getAvailableControllerV2path(path.Join(c.path, cgroupControllers))
+		ct, err := getAvailableControllerV2path(filepath.Join(c.path, cgroupControllers))
 		if err != nil {
 			c.subtreeErr = err
 			return
 		}
-		ect, err := getAvailableControllerV2path(path.Join(c.path, cgroupSubtreeControl))
+		ect, err := getAvailableControllerV2path(filepath.Join(c.path, cgroupSubtreeControl))
 		if err != nil {
 			c.subtreeErr = err
 			return
@@ -100,7 +100,7 @@ func (c *V2) enableSubtreeControl() error {
 		}
 		s := ct.Names()
 		controlMsg := []byte("+" + strings.Join(s, " +"))
-		c.subtreeErr = writeFile(path.Join(c.path, cgroupSubtreeControl), controlMsg, filePerm)
+		c.subtreeErr = writeFile(filepath.Join(c.path, cgroupSubtreeControl), controlMsg, filePerm)
 	})
 	return c.subtreeErr
 }
@@ -221,13 +221,13 @@ func (c *V2) ReadUint(filename string) (uint64, error) {
 // WriteFile writes cgroup file and handles potential EINTR error while writes to
 // the slow device (cgroup)
 func (c *V2) WriteFile(name string, content []byte) error {
-	p := path.Join(c.path, name)
+	p := filepath.Join(c.path, name)
 	return writeFile(p, content, filePerm)
 }
 
 // ReadFile reads cgroup file and handles potential EINTR error while read to
 // the slow device (cgroup)
 func (c *V2) ReadFile(name string) ([]byte, error) {
-	p := path.Join(c.path, name)
+	p := filepath.Join(c.path, name)
 	return readFile(p)
 }
