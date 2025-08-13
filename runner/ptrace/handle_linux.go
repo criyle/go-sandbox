@@ -66,11 +66,12 @@ func (h *tracerHandler) Handle(ctx *ptracer.Context) ptracer.TraceAction {
 		return ptracer.TraceKill
 	}
 
+	// not checking dirfd for now (maybe unsafe)
 	action := ptracer.TraceKill
 	switch syscallName {
 	case "open":
 		action = h.checkOpen(ctx, ctx.Arg0(), ctx.Arg1())
-	case "openat":
+	case "openat", "openat2":
 		action = h.checkOpen(ctx, ctx.Arg1(), ctx.Arg2())
 
 	case "readlink":
@@ -85,13 +86,15 @@ func (h *tracerHandler) Handle(ctx *ptracer.Context) ptracer.TraceAction {
 
 	case "access":
 		action = h.checkStat(ctx, ctx.Arg0())
-	case "faccessat", "newfstatat":
+	case "faccessat", "faccessat2":
 		action = h.checkStat(ctx, ctx.Arg1())
 
 	case "stat", "stat64":
 		action = h.checkStat(ctx, ctx.Arg0())
 	case "lstat", "lstat64":
 		action = h.checkStat(ctx, ctx.Arg0())
+	case "statx", "fstatat", "fstatat64", "newfstatat":
+		action = h.checkStat(ctx, ctx.Arg1())
 
 	case "execve":
 		action = h.checkRead(ctx, ctx.Arg0())

@@ -32,7 +32,6 @@ var (
 		"fstat",
 		"lseek",
 		"dup",
-		"dup2",
 		"dup3",
 		"ioctl",
 		"fcntl",
@@ -65,13 +64,10 @@ var (
 		"exit_group",
 
 		// others
-		"arch_prctl",
-
 		"gettimeofday",
 		"getrlimit",
 		"getrusage",
 		"times",
-		"time",
 		"clock_gettime",
 
 		"restart_syscall",
@@ -84,21 +80,15 @@ var (
 		"execveat",
 
 		// file open
-		"open",
 		"openat",
 
 		// file delete
-		"unlink",
 		"unlinkat",
 
 		// soft link
-		"readlink",
 		"readlinkat",
 
 		// permission check
-		"lstat",
-		"stat",
-		"access",
 		"faccessat",
 	}
 

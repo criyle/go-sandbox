@@ -8,7 +8,19 @@ var (
 		"/usr/lib/x86_64-linux-gnu/",
 	}
 
-	archSyscallAllows = []string{}
+	archSyscallAllows = []string{
+		"dup2",
+		"time",
+		"arch_prctl",
+	}
 
-	archSyscallTraces = []string{}
+	archSyscallTraces = []string{
+		"open",
+		"unlink",
+		"readlink",
+		"lstat",
+		"stat",
+		"access",
+		"newfstatat",
+	}
 )

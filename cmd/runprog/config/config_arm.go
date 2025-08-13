@@ -17,10 +17,19 @@ var (
 		"uname",
 		"set_tls",
 		"arm_fadvise64_64",
+		"dup2",
 	}
 
 	archSyscallTraces = []string{
 		"lstat64", // 32-bit
 		"stat64",  // 32-bit
+		"open",
+		"unlink",
+		"readlink",
+		"lstat",
+		"stat",
+		"access",
+		"fstatat",
+		"fstatat64",
 	}
 )

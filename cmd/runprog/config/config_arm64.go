@@ -8,9 +8,9 @@ var (
 		"/usr/lib/aarch64-linux-gnu/",
 	}
 
-	archSyscallAllows = []string{
-		"newfstatat",
-	}
+	archSyscallAllows = []string{}
 
-	archSyscallTraces = []string{}
+	archSyscallTraces = []string{
+		"fstatat",
+	}
 )
