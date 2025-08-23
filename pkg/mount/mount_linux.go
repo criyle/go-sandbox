@@ -17,8 +17,15 @@ func (m *Mount) Mount() error {
 	}
 	// Read-only bind mount need to be remounted
 	const bindRo = syscall.MS_BIND | syscall.MS_RDONLY
+	const mask = syscall.MS_NOSUID | syscall.MS_NODEV | syscall.MS_NOEXEC | syscall.MS_NOATIME | syscall.MS_NODIRATIME | syscall.MS_RELATIME
 	if m.Flags&bindRo == bindRo {
-		if err := syscall.Mount("", m.Target, m.FsType, m.Flags|syscall.MS_REMOUNT, m.Data); err != nil {
+		// Ensure the flag retains for bind mount
+		var s syscall.Statfs_t
+		if err := syscall.Statfs(m.Source, &s); err != nil {
+			return fmt.Errorf("statfs: %w", err)
+		}
+		flag := m.Flags | syscall.MS_REMOUNT | uintptr(s.Flags&mask)
+		if err := syscall.Mount("", m.Target, m.FsType, flag, m.Data); err != nil {
 			return fmt.Errorf("remount: %w", err)
 		}
 	}
