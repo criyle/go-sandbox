@@ -11,6 +11,7 @@ const (
 	cmdOk
 	cmdKill
 	cmdConf
+	cmdSymlink
 
 	initArg = "container_init"
 

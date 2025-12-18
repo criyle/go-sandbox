@@ -17,16 +17,25 @@ type cmd struct {
 	ExecCmd   *execCmd   // execve argument
 	ConfCmd   *confCmd   // to set configuration
 
-	OpenCmd []OpenCmd // open argument
+	OpenCmd    []OpenCmd      // open argument
+	SymlinkCmd []SymbolicLink // symlink argument
 
 	Cmd cmdType // type of the cmd
 }
 
 // OpenCmd correspond to a single open syscall
 type OpenCmd struct {
-	Path string
-	Flag int
-	Perm os.FileMode
+	Path     string
+	Flag     int
+	Perm     os.FileMode
+	MkdirAll bool
+}
+
+// OpenCmdResult represent the result of a open command, it could be either
+// a opened file or error represent the error encountered
+type OpenCmdResult struct {
+	File *os.File
+	Err  error
 }
 
 // deleteCmd stores delete command
@@ -72,8 +81,9 @@ type containerConfig struct {
 
 // reply is the reply message send back to controller
 type reply struct {
-	Error     *errorReply // nil if no error
-	ExecReply *execReply
+	Error      *errorReply // nil if no error
+	ExecReply  *execReply
+	OpenErrors []string
 }
 
 // errorReply stores error returned back from container

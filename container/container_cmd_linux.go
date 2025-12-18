@@ -44,19 +44,42 @@ func (c *containerServer) handleOpen(open []OpenCmd) error {
 	// open files
 	fds := make([]int, 0, len(open))
 	fileToClose := make([]*os.File, 0, len(open)) // let sendMsg close these files
-	for _, o := range open {
+	openErrors := make([]string, len(open))
+	for i, o := range open {
+		if o.MkdirAll {
+			dir := filepath.Dir(o.Path)
+			if err := os.MkdirAll(dir, 0777); err != nil {
+				openErrors[i] = "mkdir: " + err.Error()
+				continue
+			}
+		}
+
 		outFile, err := os.OpenFile(o.Path, o.Flag, o.Perm)
 		if err != nil {
-			for _, f := range fileToClose {
-				f.Close()
-			}
-			return c.sendErrorReply("open: %v", err)
+			openErrors[i] = err.Error()
+			continue
 		}
 		fileToClose = append(fileToClose, outFile)
 		fds = append(fds, int(outFile.Fd()))
 	}
 
-	return c.sendReplyFiles(reply{}, unixsocket.Msg{Fds: fds}, fileToClose)
+	return c.sendReplyFiles(reply{OpenErrors: openErrors}, unixsocket.Msg{Fds: fds}, fileToClose)
+}
+
+func (c *containerServer) handleSymlink(links []SymbolicLink) error {
+	if len(links) == 0 {
+		return c.sendErrorReply("symlink: no parameters received")
+	}
+
+	symlinkErrors := make([]string, len(links))
+	for i, l := range links {
+		if err := os.Symlink(l.Target, l.LinkPath); err != nil {
+			symlinkErrors[i] = err.Error()
+			continue
+		}
+	}
+
+	return c.sendReply(reply{OpenErrors: symlinkErrors}, unixsocket.Msg{})
 }
 
 func (c *containerServer) handleDelete(delete *deleteCmd) error {

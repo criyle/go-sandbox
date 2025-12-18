@@ -86,7 +86,8 @@ type CredGenerator interface {
 // Environment holds single progrem containerized environment
 type Environment interface {
 	Ping() error
-	Open([]OpenCmd) ([]*os.File, error)
+	Open([]OpenCmd) ([]OpenCmdResult, error)
+	Symlink([]SymbolicLink) []error
 	Delete(p string) error
 	Reset() error
 	Execve(context.Context, ExecveParam) runner.Result

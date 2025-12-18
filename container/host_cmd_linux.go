@@ -1,6 +1,7 @@
 package container
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"syscall"
@@ -46,7 +47,7 @@ func (c *container) conf(conf *containerConfig) error {
 }
 
 // Open open files in container
-func (c *container) Open(p []OpenCmd) ([]*os.File, error) {
+func (c *container) Open(p []OpenCmd) ([]OpenCmdResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -65,25 +66,60 @@ func (c *container) Open(p []OpenCmd) ([]*os.File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
-	if reply.Error != nil {
-		return nil, fmt.Errorf("open: %v", reply.Error)
-	}
-	if len(msg.Fds) != len(p) {
-		closeFds(msg.Fds)
-		return nil, fmt.Errorf("open: unexpected number of fds: got %d, want %d", len(msg.Fds), len(p))
-	}
-
-	ret := make([]*os.File, 0, len(p))
-	for i, fd := range msg.Fds {
+	results := make([]OpenCmdResult, len(p))
+	fdIndex := 0
+	for i, errStr := range reply.OpenErrors {
+		if errStr != "" {
+			// This specific file failed to open
+			results[i] = OpenCmdResult{Err: errors.New(errStr)}
+			continue
+		}
+		if fdIndex >= len(msg.Fds) {
+			closeFds(msg.Fds)
+			return nil, fmt.Errorf("open: mismatch between success flags and received FDs")
+		}
+		fd := msg.Fds[fdIndex]
 		syscall.CloseOnExec(fd)
 		f := os.NewFile(uintptr(fd), p[i].Path)
 		if f == nil {
-			closeFds(msg.Fds)
+			closeFds(msg.Fds[fdIndex:])
 			return nil, fmt.Errorf("open: failed to create file for fd: %d", fd)
 		}
-		ret = append(ret, f)
+		results[i] = OpenCmdResult{File: f}
+		fdIndex++
 	}
-	return ret, nil
+	return results, nil
+}
+
+func (c *container) Symlink(l []SymbolicLink) []error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	cmd := cmd{
+		Cmd:        cmdSymlink,
+		SymlinkCmd: l,
+	}
+
+	if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
+		// If transport fails, we return the error for all entries or a wrap
+		return []error{fmt.Errorf("symlink transport: %w", err)}
+	}
+
+	reply, _, err := c.recvReply()
+	if err != nil {
+		return []error{fmt.Errorf("symlink recv: %w", err)}
+	}
+
+	results := make([]error, len(l))
+	// Map error strings back to error objects
+	for i, errStr := range reply.OpenErrors {
+		if errStr != "" {
+			results[i] = errors.New(errStr)
+		} else {
+			results[i] = nil // Success
+		}
+	}
+	return results
 }
 
 // Delete remove file from container

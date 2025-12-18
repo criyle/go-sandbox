@@ -224,6 +224,9 @@ func (c *containerServer) handleCmd(cmd cmd, msg unixsocket.Msg) error {
 
 	case cmdExecve:
 		return c.handleExecve(cmd.ExecCmd, msg)
+
+	case cmdSymlink:
+		return c.handleSymlink(cmd.SymlinkCmd)
 	}
 	return fmt.Errorf("unknown command: %v", cmd.Cmd)
 }
