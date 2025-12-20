@@ -63,7 +63,7 @@ func (c *containerServer) handleOpen(open []OpenCmd) error {
 		fds = append(fds, int(outFile.Fd()))
 	}
 
-	return c.sendReplyFiles(reply{OpenErrors: openErrors}, unixsocket.Msg{Fds: fds}, fileToClose)
+	return c.sendReplyFiles(reply{BatchErrors: openErrors}, unixsocket.Msg{Fds: fds}, fileToClose)
 }
 
 func (c *containerServer) handleSymlink(links []SymbolicLink) error {
@@ -79,7 +79,7 @@ func (c *containerServer) handleSymlink(links []SymbolicLink) error {
 		}
 	}
 
-	return c.sendReply(reply{OpenErrors: symlinkErrors}, unixsocket.Msg{})
+	return c.sendReply(reply{BatchErrors: symlinkErrors}, unixsocket.Msg{})
 }
 
 func (c *containerServer) handleDelete(delete *deleteCmd) error {

@@ -47,7 +47,7 @@ func (c *container) conf(conf *containerConfig) error {
 }
 
 // Open open files in container
-func (c *container) Open(p []OpenCmd) ([]OpenCmdResult, error) {
+func (c *container) Open(p []OpenCmd) (results []OpenCmdResult, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -66,32 +66,44 @@ func (c *container) Open(p []OpenCmd) ([]OpenCmdResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
-	results := make([]OpenCmdResult, len(p))
+	defer func() {
+		if err != nil {
+			closeFds(msg.Fds)
+			for _, res := range results {
+				if res.File != nil {
+					res.File.Close()
+				}
+			}
+		}
+	}()
+	if len(reply.BatchErrors) != len(p) {
+		return nil, fmt.Errorf("open: response length mismatch: got %d, want %d", len(reply.BatchErrors), len(p))
+	}
+
+	results = make([]OpenCmdResult, len(p))
 	fdIndex := 0
-	for i, errStr := range reply.OpenErrors {
+	for i, errStr := range reply.BatchErrors {
 		if errStr != "" {
 			// This specific file failed to open
 			results[i] = OpenCmdResult{Err: errors.New(errStr)}
 			continue
 		}
 		if fdIndex >= len(msg.Fds) {
-			closeFds(msg.Fds)
 			return nil, fmt.Errorf("open: mismatch between success flags and received FDs")
 		}
 		fd := msg.Fds[fdIndex]
+		fdIndex++
 		syscall.CloseOnExec(fd)
 		f := os.NewFile(uintptr(fd), p[i].Path)
 		if f == nil {
-			closeFds(msg.Fds[fdIndex:])
 			return nil, fmt.Errorf("open: failed to create file for fd: %d", fd)
 		}
 		results[i] = OpenCmdResult{File: f}
-		fdIndex++
 	}
 	return results, nil
 }
 
-func (c *container) Symlink(l []SymbolicLink) []error {
+func (c *container) Symlink(l []SymbolicLink) ([]error, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -102,24 +114,24 @@ func (c *container) Symlink(l []SymbolicLink) []error {
 
 	if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
 		// If transport fails, we return the error for all entries or a wrap
-		return []error{fmt.Errorf("symlink transport: %w", err)}
+		return nil, fmt.Errorf("symlink transport: %w", err)
 	}
 
 	reply, _, err := c.recvReply()
 	if err != nil {
-		return []error{fmt.Errorf("symlink recv: %w", err)}
+		return nil, fmt.Errorf("symlink recv: %w", err)
 	}
 
 	results := make([]error, len(l))
 	// Map error strings back to error objects
-	for i, errStr := range reply.OpenErrors {
+	for i, errStr := range reply.BatchErrors {
 		if errStr != "" {
 			results[i] = errors.New(errStr)
 		} else {
 			results[i] = nil // Success
 		}
 	}
-	return results
+	return results, nil
 }
 
 // Delete remove file from container

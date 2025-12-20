@@ -81,9 +81,9 @@ type containerConfig struct {
 
 // reply is the reply message send back to controller
 type reply struct {
-	Error      *errorReply // nil if no error
-	ExecReply  *execReply
-	OpenErrors []string
+	Error       *errorReply // nil if no error
+	ExecReply   *execReply
+	BatchErrors []string
 }
 
 // errorReply stores error returned back from container

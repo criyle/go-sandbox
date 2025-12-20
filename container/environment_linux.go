@@ -87,7 +87,7 @@ type CredGenerator interface {
 type Environment interface {
 	Ping() error
 	Open([]OpenCmd) ([]OpenCmdResult, error)
-	Symlink([]SymbolicLink) []error
+	Symlink([]SymbolicLink) ([]error, error)
 	Delete(p string) error
 	Reset() error
 	Execve(context.Context, ExecveParam) runner.Result
