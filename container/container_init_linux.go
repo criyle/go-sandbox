@@ -43,6 +43,7 @@ type sendReply struct {
 	Reply       reply
 	Msg         unixsocket.Msg
 	FileToClose []*os.File
+	Done        chan struct{}
 }
 
 type waitPidResult struct {
@@ -133,6 +134,9 @@ func (c *containerServer) sendLoop() {
 			if err != nil {
 				c.socketError(err)
 				return
+			}
+			if rep.Done != nil {
+				close(rep.Done)
 			}
 		}
 	}
@@ -320,12 +324,22 @@ func (c *containerServer) recvCmd() (cmd, unixsocket.Msg, error) {
 }
 
 func (c *containerServer) sendReplyFiles(rep reply, msg unixsocket.Msg, fileToClose []*os.File) error {
+	done := make(chan struct{})
 	select {
 	case <-c.done:
+		for _, f := range fileToClose {
+			f.Close()
+		}
 		return c.err
 
-	case c.sendCh <- sendReply{Reply: rep, Msg: msg, FileToClose: fileToClose}:
-		return nil
+	case c.sendCh <- sendReply{Reply: rep, Msg: msg, FileToClose: fileToClose, Done: done}:
+		select {
+		case <-c.done:
+			return c.err
+
+		case <-done:
+			return nil
+		}
 	}
 }
 

@@ -66,9 +66,12 @@ func (c *container) Open(p []OpenCmd) (results []OpenCmdResult, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
+	fdIndex := 0
 	defer func() {
 		if err != nil {
-			closeFds(msg.Fds)
+			if fdIndex < len(msg.Fds) {
+				closeFds(msg.Fds[fdIndex:])
+			}
 			for _, res := range results {
 				if res.File != nil {
 					res.File.Close()
@@ -81,7 +84,6 @@ func (c *container) Open(p []OpenCmd) (results []OpenCmdResult, err error) {
 	}
 
 	results = make([]OpenCmdResult, len(p))
-	fdIndex := 0
 	for i, errStr := range reply.BatchErrors {
 		if errStr != "" {
 			// This specific file failed to open
