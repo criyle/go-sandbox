@@ -14,7 +14,7 @@ Notice: Only works on Linux since ptrace, unshare, cgroup are available only on 
 
 - install latest go compiler from [golang/download](https://golang.org/dl/)
 - download repository: `git clone githuc.com/criyle/go-sandbox`
-- build: `go build ./cmd/runprog` 
+- build: `go build ./cmd/runprog`
 - or install directly: `go install github.com/criyle/go-sandbox/cmd/runprog@latest`
 
 ## Technologies
@@ -75,7 +75,7 @@ On kernel >= 5.7 with cgroup v2, the new `clone3(CLONE_INTO_CGROUP)` with `vfork
 
 ### Result Structure
 
-``` go
+```go
 type Result struct {
     Status            // result status
     ExitStatus int    // exit status (signal number if signalled)
@@ -93,9 +93,9 @@ type Result struct {
 
 Configured runner to run the program. `Context` is used to cancel (control time limit exceeded event; should not be nil).
 
-``` go
+```go
 type Runner interface {
-    Run(context.Context) <-chan runner.Result
+	Run(context.Context) Result
 }
 ```
 
@@ -147,7 +147,7 @@ Provides:
 - Run program
   - Execve: execute program with given parameters
 
-``` go
+```go
 type Environment interface {
     Ping() error
     Open([]OpenCmd) ([]*os.File, error)
@@ -195,7 +195,7 @@ type Environment interface {
 - 5.7: `clone3` with `CLONE_INTO_CGROUP`
 - 5.3: `clone3`
 - 4.15: cgroup v2 (also need support in the Linux distribution)
-- 4.14: SECCOMP_RET_KILL_PROCESS 
+- 4.14: SECCOMP_RET_KILL_PROCESS
 - 4.6: CLONE_NEWCGROUP
 - 3.19: execveat()
 - 3.17: seccomp, memfd_create
