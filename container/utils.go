@@ -55,7 +55,7 @@ func removeContents(dir string) error {
 
 	for _, name := range names {
 		err1 := os.RemoveAll(filepath.Join(dir, name))
-		if err != nil {
+		if err1 != nil {
 			err = err1
 		}
 	}
