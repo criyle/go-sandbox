@@ -4,6 +4,7 @@ package unixsocket
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -12,6 +13,8 @@ import (
 
 // oob size default to page size
 const oobSize = 4 << 10 // 4kb
+
+var errMessageTruncated = errors.New("unix socket message truncated")
 
 // Socket wrappers a unix socket connection
 type Socket struct {
@@ -117,9 +120,12 @@ func (s *Socket) SendMsg(b []byte, m Msg) error {
 // RecvMsg recvmsg from unix socket and parse possible unix right / credential
 func (s *Socket) RecvMsg(b []byte) (int, Msg, error) {
 	var msg Msg
-	n, oobn, _, _, err := s.ReadMsgUnix(b, s.recvBuff)
+	n, oobn, flags, _, err := s.ReadMsgUnix(b, s.recvBuff)
 	if err != nil {
 		return 0, msg, err
+	}
+	if flags&(syscall.MSG_TRUNC|syscall.MSG_CTRUNC) != 0 {
+		return 0, msg, errMessageTruncated
 	}
 	// parse oob msg
 	msgs, err := syscall.ParseSocketControlMessage(s.recvBuff[:oobn])

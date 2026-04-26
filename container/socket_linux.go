@@ -8,8 +8,8 @@ import (
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
 )
 
-// 16k buffer size
-const bufferSize = 16 << 10
+// 32k buffer size
+const bufferSize = 32 << 10
 
 type socket struct {
 	*unixsocket.Socket
@@ -60,6 +60,9 @@ func (s *socket) SendMsg(e any, msg unixsocket.Msg) error {
 	s.sendBuff.Reset()
 	if err := s.encoder.Encode(e); err != nil {
 		return fmt.Errorf("send msg: encode: %w", err)
+	}
+	if s.sendBuff.Len() > bufferSize {
+		return fmt.Errorf("send msg: payload too large: %d > %d", s.sendBuff.Len(), bufferSize)
 	}
 
 	if err := s.Socket.SendMsg(s.sendBuff.Bytes(), msg); err != nil {
