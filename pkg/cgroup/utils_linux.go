@@ -72,15 +72,16 @@ func ReadProcesses(path string) ([]int, error) {
 		return nil, err
 	}
 	procs := strings.Split(string(content), "\n")
-	rt := make([]int, len(procs))
-	for i, x := range procs {
+	rt := make([]int, 0, len(procs))
+	for _, x := range procs {
 		if len(x) == 0 {
 			continue
 		}
-		rt[i], err = strconv.Atoi(x)
+		pid, err := strconv.Atoi(x)
 		if err != nil {
 			return nil, err
 		}
+		rt = append(rt, pid)
 	}
 	return rt, nil
 }
