@@ -143,7 +143,11 @@ func killAll(pgid int) {
 func collectZombie(pgid int) {
 	var wstatus unix.WaitStatus
 	for {
-		if _, err := unix.Wait4(-pgid, &wstatus, unix.WALL|unix.WNOHANG, nil); err != unix.EINTR && err != nil {
+		_, err := unix.Wait4(-pgid, &wstatus, unix.WALL, nil)
+		if err == unix.EINTR {
+			continue
+		}
+		if err != nil {
 			break
 		}
 	}

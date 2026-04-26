@@ -188,7 +188,11 @@ func (c *containerServer) waitLoop() {
 
 		case <-c.waitAll:
 			for {
-				if _, err := syscall.Wait4(-1, nil, syscall.WNOHANG, nil); err != nil && err != syscall.EINTR {
+				_, err := syscall.Wait4(-1, nil, 0, nil)
+				if err == syscall.EINTR {
+					continue
+				}
+				if err != nil {
 					break
 				}
 			}
