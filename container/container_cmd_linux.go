@@ -53,6 +53,10 @@ func (c *containerServer) handleOpen(open []OpenCmd) error {
 				continue
 			}
 		}
+		if err := checkOpenTargetFile(o.Path); err != nil {
+			openErrors[i] = err.Error()
+			continue
+		}
 
 		outFile, err := os.OpenFile(o.Path, o.Flag, o.Perm)
 		if err != nil {
@@ -64,6 +68,20 @@ func (c *containerServer) handleOpen(open []OpenCmd) error {
 	}
 
 	return c.sendReplyFiles(reply{BatchErrors: openErrors}, unixsocket.Msg{Fds: fds}, fileToClose)
+}
+
+func checkOpenTargetFile(path string) error {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	if fi.Mode().IsRegular() {
+		return nil
+	}
+	return fmt.Errorf("%s is not a regular file", path)
 }
 
 func (c *containerServer) handleSymlink(links []SymbolicLink) error {
