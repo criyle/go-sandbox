@@ -66,6 +66,9 @@ func (c *container) Open(p []OpenCmd) (results []OpenCmdResult, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
+	if reply.Error != nil {
+		return nil, fmt.Errorf("open: container error: %v", reply.Error)
+	}
 	fdIndex := 0
 	defer func() {
 		if err != nil {
@@ -122,6 +125,9 @@ func (c *container) Symlink(l []SymbolicLink) ([]error, error) {
 	reply, _, err := c.recvReply()
 	if err != nil {
 		return nil, fmt.Errorf("symlink recv: %w", err)
+	}
+	if reply.Error != nil {
+		return nil, fmt.Errorf("symlink: container error: %v", reply.Error)
 	}
 	if len(reply.BatchErrors) != len(l) {
 		return nil, fmt.Errorf("symlink: response length mismatch: got %d, want %d", len(reply.BatchErrors), len(l))
