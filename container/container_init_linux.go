@@ -84,6 +84,10 @@ func Init() (err error) {
 	// ignore any signal that kills the init process
 	ignoreSignals()
 
+	// Ensure container-created files and directories honor explicit modes
+	// instead of inheriting a restrictive host/service umask.
+	syscall.Umask(0)
+
 	// limit container resource usage
 	runtime.GOMAXPROCS(containerMaxProc)
 

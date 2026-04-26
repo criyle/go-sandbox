@@ -60,9 +60,6 @@ func TestCgroupAll(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer builder.Destroy()
-	if err != nil {
-		t.Fatal(err)
-	}
 	cg, err := builder.New("test")
 	if err != nil {
 		t.Fatal(err)
