@@ -145,5 +145,8 @@ func readDotEnv() ([]string, error) {
 		}
 		ret = append(ret, line)
 	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("dotenv: scan /.env: %w", err)
+	}
 	return ret, nil
 }
