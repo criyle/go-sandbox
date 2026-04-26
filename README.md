@@ -138,8 +138,8 @@ Container restricted environment is accessed though RPC interface defined by abo
 Provides:
 
 - File access
-  - Open: create / access files
-  - Delete: remove file
+  - Open: create / access files by container-visible path
+  - Delete: remove file by container-visible path
 - Management
   - Ping: alive check
   - Reset: remove temporary files

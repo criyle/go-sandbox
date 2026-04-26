@@ -22,12 +22,12 @@
 // - send: conf
 // - reply:
 //
-// ## open (open files in given mode inside container):
+// ## open (open files in given mode by container-visible path):
 //
 // - send: []OpenCmd
 // - reply: "success", file fds / "error"
 //
-// ## delete (unlink file / rmdir dir inside container):
+// ## delete (unlink file / rmdir dir by container-visible path):
 //
 // - send: path
 // - reply: "finished" / "error"
