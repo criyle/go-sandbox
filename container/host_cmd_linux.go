@@ -123,6 +123,9 @@ func (c *container) Symlink(l []SymbolicLink) ([]error, error) {
 	if err != nil {
 		return nil, fmt.Errorf("symlink recv: %w", err)
 	}
+	if len(reply.BatchErrors) != len(l) {
+		return nil, fmt.Errorf("symlink: response length mismatch: got %d, want %d", len(reply.BatchErrors), len(l))
+	}
 
 	results := make([]error, len(l))
 	// Map error strings back to error objects
