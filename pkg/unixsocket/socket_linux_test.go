@@ -87,9 +87,9 @@ func TestSendRecvMsg_Cred(t *testing.T) {
 	}
 
 	msg := []byte("credtest")
-	go func() {
-		a.SendMsg(msg, Msg{Cred: &syscall.Ucred{Pid: 123, Uid: 456, Gid: 789}})
-	}()
+	if err := a.SendMsg(msg, Msg{Cred: &syscall.Ucred{Pid: 1, Uid: 1, Gid: 1}}); err != nil {
+		t.Fatal(err)
+	}
 
 	buf := make([]byte, 64)
 	n, m, err := b.RecvMsg(buf)

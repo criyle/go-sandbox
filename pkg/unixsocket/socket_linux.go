@@ -95,9 +95,13 @@ func (s *Socket) SetPassCred(option int) error {
 	if err != nil {
 		return err
 	}
-	return sysconn.Control(func(fd uintptr) {
-		syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_PASSCRED, option)
-	})
+	var sockErr error
+	if err := sysconn.Control(func(fd uintptr) {
+		sockErr = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_PASSCRED, option)
+	}); err != nil {
+		return err
+	}
+	return sockErr
 }
 
 // SendMsg sendmsg to unix socket and encode possible unix right / credential
