@@ -1,6 +1,7 @@
 package ptrace
 
 import (
+	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -40,10 +41,7 @@ func (h *tracerHandler) checkOpen(ctx *ptracer.Context, addr uint, flags uint) p
 		h.Debug("open proc policy: ", fn, getFileMode(flags))
 		return action
 	}
-	isReadOnly := (flags&syscall.O_ACCMODE == syscall.O_RDONLY) &&
-		(flags&syscall.O_CREAT == 0) &&
-		(flags&syscall.O_EXCL == 0) &&
-		(flags&syscall.O_TRUNC == 0)
+	isReadOnly := isOpenReadOnly(uint64(flags))
 
 	h.Debug("open: ", fn, getFileMode(flags))
 	if isReadOnly {
@@ -58,13 +56,33 @@ func (h *tracerHandler) checkOpenAt(ctx *ptracer.Context, dirfd int, addr uint, 
 		h.Debug("openat proc policy: ", fn, getFileMode(flags), "dirfd:", dirfd)
 		return action
 	}
-	isReadOnly := (flags&syscall.O_ACCMODE == syscall.O_RDONLY) &&
-		(flags&syscall.O_CREAT == 0) &&
-		(flags&syscall.O_EXCL == 0) &&
-		(flags&syscall.O_TRUNC == 0)
+	isReadOnly := isOpenReadOnly(uint64(flags))
 
 	h.Debug("openat: ", fn, getFileMode(flags), "dirfd:", dirfd)
 	if isReadOnly {
+		return h.Handler.CheckRead(fn)
+	}
+	return h.Handler.CheckWrite(fn)
+}
+
+func (h *tracerHandler) checkOpenAt2(ctx *ptracer.Context, dirfd int, addr uint, howAddr uint) ptracer.TraceAction {
+	fn := h.getStringAt(ctx, dirfd, addr)
+	if blocked, action := h.checkProcPath(ctx.Pid, fn); blocked {
+		h.Debug("openat2 proc policy: ", fn, "dirfd:", dirfd)
+		return action
+	}
+
+	flags, err := readOpenHowFlags(ctx.Pid, uintptr(howAddr))
+	if err != nil {
+		// Fail closed for policy classification: if the kernel will attempt an
+		// openat2 but we cannot decode open_how.flags, treat it as a write-capable
+		// open so it cannot bypass writable-path restrictions by looking read-only.
+		h.Debug("openat2: failed to read open_how.flags for ", fn, "dirfd:", dirfd, " err:", err)
+		return h.Handler.CheckWrite(fn)
+	}
+
+	h.Debug("openat2: ", fn, getFileMode(uint(flags)), "dirfd:", dirfd)
+	if isOpenReadOnly(flags) {
 		return h.Handler.CheckRead(fn)
 	}
 	return h.Handler.CheckWrite(fn)
@@ -143,8 +161,10 @@ func (h *tracerHandler) Handle(ctx *ptracer.Context) ptracer.TraceAction {
 	switch syscallName {
 	case "open":
 		action = h.checkOpen(ctx, ctx.Arg0(), ctx.Arg1())
-	case "openat", "openat2":
+	case "openat":
 		action = h.checkOpenAt(ctx, int(int64(ctx.Arg0())), ctx.Arg1(), ctx.Arg2())
+	case "openat2":
+		action = h.checkOpenAt2(ctx, int(int64(ctx.Arg0())), ctx.Arg1(), ctx.Arg2())
 
 	case "readlink":
 		action = h.checkRead(ctx, ctx.Arg0())
@@ -189,7 +209,10 @@ func (h *tracerHandler) Handle(ctx *ptracer.Context) ptracer.TraceAction {
 	case "chmod":
 		action = h.checkWrite(ctx, ctx.Arg0())
 	case "rename":
-		action = h.checkWrite(ctx, ctx.Arg0())
+		action = combineTraceActions(
+			h.checkWrite(ctx, ctx.Arg0()),
+			h.checkWrite(ctx, ctx.Arg1()),
+		)
 
 	default:
 		action = h.Handler.CheckSyscall(syscallName)
@@ -259,6 +282,21 @@ func getFileMode(flags uint) string {
 	default:
 		return "??"
 	}
+}
+
+func isOpenReadOnly(flags uint64) bool {
+	return (flags&syscall.O_ACCMODE == syscall.O_RDONLY) &&
+		(flags&syscall.O_CREAT == 0) &&
+		(flags&syscall.O_EXCL == 0) &&
+		(flags&syscall.O_TRUNC == 0)
+}
+
+func readOpenHowFlags(pid int, howAddr uintptr) (uint64, error) {
+	var buf [8]byte
+	if _, err := syscall.PtracePeekData(pid, howAddr, buf[:]); err != nil {
+		return 0, err
+	}
+	return binary.NativeEndian.Uint64(buf[:]), nil
 }
 
 // getProcCwd gets the process CWD

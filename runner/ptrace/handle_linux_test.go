@@ -1,6 +1,7 @@
 package ptrace
 
 import (
+	"syscall"
 	"testing"
 
 	"github.com/criyle/go-sandbox/ptracer"
@@ -177,6 +178,29 @@ func TestCheckProcPath(t *testing.T) {
 			blocked, action := h.checkProcPath(pid, tt.path)
 			if blocked != tt.wantBlocked || action != tt.wantAction {
 				t.Fatalf("checkProcPath(%d, %q) = (%v, %v), want (%v, %v)", pid, tt.path, blocked, action, tt.wantBlocked, tt.wantAction)
+			}
+		})
+	}
+}
+
+func TestIsOpenReadOnly(t *testing.T) {
+	tests := []struct {
+		name  string
+		flags uint64
+		want  bool
+	}{
+		{name: "readonly", flags: syscall.O_RDONLY, want: true},
+		{name: "writeonly", flags: syscall.O_WRONLY, want: false},
+		{name: "readwrite", flags: syscall.O_RDWR, want: false},
+		{name: "readonly create", flags: syscall.O_RDONLY | syscall.O_CREAT, want: false},
+		{name: "readonly truncate", flags: syscall.O_RDONLY | syscall.O_TRUNC, want: false},
+		{name: "readonly excl", flags: syscall.O_RDONLY | syscall.O_EXCL, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isOpenReadOnly(tt.flags); got != tt.want {
+				t.Fatalf("isOpenReadOnly(%#x) = %v, want %v", tt.flags, got, tt.want)
 			}
 		})
 	}
