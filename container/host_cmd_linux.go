@@ -10,6 +10,11 @@ import (
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
 )
 
+// maxOpenPerBatch limits the number of files opened in a single batch to stay
+// under the Linux SCM_MAX_FD (253) kernel limit for sendmsg SCM_RIGHTS.
+// 200 leaves a safe margin.
+const maxOpenPerBatch = 200
+
 // Ping send ping message to container, wait for 3 second before timeout
 func (c *container) Ping() error {
 	c.mu.Lock()
@@ -54,27 +59,8 @@ func (c *container) Open(p []OpenCmd) (results []OpenCmdResult, err error) {
 	syscall.ForkLock.RLock()
 	defer syscall.ForkLock.RUnlock()
 
-	// send copyin
-	cmd := cmd{
-		Cmd:     cmdOpen,
-		OpenCmd: p,
-	}
-	if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
-		return nil, fmt.Errorf("open: %w", err)
-	}
-	reply, msg, err := c.recvReply()
-	if err != nil {
-		return nil, fmt.Errorf("open: %w", err)
-	}
-	if reply.Error != nil {
-		return nil, fmt.Errorf("open: container error: %v", reply.Error)
-	}
-	fdIndex := 0
 	defer func() {
 		if err != nil {
-			if fdIndex < len(msg.Fds) {
-				closeFds(msg.Fds[fdIndex:])
-			}
 			for _, res := range results {
 				if res.File != nil {
 					res.File.Close()
@@ -82,28 +68,55 @@ func (c *container) Open(p []OpenCmd) (results []OpenCmdResult, err error) {
 			}
 		}
 	}()
-	if len(reply.BatchErrors) != len(p) {
-		return nil, fmt.Errorf("open: response length mismatch: got %d, want %d", len(reply.BatchErrors), len(p))
-	}
 
+	// send copyin in batches to stay under the SCM_MAX_FD kernel limit
 	results = make([]OpenCmdResult, len(p))
-	for i, errStr := range reply.BatchErrors {
-		if errStr != "" {
-			// This specific file failed to open
-			results[i] = OpenCmdResult{Err: errors.New(errStr)}
-			continue
+	for offset := 0; offset < len(p); offset += maxOpenPerBatch {
+		end := offset + maxOpenPerBatch
+		if end > len(p) {
+			end = len(p)
 		}
-		if fdIndex >= len(msg.Fds) {
-			return nil, fmt.Errorf("open: mismatch between success flags and received FDs")
+		cmd := cmd{
+			Cmd:     cmdOpen,
+			OpenCmd: p[offset:end],
 		}
-		fd := msg.Fds[fdIndex]
-		fdIndex++
-		syscall.CloseOnExec(fd)
-		f := os.NewFile(uintptr(fd), p[i].Path)
-		if f == nil {
-			return nil, fmt.Errorf("open: failed to create file for fd: %d", fd)
+		if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
+			return nil, fmt.Errorf("open: %w", err)
 		}
-		results[i] = OpenCmdResult{File: f}
+		reply, msg, err := c.recvReply()
+		if err != nil {
+			return nil, fmt.Errorf("open: %w", err)
+		}
+		if reply.Error != nil {
+			closeFds(msg.Fds)
+			return nil, fmt.Errorf("open: container error: %v", reply.Error)
+		}
+		if len(reply.BatchErrors) != end-offset {
+			closeFds(msg.Fds)
+			return nil, fmt.Errorf("open: response length mismatch: got %d, want %d", len(reply.BatchErrors), end-offset)
+		}
+
+		fdIndex := 0
+		for i, errStr := range reply.BatchErrors {
+			if errStr != "" {
+				// This specific file failed to open
+				results[offset+i] = OpenCmdResult{Err: errors.New(errStr)}
+				continue
+			}
+			if fdIndex >= len(msg.Fds) {
+				closeFds(msg.Fds[fdIndex:])
+				return nil, fmt.Errorf("open: mismatch between success flags and received FDs")
+			}
+			fd := msg.Fds[fdIndex]
+			fdIndex++
+			syscall.CloseOnExec(fd)
+			f := os.NewFile(uintptr(fd), p[offset+i].Path)
+			if f == nil {
+				closeFds(msg.Fds[fdIndex:])
+				return nil, fmt.Errorf("open: failed to create file for fd: %d", fd)
+			}
+			results[offset+i] = OpenCmdResult{File: f}
+		}
 	}
 	return results, nil
 }
