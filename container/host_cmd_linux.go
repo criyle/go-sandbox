@@ -80,19 +80,19 @@ func (c *container) Open(p []OpenCmd) (results []OpenCmdResult, err error) {
 			OpenCmd: p[offset:end],
 		}
 		if err := c.sendCmd(cmd, unixsocket.Msg{}); err != nil {
-			return nil, fmt.Errorf("open: %w", err)
+			return results, fmt.Errorf("open: %w", err)
 		}
 		reply, msg, err := c.recvReply()
 		if err != nil {
-			return nil, fmt.Errorf("open: %w", err)
+			return results, fmt.Errorf("open: %w", err)
 		}
 		if reply.Error != nil {
 			closeFds(msg.Fds)
-			return nil, fmt.Errorf("open: container error: %v", reply.Error)
+			return results, fmt.Errorf("open: container error: %v", reply.Error)
 		}
 		if len(reply.BatchErrors) != end-offset {
 			closeFds(msg.Fds)
-			return nil, fmt.Errorf("open: response length mismatch: got %d, want %d", len(reply.BatchErrors), end-offset)
+			return results, fmt.Errorf("open: response length mismatch: got %d, want %d", len(reply.BatchErrors), end-offset)
 		}
 
 		fdIndex := 0
@@ -103,23 +103,24 @@ func (c *container) Open(p []OpenCmd) (results []OpenCmdResult, err error) {
 				continue
 			}
 			if fdIndex >= len(msg.Fds) {
-				return nil, fmt.Errorf("open: mismatch between success flags and received FDs")
+				closeFds(msg.Fds[fdIndex:])
+				return results, fmt.Errorf("open: mismatch between success flags and received FDs")
 			}
 			fd := msg.Fds[fdIndex]
 			fdIndex++
 			syscall.CloseOnExec(fd)
 			f := os.NewFile(uintptr(fd), p[offset+i].Path)
 			if f == nil {
-				syscall.Close(fd)
+				closeFds([]int{fd})
 				closeFds(msg.Fds[fdIndex:])
-				return nil, fmt.Errorf("open: failed to create file for fd: %d", fd)
+				return results, fmt.Errorf("open: failed to create file for fd: %d", fd)
 			}
 			opened = append(opened, f)
 			results[offset+i] = OpenCmdResult{File: f}
 		}
 		if fdIndex != len(msg.Fds) {
 			closeFds(msg.Fds[fdIndex:])
-			return nil, fmt.Errorf("open: received %d extra FDs", len(msg.Fds)-fdIndex)
+			return results, fmt.Errorf("open: mismatch between success flags and received FDs")
 		}
 	}
 	return results, nil
