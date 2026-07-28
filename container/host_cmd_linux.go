@@ -59,12 +59,11 @@ func (c *container) Open(p []OpenCmd) (results []OpenCmdResult, err error) {
 	syscall.ForkLock.RLock()
 	defer syscall.ForkLock.RUnlock()
 
+	var opened []*os.File
 	defer func() {
 		if err != nil {
-			for _, res := range results {
-				if res.File != nil {
-					res.File.Close()
-				}
+			for _, f := range opened {
+				f.Close()
 			}
 		}
 	}()
@@ -116,6 +115,7 @@ func (c *container) Open(p []OpenCmd) (results []OpenCmdResult, err error) {
 				closeFds(msg.Fds[fdIndex:])
 				return results, fmt.Errorf("open: failed to create file for fd: %d", fd)
 			}
+			opened = append(opened, f)
 			results[offset+i] = OpenCmdResult{File: f}
 		}
 		if fdIndex != len(msg.Fds) {

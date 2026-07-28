@@ -198,15 +198,20 @@ func BenchmarkSocketOpenRoundTrip(b *testing.B) {
 						return
 					}
 					fds := make([]int, 0, len(in.OpenCmd))
+					files := make([]*os.File, 0, len(in.OpenCmd))
 					closeFds(msg.Fds)
 					for _, o := range in.OpenCmd {
 						f, e := os.OpenFile(o.Path, o.Flag, o.Perm)
 						if e != nil {
 							continue
 						}
+						files = append(files, f)
 						fds = append(fds, int(f.Fd()))
 					}
 					_ = srv.SendMsg(reply{}, unixsocket.Msg{Fds: fds})
+					for _, f := range files {
+						f.Close()
+					}
 				}
 			}()
 
