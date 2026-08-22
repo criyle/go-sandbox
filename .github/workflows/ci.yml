@@ -25,6 +25,12 @@ jobs:
       - name: Build
         run: go build ./...
 
+      - name: Allow unprivileged user namespaces
+        run: |
+          if [[ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+
       - name: Test with coverage
         run: go test -covermode=atomic -coverprofile=coverage.out ./...
 
