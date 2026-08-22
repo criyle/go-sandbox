@@ -15,7 +15,8 @@ type Runner struct {
 	Args []string
 	Env  []string
 
-	// if exec_fd is defined, then at the end, fd_execve is called
+	// if exec_fd is defined (FDs must be greater than 0), then at the end,
+	// fd_execve is called
 	ExecFile uintptr
 
 	// POSIX Resource limit set by set rlimit
@@ -54,14 +55,16 @@ type Runner struct {
 	// mount("tmpfs", "/", "tmpfs", MS_BIND | MS_REMOUNT | MS_RDONLY | MS_NOATIME | MS_NOSUID, nil)
 	PivotRoot string
 
-	// HostName and DomainName to be set after unshare UTS & user (CAP_SYS_ADMIN)
+	// HostName and DomainName are best-effort values set after unshare UTS & user
+	// (CAP_SYS_ADMIN). Errors from these set operations are intentionally ignored.
 	HostName, DomainName string
 
 	// UidMappings / GidMappings for unshared user namespaces, no-op if mapping is null
 	UIDMappings []syscall.SysProcIDMap
 	GIDMappings []syscall.SysProcIDMap
 
-	// CgroupFd to use when clone3 with CLONE_INTO_CGROUP with kernel >=5.7 and cgroup v2
+	// CgroupFd to use when clone3 with CLONE_INTO_CGROUP with kernel >=5.7 and
+	// cgroup v2. FD 0 is treated as unset; use a positive file descriptor.
 	CgroupFd uintptr
 
 	// Credential holds user and group identities to be assumed

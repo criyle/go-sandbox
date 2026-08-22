@@ -117,3 +117,10 @@ func TestFork_ENOENT(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestFork_EmptyArgs(t *testing.T) {
+	_, err := (&Runner{}).Start()
+	if err == nil {
+		t.Fatal("expected an error for empty arguments")
+	}
+}

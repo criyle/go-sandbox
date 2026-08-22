@@ -134,13 +134,33 @@ failAfterClose:
 }
 
 func readChildErr(fd int, childErr *ChildError) (n int, err error) {
-	for {
-		n, err = readlen(fd, (*byte)(unsafe.Pointer(childErr)), int(unsafe.Sizeof(*childErr)))
-		if err != syscall.EINTR {
-			break
+	// The socket is SOCK_STREAM, so one write is not guaranteed to be
+	// returned by one read. Successful synchronization sends only an Errno,
+	// while failures send a complete ChildError. Read the common prefix first;
+	// a non-zero errno tells us that the remaining fields belong to an error.
+	errnoSize := int(unsafe.Sizeof(syscall.Errno(0)))
+	n, err = readFull(fd, (*byte)(unsafe.Pointer(&childErr.Err)), errnoSize)
+	if err != nil || n != errnoSize || childErr.Err == 0 {
+		return n, err
+	}
+
+	remaining := int(unsafe.Sizeof(*childErr)) - errnoSize
+	m, readErr := readFull(fd, (*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(childErr))+uintptr(errnoSize))), remaining)
+	return n + m, readErr
+}
+
+func readFull(fd int, p *byte, np int) (n int, err error) {
+	for n < np {
+		m, readErr := readlen(fd, (*byte)(unsafe.Pointer(uintptr(unsafe.Pointer(p))+uintptr(n))), np-n)
+		n += m
+		if readErr == syscall.EINTR {
+			continue
+		}
+		if readErr != nil || m == 0 {
+			return n, readErr
 		}
 	}
-	return
+	return n, nil
 }
 
 // https://cs.opensource.google/go/go/+/refs/tags/go1.18.1:src/syscall/zsyscall_linux_amd64.go;l=944

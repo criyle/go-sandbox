@@ -3,11 +3,15 @@
 package forkexec
 
 import (
+	"fmt"
 	"syscall"
 )
 
 // prepareExec prepares execve parameters
 func prepareExec(Args, Env []string) (*byte, []*byte, []*byte, error) {
+	if len(Args) == 0 {
+		return nil, nil, nil, fmt.Errorf("missing executable argument")
+	}
 	// make exec args0
 	argv0, err := syscall.BytePtrFromString(Args[0])
 	if err != nil {

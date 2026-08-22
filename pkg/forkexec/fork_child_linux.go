@@ -19,6 +19,7 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	var (
 		clone3      *cloneArgs
 		pid         uintptr
+		execFile    = r.ExecFile
 		err2        syscall.Errno
 		unshareUser = r.CloneFlags&unix.CLONE_NEWUSER == unix.CLONE_NEWUSER
 		i           int
@@ -146,22 +147,22 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 		pipe = nextfd
 		nextfd++
 	}
-	if r.ExecFile > 0 && int(r.ExecFile) < nextfd {
+	if execFile > 0 && int(execFile) < nextfd {
 		// Avoid fd rewrite
 		for nextfd == pipe {
 			nextfd++
 		}
-		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, r.ExecFile, uintptr(nextfd), syscall.O_CLOEXEC)
+		_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, execFile, uintptr(nextfd), syscall.O_CLOEXEC)
 		if err1 != 0 {
 			childExitError(pipe, LocDup3, err1)
 		}
-		r.ExecFile = uintptr(nextfd)
+		execFile = uintptr(nextfd)
 		nextfd++
 	}
 	for i = 0; i < len(fd); i++ {
 		if fd[i] >= 0 && fd[i] < int(i) {
 			// Avoid fd rewrite
-			for nextfd == pipe || (r.ExecFile > 0 && nextfd == int(r.ExecFile)) {
+			for nextfd == pipe || (execFile > 0 && nextfd == int(execFile)) {
 				nextfd++
 			}
 			_, _, err1 = syscall.RawSyscall(syscall.SYS_DUP3, uintptr(fd[i]), uintptr(nextfd), syscall.O_CLOEXEC)
@@ -488,8 +489,8 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 	// or execve trapped without seccomp filter
 	// time to exec
 	// if execfile fd is specified, call fexecve
-	if r.ExecFile > 0 {
-		_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, r.ExecFile,
+	if execFile > 0 {
+		_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, execFile,
 			uintptr(unsafe.Pointer(&empty[0])), uintptr(unsafe.Pointer(&argv[0])),
 			uintptr(unsafe.Pointer(&env[0])), unix.AT_EMPTY_PATH, 0)
 	} else {
@@ -507,8 +508,8 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, host
 		}
 		// wait instead of busy wait
 		syscall.RawSyscall(unix.SYS_NANOSLEEP, uintptr(unsafe.Pointer(&etxtbsyRetryInterval)), 0, 0)
-		if r.ExecFile > 0 {
-			_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, r.ExecFile,
+		if execFile > 0 {
+			_, _, err1 = syscall.RawSyscall6(unix.SYS_EXECVEAT, execFile,
 				uintptr(unsafe.Pointer(&empty[0])), uintptr(unsafe.Pointer(&argv[0])),
 				uintptr(unsafe.Pointer(&env[0])), unix.AT_EMPTY_PATH, 0)
 		} else {
