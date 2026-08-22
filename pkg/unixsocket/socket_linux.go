@@ -74,7 +74,6 @@ func NewSocketPair() (*Socket, *Socket, error) {
 
 	ins, err := NewSocket(fd[0])
 	if err != nil {
-		syscall.Close(fd[0])
 		syscall.Close(fd[1])
 		return nil, nil, fmt.Errorf("new socket pair: sender: %w", err)
 	}
@@ -82,7 +81,6 @@ func NewSocketPair() (*Socket, *Socket, error) {
 	outs, err := NewSocket(fd[1])
 	if err != nil {
 		ins.Close()
-		syscall.Close(fd[1])
 		return nil, nil, fmt.Errorf("new socket pair: receiver: %w", err)
 	}
 
