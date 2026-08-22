@@ -9,17 +9,21 @@ permissions:
 
 jobs:
   build-test:
-    name: Build, test, and coverage
+    name: Build and test (Go ${{ matrix.go-version }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.26', '1.27']
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: ${{ matrix.go-version }}
+          check-latest: true
           cache: true
 
       - name: Build
@@ -46,7 +50,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage profile
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
+        if: matrix.go-version == '1.27'
         with:
           name: coverage
           path: coverage.out

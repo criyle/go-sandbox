@@ -1,6 +1,6 @@
 module github.com/criyle/go-sandbox
 
-go 1.26.0
+go 1.26
 
 require (
 	github.com/elastic/go-seccomp-bpf v1.6.0
