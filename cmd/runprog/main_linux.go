@@ -239,11 +239,11 @@ func start() (*runner.Result, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to open args[0]: %w", err)
 		}
+		defer fin.Close()
 		execf, err := memfd.DupToMemfd("run_program", fin)
 		if err != nil {
 			return nil, fmt.Errorf("dup to memfd failed: %w", err)
 		}
-		fin.Close()
 		defer execf.Close()
 		execFile = execf.Fd()
 		debug("memfd: ", execFile)

@@ -31,7 +31,7 @@ func DupToMemfd(name string, reader io.Reader) (*os.File, error) {
 	if err != nil {
 		return nil, fmt.Errorf("memfd: dup: %w", err)
 	}
-	// linux syscall sendfile might be more efficient here if reader is a file
+	// os.File.ReadFrom uses zero-copy kernel paths when available for file readers.
 	if _, err = file.ReadFrom(reader); err != nil {
 		file.Close()
 		return nil, fmt.Errorf("memfd: read from: %w", err)
