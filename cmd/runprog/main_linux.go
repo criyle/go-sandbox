@@ -92,11 +92,12 @@ func main() {
 		f   *os.File
 		err error
 	)
-	if result == "stdout" {
+	switch result {
+	case "stdout":
 		f = os.Stdout
-	} else if result == "stderr" {
+	case "stderr":
 		f = os.Stderr
-	} else {
+	default:
 		f, err = os.Create(result)
 		if err != nil {
 			debug("Failed to open result file:", err)
@@ -304,7 +305,8 @@ func start() (*runner.Result, error) {
 		MemoryLimit: runner.Size(memoryLimit << 20),
 	}
 
-	if runt == "container" {
+	switch runt {
+	case "container":
 		var credG container.CredGenerator
 		if cred {
 			credG = newCredGen()
@@ -353,7 +355,7 @@ func start() (*runner.Result, error) {
 				SyncAfterExec: cg == nil || cgDir != nil,
 			},
 		}
-	} else if runt == "ns" {
+	case "ns":
 		root, err := os.MkdirTemp("", "ns")
 		if err != nil {
 			return nil, fmt.Errorf("cannot make temp root for new namespace")
@@ -375,7 +377,7 @@ func start() (*runner.Result, error) {
 			HostName:    "run_program",
 			DomainName:  "run_program",
 		}
-	} else if runt == "ptrace" {
+	case "ptrace":
 		r = &ptrace.Runner{
 			Args:        args,
 			Env:         []string{pathEnv},
@@ -390,7 +392,7 @@ func start() (*runner.Result, error) {
 			Handler:     h,
 			SyncFunc:    syncFunc,
 		}
-	} else {
+	default:
 		return nil, fmt.Errorf("invalid runner type: %s", runt)
 	}
 

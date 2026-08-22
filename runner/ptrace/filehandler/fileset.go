@@ -111,11 +111,12 @@ func (s *FileSets) IsSoftBanFile(name string) bool {
 
 // AddFilePermission adds the file into fileSets according to the given permission
 func (s *FileSets) AddFilePermission(name string, mode FilePerm) {
-	if mode == FilePermWrite {
+	switch mode {
+	case FilePermWrite:
 		s.Writable.Add(name)
-	} else if mode == FilePermRead {
+	case FilePermRead:
 		s.Readable.Add(name)
-	} else if mode == FilePermStat {
+	case FilePermStat:
 		s.Statable.Add(name)
 	}
 	for name = dirname(name); name != ""; name = dirname(name) {
