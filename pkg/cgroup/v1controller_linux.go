@@ -23,7 +23,7 @@ func newV1Controller(p string) *v1controller {
 // WriteUint writes uint64 into given file
 func (c *v1controller) WriteUint(filename string, i uint64) error {
 	if c == nil || c.path == "" {
-		return nil
+		return ErrNotInitialized
 	}
 	return c.WriteFile(filename, []byte(strconv.FormatUint(i, 10)))
 }

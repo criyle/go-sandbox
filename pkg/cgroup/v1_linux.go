@@ -20,7 +20,8 @@ type V1 struct {
 	memory  *v1controller
 	pids    *v1controller
 
-	all []*v1controller
+	all     []*v1controller
+	created []*v1controller
 
 	existing bool
 }
@@ -69,12 +70,15 @@ func (c *V1) Processes() ([]int, error) {
 
 // New creates a sub-cgroup based on the existing one
 func (c *V1) New(name string) (cg Cgroup, err error) {
+	if err = validateCgroupName(name); err != nil {
+		return nil, err
+	}
 	v1 := &V1{
 		prefix: filepath.Join(c.prefix, name),
 	}
 	defer func() {
 		if err != nil {
-			for _, v := range v1.all {
+			for _, v := range v1.created {
 				remove(v.path)
 			}
 		}
@@ -97,15 +101,14 @@ func (c *V1) New(name string) (cg Cgroup, err error) {
 		err = EnsureDirExists(p)
 		if os.IsExist(err) {
 			err = nil
-			if len(v1.all) == 0 {
-				v1.existing = true
-			}
+			v1.all = append(v1.all, *v.new)
 			continue
 		}
 		if err != nil {
 			return
 		}
 		v1.all = append(v1.all, *v.new)
+		v1.created = append(v1.created, *v.new)
 	}
 	// init cpu set before use, otherwise it is not functional
 	if v1.cpuset != nil {
@@ -113,6 +116,7 @@ func (c *V1) New(name string) (cg Cgroup, err error) {
 			return
 		}
 	}
+	v1.existing = len(v1.created) == 0
 	return v1, nil
 }
 
@@ -127,6 +131,12 @@ func (c *V1) Nest(name string) (Cgroup, error) {
 	if err != nil {
 		return nil, err
 	}
+	cleanup := true
+	defer func() {
+		if cleanup {
+			v1.Destroy()
+		}
+	}()
 	p, err := c.Processes()
 	if err != nil {
 		return nil, err
@@ -134,16 +144,14 @@ func (c *V1) Nest(name string) (Cgroup, error) {
 	if err := v1.AddProc(p...); err != nil {
 		return nil, err
 	}
+	cleanup = false
 	return v1, nil
 }
 
 // Destroy removes dir for controllers recursively, errors are ignored if remove one failed
 func (c *V1) Destroy() error {
 	var err1 error
-	for _, s := range c.all {
-		if c.existing {
-			continue
-		}
+	for _, s := range c.created {
 		if err := remove(s.path); err != nil {
 			err1 = err
 		}

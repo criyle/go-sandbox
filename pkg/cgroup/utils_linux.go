@@ -22,6 +22,34 @@ func EnsureDirExists(path string) error {
 	return os.ErrExist
 }
 
+// validateCgroupPath validates a relative cgroup path. Nested prefixes are
+// allowed, but paths must not escape the cgroup mount.
+func validateCgroupPath(path string, allowEmpty bool) error {
+	if path == "" {
+		if allowEmpty {
+			return nil
+		}
+		return fmt.Errorf("cgroup path is empty")
+	}
+	if filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return fmt.Errorf("invalid cgroup path %q", path)
+	}
+	for _, part := range strings.Split(path, string(filepath.Separator)) {
+		if part == "" || part == "." || part == ".." {
+			return fmt.Errorf("invalid cgroup path %q", path)
+		}
+	}
+	return nil
+}
+
+func validateCgroupName(name string) error {
+	if name == "" || name == "." || name == ".." ||
+		strings.ContainsRune(name, filepath.Separator) {
+		return fmt.Errorf("invalid cgroup name %q", name)
+	}
+	return nil
+}
+
 // CreateV1ControllerPath create path for controller with given group, prefix
 func CreateV1ControllerPath(controller, prefix string) (string, error) {
 	p := filepath.Join(basePath, controller, prefix)
@@ -41,7 +69,7 @@ func EnableV2Nesting() error {
 	if err != nil {
 		return err
 	}
-	procs := strings.Split(string(p), "\n")
+	procs := strings.Fields(string(p))
 	if len(procs) == 0 {
 		return nil
 	}
@@ -57,12 +85,11 @@ func EnableV2Nesting() error {
 	}
 	for _, v := range procs {
 		if _, err := procFile.WriteString(v); err != nil {
-			continue
-			//return err
+			procFile.Close()
+			return err
 		}
 	}
-	procFile.Close()
-	return nil
+	return procFile.Close()
 }
 
 // ReadProcesses reads cgroup.procs file and return pids individually

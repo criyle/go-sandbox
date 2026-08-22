@@ -42,6 +42,9 @@ func (c *V2) Processes() ([]int, error) {
 
 // New creates a sub-cgroup based on the existing one
 func (c *V2) New(name string) (Cgroup, error) {
+	if err := validateCgroupName(name); err != nil {
+		return nil, err
+	}
 	if err := c.enableSubtreeControl(); err != nil {
 		return nil, err
 	}
@@ -60,6 +63,9 @@ func (c *V2) New(name string) (Cgroup, error) {
 
 // Nest creates a sub-cgroup, moves current process into that cgroup
 func (c *V2) Nest(name string) (Cgroup, error) {
+	if err := validateCgroupName(name); err != nil {
+		return nil, err
+	}
 	v2 := &V2{
 		path:    filepath.Join(c.path, name),
 		control: c.control,
@@ -70,6 +76,12 @@ func (c *V2) Nest(name string) (Cgroup, error) {
 		}
 		v2.existing = true
 	}
+	cleanup := true
+	defer func() {
+		if cleanup && !v2.existing {
+			remove(v2.path)
+		}
+	}()
 	p, err := c.Processes()
 	if err != nil {
 		return nil, err
@@ -80,6 +92,7 @@ func (c *V2) Nest(name string) (Cgroup, error) {
 	if err := c.enableSubtreeControl(); err != nil {
 		return nil, err
 	}
+	cleanup = false
 	return v2, nil
 }
 
@@ -133,12 +146,15 @@ func (c *V2) CPUUsage() (uint64, error) {
 	for s.Scan() {
 		parts := strings.Fields(s.Text())
 		if len(parts) == 2 && parts[0] == "usage_usec" {
-			v, err := strconv.Atoi(parts[1])
+			v, err := strconv.ParseUint(parts[1], 10, 64)
 			if err != nil {
 				return 0, err
 			}
-			return uint64(v) * 1000, nil // to ns
+			return v * 1000, nil // to ns
 		}
+	}
+	if err := s.Err(); err != nil {
+		return 0, err
 	}
 	return 0, os.ErrNotExist
 }

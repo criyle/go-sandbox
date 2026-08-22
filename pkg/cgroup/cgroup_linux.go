@@ -66,6 +66,12 @@ var DetectedCgroupType = DetectType()
 
 // New creates a new cgroup with provided prefix, it opens existing one if existed
 func New(prefix string, ct *Controllers) (Cgroup, error) {
+	if err := validateCgroupPath(prefix, false); err != nil {
+		return nil, err
+	}
+	if ct == nil {
+		return nil, fmt.Errorf("cgroup controllers are nil")
+	}
 	if DetectedCgroupType == TypeV1 {
 		return newV1(prefix, ct)
 	}
@@ -100,8 +106,8 @@ func newV1(prefix string, ct *Controllers) (cg Cgroup, err error) {
 	}
 	// if failed, remove potential created directory
 	defer func() {
-		if err != nil && !v1.existing {
-			for _, p := range v1.all {
+		if err != nil {
+			for _, p := range v1.created {
 				remove(p.path)
 			}
 		}
@@ -111,15 +117,14 @@ func newV1(prefix string, ct *Controllers) (cg Cgroup, err error) {
 		path, err := CreateV1ControllerPath(name, prefix)
 		*cg = newV1Controller(path)
 		if errors.Is(err, os.ErrExist) {
-			if len(v1.all) == 0 {
-				v1.existing = true
-			}
+			v1.all = append(v1.all, *cg)
 			return nil
 		}
 		if err != nil {
 			return err
 		}
 		v1.all = append(v1.all, *cg)
+		v1.created = append(v1.created, *cg)
 		return nil
 	}); err != nil {
 		return
@@ -131,20 +136,29 @@ func newV1(prefix string, ct *Controllers) (cg Cgroup, err error) {
 			return
 		}
 	}
+	v1.existing = len(v1.created) == 0
 	return v1, err
 }
 
 func newV2(prefix string, ct *Controllers) (cg Cgroup, err error) {
+	if err := validateCgroupPath(prefix, false); err != nil {
+		return nil, err
+	}
 	v2 := &V2{
 		path:    filepath.Join(basePath, prefix),
 		control: ct,
 	}
 	if _, err := os.Stat(v2.path); err == nil {
 		v2.existing = true
+	} else if !os.IsNotExist(err) {
+		return nil, err
 	}
+	created := make([]string, 0, strings.Count(prefix, "/")+1)
 	defer func() {
 		if err != nil && !v2.existing {
-			remove(v2.path)
+			for i := len(created) - 1; i >= 0; i-- {
+				remove(created[i])
+			}
 		}
 	}()
 
@@ -163,6 +177,7 @@ func newV2(prefix string, ct *Controllers) (cg Cgroup, err error) {
 			if err := os.Mkdir(filepath.Join(basePath, current), dirPerm); err != nil {
 				return nil, err
 			}
+			created = append(created, filepath.Join(basePath, current))
 		} else if err != nil {
 			return nil, err
 		}
@@ -184,6 +199,12 @@ func newV2(prefix string, ct *Controllers) (cg Cgroup, err error) {
 
 // OpenExisting opens a existing cgroup with provided prefix
 func OpenExisting(prefix string, ct *Controllers) (Cgroup, error) {
+	if err := validateCgroupPath(prefix, false); err != nil {
+		return nil, err
+	}
+	if ct == nil {
+		return nil, fmt.Errorf("cgroup controllers are nil")
+	}
 	if DetectedCgroupType == TypeV1 {
 		return openExistingV1(prefix, ct)
 	}
