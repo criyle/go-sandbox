@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -120,6 +121,24 @@ type sendCmd struct {
 
 // Build creates new environment with underlying container
 func (b *Builder) Build() (Environment, error) {
+	// Resolve the host-side container root before starting the init process.
+	// This prevents a failed MkdirTemp/Getwd path from leaking a process that
+	// has already been started by startContainer.
+	root := b.Root
+	if b.TmpRoot != "" {
+		var err error
+		if root, err = os.MkdirTemp(b.Root, b.TmpRoot); err != nil {
+			return nil, fmt.Errorf("container: failed to make tmp container root at %s: %w", b.Root, err)
+		}
+		defer os.Remove(root)
+	}
+	if root == "" {
+		var err error
+		if root, err = os.Getwd(); err != nil {
+			return nil, fmt.Errorf("container: failed to get work directory: %w", err)
+		}
+	}
+
 	c, err := b.startContainer()
 	if err != nil {
 		return nil, err
@@ -151,19 +170,6 @@ func (b *Builder) Build() (Environment, error) {
 		maskPaths = defaultMaskPaths
 	}
 
-	// container root directory on the host
-	root := b.Root
-	if b.TmpRoot != "" {
-		if root, err = os.MkdirTemp(b.Root, b.TmpRoot); err != nil {
-			return nil, fmt.Errorf("container: failed to make tmp container root at %s: %w", b.Root, err)
-		}
-		defer os.Remove(root)
-	}
-	if root == "" {
-		if root, err = os.Getwd(); err != nil {
-			return nil, fmt.Errorf("container: failed to get work directory: %w", err)
-		}
-	}
 	workDir := containerWD
 	if b.WorkDir != "" {
 		workDir = b.WorkDir
@@ -325,7 +331,14 @@ func (c *container) Destroy() error {
 	defer c.mu.Unlock()
 
 	// kill process
-	c.process.Kill()
+	if err := c.process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+		// Still wait below so the child is reaped before returning.
+		_, waitErr := c.process.Wait()
+		if waitErr != nil && !errors.Is(waitErr, os.ErrProcessDone) {
+			return fmt.Errorf("container: kill: %w; wait: %v", err, waitErr)
+		}
+		return fmt.Errorf("container: kill: %w", err)
+	}
 	_, err := c.process.Wait()
 	return err
 }
