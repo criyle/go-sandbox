@@ -60,7 +60,7 @@ func TestSocketFramingLargeMessage(t *testing.T) {
 	// Create a large message that exceeds 32KB to trigger chunking
 	// Use long paths in OpenCmd to inflate GOB size
 	lotsOfPaths := make([]OpenCmd, 0, 500)
-	for i := 0; i < 500; i++ {
+	for i := range 500 {
 		lotsOfPaths = append(lotsOfPaths, OpenCmd{
 			Path:     strings.Repeat("a", 100) + "_file_" + string(rune('A'+i%26)),
 			Flag:     0,
@@ -117,7 +117,7 @@ func TestSocketFramingRoundTrip(t *testing.T) {
 	cliSock := newSocket(client)
 
 	// Send multiple messages alternating directions to verify state is clean
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		c := cmd{Cmd: cmdPing}
 		if err := cliSock.SendMsg(c, unixsocket.Msg{}); err != nil {
 			t.Fatalf("SendMsg ping %d: %v", i, err)

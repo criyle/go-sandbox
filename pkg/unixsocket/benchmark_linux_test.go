@@ -61,7 +61,7 @@ func BenchmarkChannelBuffed4(b *testing.B) {
 }
 
 func BenchmarkEmptyGoroutine(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		c := make(chan struct{})
 		go func() {
 			close(c)

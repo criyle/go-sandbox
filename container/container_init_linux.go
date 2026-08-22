@@ -356,7 +356,7 @@ func (c *containerServer) sendReply(rep reply, msg unixsocket.Msg) error {
 }
 
 // sendErrorReply sends error reply
-func (c *containerServer) sendErrorReply(ft string, v ...interface{}) error {
+func (c *containerServer) sendErrorReply(ft string, v ...any) error {
 	errRep := &errorReply{
 		Msg: fmt.Sprintf(ft, v...),
 	}

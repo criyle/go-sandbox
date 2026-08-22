@@ -125,10 +125,7 @@ func (s *socket) SendMsg(e any, msg unixsocket.Msg) error {
 		s.chunkBuff = make([]byte, bufferSize)
 	}
 	for offset := 0; offset < len(data); offset += chunkPayloadSize {
-		end := offset + chunkPayloadSize
-		if end > len(data) {
-			end = len(data)
-		}
+		end := min(offset+chunkPayloadSize, len(data))
 		s.chunkBuff[0] = chunkByte
 		if end == len(data) {
 			s.chunkBuff[1] = chunkComplete

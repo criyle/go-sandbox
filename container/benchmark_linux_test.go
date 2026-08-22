@@ -26,7 +26,7 @@ func BenchmarkContainer(b *testing.B) {
 	}
 	n := runtime.GOMAXPROCS(0)
 	ch := make(chan Environment, n)
-	for i := 0; i < n; i++ {
+	for range n {
 		m, err := builder.Build()
 		if err != nil {
 			b.Error(err)

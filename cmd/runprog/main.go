@@ -56,7 +56,7 @@ func getStatus(s runner.Status) int {
 	}
 }
 
-func debug(v ...interface{}) {
+func debug(v ...any) {
 	if showDetails {
 		fmt.Fprintln(os.Stderr, v...)
 	}

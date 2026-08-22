@@ -153,7 +153,7 @@ func collectZombie(pgid int) {
 	}
 }
 
-func (r *Runner) println(v ...interface{}) {
+func (r *Runner) println(v ...any) {
 	if r.ShowDetails {
 		fmt.Fprintln(os.Stderr, v...)
 	}

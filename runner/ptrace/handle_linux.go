@@ -21,7 +21,7 @@ type tracerHandler struct {
 const atFDCWD = -100
 const maxSymlinkDepth = 40
 
-func (h *tracerHandler) Debug(v ...interface{}) {
+func (h *tracerHandler) Debug(v ...any) {
 	if h.ShowDetails {
 		fmt.Fprintln(os.Stderr, v...)
 	}

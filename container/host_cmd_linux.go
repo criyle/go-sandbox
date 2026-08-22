@@ -71,10 +71,7 @@ func (c *container) Open(p []OpenCmd) (results []OpenCmdResult, err error) {
 	// send copyin in batches to stay under the SCM_MAX_FD kernel limit
 	results = make([]OpenCmdResult, len(p))
 	for offset := 0; offset < len(p); offset += maxOpenPerBatch {
-		end := offset + maxOpenPerBatch
-		if end > len(p) {
-			end = len(p)
-		}
+		end := min(offset+maxOpenPerBatch, len(p))
 		cmd := cmd{
 			Cmd:     cmdOpen,
 			OpenCmd: p[offset:end],

@@ -1,5 +1,7 @@
 package filehandler
 
+import "maps"
+
 // SyscallCounter defines a count-down for each each syscall occurs
 type SyscallCounter map[string]int
 
@@ -15,9 +17,7 @@ func (s SyscallCounter) Add(name string, count int) {
 
 // AddRange add multiple counter to SyscallCounter
 func (s SyscallCounter) AddRange(m map[string]int) {
-	for k, v := range m {
-		s[k] = v
-	}
+	maps.Copy(s, m)
 }
 
 // Check return inside, allow

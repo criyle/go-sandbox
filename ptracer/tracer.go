@@ -34,5 +34,5 @@ type Handler interface {
 	Handle(*Context) TraceAction
 
 	// Debug prints debug information when in debug mode
-	Debug(v ...interface{})
+	Debug(v ...any)
 }

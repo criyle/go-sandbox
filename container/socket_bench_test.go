@@ -40,9 +40,8 @@ func BenchmarkSocketPing(b *testing.B) {
 		}
 	}()
 
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if err := cli.SendMsg(cmd{Cmd: cmdPing}, unixsocket.Msg{}); err != nil {
 			b.Fatal(err)
 		}
@@ -85,9 +84,8 @@ func BenchmarkSocketSendSmall(b *testing.B) {
 	}()
 	<-ready
 
-	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		if err := cli.SendMsg(cmd{Cmd: cmdPing}, unixsocket.Msg{}); err != nil {
 			b.Fatal(err)
 		}
@@ -171,7 +169,7 @@ func BenchmarkSocketOpenRoundTrip(b *testing.B) {
 				b.Fatal(err)
 			}
 			args := make([]OpenCmd, n)
-			for j := 0; j < n; j++ {
+			for j := range n {
 				p := filepath.Join(dir, fmt.Sprintf("f%d", j))
 				if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
 					b.Fatal(err)

@@ -168,7 +168,7 @@ func (c *container) execveSyncKill() {
 	c.recvReply()
 }
 
-func errResult(f string, v ...interface{}) runner.Result {
+func errResult(f string, v ...any) runner.Result {
 	return runner.Result{
 		Status: runner.StatusRunnerError,
 		Error:  fmt.Sprintf(f, v...),

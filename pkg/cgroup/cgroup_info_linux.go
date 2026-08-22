@@ -188,8 +188,8 @@ func getAvailableControllerV2path(p string) (*Controllers, error) {
 	}
 
 	m := &Controllers{}
-	f := strings.Fields(string(c))
-	for _, v := range f {
+	f := strings.FieldsSeq(string(c))
+	for v := range f {
 		m.Set(v, true)
 	}
 	return m, nil

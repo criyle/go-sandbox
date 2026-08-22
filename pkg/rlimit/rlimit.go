@@ -40,10 +40,7 @@ func getRlimit(cur, max uint64) syscall.Rlimit {
 func (r *RLimits) PrepareRLimit() []RLimit {
 	var ret []RLimit
 	if r.CPU > 0 {
-		cpuHard := r.CPUHard
-		if cpuHard < r.CPU {
-			cpuHard = r.CPU
-		}
+		cpuHard := max(r.CPUHard, r.CPU)
 
 		ret = append(ret, RLimit{
 			Res:  syscall.RLIMIT_CPU,

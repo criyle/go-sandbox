@@ -1,6 +1,7 @@
 package ptracer
 
 import (
+	"slices"
 	"syscall"
 	"unsafe"
 
@@ -72,16 +73,11 @@ func vmReadStr(pid int, addr uintptr, buff []byte) error {
 }
 
 func hasNull(buff []byte) bool {
-	for _, b := range buff {
-		if b == 0 {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(buff, 0)
 }
 
 func clen(b []byte) int {
-	for i := 0; i < len(b); i++ {
+	for i := range b {
 		if b[i] == 0 {
 			return i
 		}

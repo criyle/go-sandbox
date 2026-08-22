@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -54,8 +55,8 @@ func lookPath(name string, env []string) (string, error) {
 func findPath(env []string) ([]string, error) {
 	// find PATH=
 	const pathPrefix = "PATH="
-	for i := len(env) - 1; i >= 0; i-- {
-		s := env[i]
+	for _, s := range slices.Backward(env) {
+
 		if strings.HasPrefix(s, pathPrefix) {
 			return filepath.SplitList(s[len(pathPrefix):]), nil
 		}

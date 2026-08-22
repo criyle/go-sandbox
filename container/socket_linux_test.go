@@ -67,7 +67,7 @@ func TestLongPathsManyFiles(t *testing.T) {
 	n := 200
 	longPathPrefix := "/w/very_long_directory_name_to_increase_gob_payload_size/subdir_level2/another_level"
 	cmds := make([]OpenCmd, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		cmds[i] = OpenCmd{
 			Path:     fmt.Sprintf("%s/file_number_%d_with_some_extra_padding_to_make_it_even_longer", longPathPrefix, i),
 			Flag:     os.O_CREATE | os.O_WRONLY | os.O_TRUNC,
@@ -99,7 +99,7 @@ func TestOpenThenExecveManyFiles(t *testing.T) {
 	// Open many files
 	n := 500
 	cmds := make([]OpenCmd, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		cmds[i] = OpenCmd{
 			Path:     fmt.Sprintf("/w/exectest_%d", i),
 			Flag:     os.O_CREATE | os.O_WRONLY | os.O_TRUNC,

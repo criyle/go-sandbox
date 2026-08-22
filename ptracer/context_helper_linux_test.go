@@ -73,7 +73,7 @@ func findReadableMemoryRegion(t *testing.T, pid int, minSize int) uintptr {
 		t.Fatalf("Failed to read process maps: %v", err)
 	}
 
-	for _, line := range bytes.Split(maps, []byte{'\n'}) {
+	for line := range bytes.SplitSeq(maps, []byte{'\n'}) {
 		if len(line) == 0 {
 			continue
 		}
@@ -84,7 +84,7 @@ func findReadableMemoryRegion(t *testing.T, pid int, minSize int) uintptr {
 			if err != nil {
 				continue
 			}
-			
+
 			// Calculate region size
 			size := end - start
 			if size >= uint64(minSize) {
@@ -175,7 +175,7 @@ func TestVmReadStr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			buff := make([]byte, tc.buffSize)
-			
+
 			// Ensure the found memory region is large enough
 			baseAddr := findReadableMemoryRegion(t, pid, tc.buffSize)
 
@@ -213,22 +213,22 @@ func TestVmReadStr(t *testing.T) {
 // TestSliceBehavior tests slice behavior
 func TestSliceBehavior(t *testing.T) {
 	tests := []struct {
-		name      string
-		buffSize  int
-		nextRead  int
-		expected  int
+		name     string
+		buffSize int
+		nextRead int
+		expected int
 	}{
 		{
 			name:     "small_buffer_large_read",
 			buffSize: 10,
 			nextRead: 4096,
-			expected: 10,  // must be limited to buffer size
+			expected: 10, // must be limited to buffer size
 		},
 		{
 			name:     "large_buffer_small_read",
 			buffSize: 8192,
 			nextRead: 4096,
-			expected: 4096,  // can use full read amount
+			expected: 4096, // can use full read amount
 		},
 	}
 
@@ -236,12 +236,9 @@ func TestSliceBehavior(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			buff := make([]byte, tt.buffSize)
 			// safely calculate actual read amount
-			actualRead := tt.nextRead
-			if tt.buffSize < actualRead {
-				actualRead = tt.buffSize
-			}
+			actualRead := min(tt.buffSize, tt.nextRead)
 			slice := buff[:actualRead]
-			
+
 			if len(slice) != tt.expected {
 				t.Errorf("Expected slice len %d, got %d", tt.expected, len(slice))
 			}

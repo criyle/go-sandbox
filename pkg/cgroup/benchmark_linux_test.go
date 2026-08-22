@@ -18,8 +18,8 @@ func BenchmarkCgroup(b *testing.B) {
 		b.Fatal(err)
 	}
 	defer builder.Destroy()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		cg, err := builder.New("test")
 		if err != nil {
 			b.Fatal(err)
