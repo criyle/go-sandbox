@@ -9,7 +9,7 @@ import (
 
 // Mount calls mount syscall
 func (m *Mount) Mount() error {
-	if err := ensureMountTargetExists(m.Source, m.Target); err != nil {
+	if err := ensureMountTargetExistsForMount(m.Source, m.Target, m.IsBindMount()); err != nil {
 		return fmt.Errorf("mkdir: %w", err)
 	}
 	if err := syscall.Mount(m.Source, m.Target, m.FsType, m.Flags, m.Data); err != nil {
@@ -48,8 +48,20 @@ func (m Mount) IsTmpFs() bool {
 }
 
 func ensureMountTargetExists(source, target string) error {
+	return ensureMountTargetExistsForMount(source, target, true)
+}
+
+// ensureMountTargetExistsForMount creates a directory mount target, or a
+// regular-file target for bind mounts whose source is a regular file. Sources
+// for non-bind mounts (for example, "proc" and "tmpfs") are not local paths
+// and must not be inspected.
+func ensureMountTargetExistsForMount(source, target string, bind bool) error {
 	isFile := false
-	if fi, err := os.Stat(source); err == nil {
+	if bind {
+		fi, err := os.Stat(source)
+		if err != nil {
+			return err
+		}
 		isFile = !fi.IsDir()
 	}
 	dir := target

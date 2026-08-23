@@ -110,3 +110,25 @@ func TestEnsureMountTargetExists_File(t *testing.T) {
 		t.Errorf("expected file at %s, got directory", target)
 	}
 }
+
+func TestEnsureMountTargetExistsForMount_NonBindDoesNotInspectSource(t *testing.T) {
+	tmpDir := t.TempDir()
+	target := filepath.Join(tmpDir, "proc")
+	if err := ensureMountTargetExistsForMount("invalid\x00source", target, false); err != nil {
+		t.Fatalf("ensureMountTargetExistsForMount error: %v", err)
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatalf("stat error: %v", err)
+	}
+	if !info.IsDir() {
+		t.Errorf("expected directory at %s", target)
+	}
+}
+
+func TestEnsureMountTargetExistsForMount_BindReturnsSourceError(t *testing.T) {
+	err := ensureMountTargetExistsForMount("invalid\x00source", "target", true)
+	if err == nil {
+		t.Fatal("expected source stat error")
+	}
+}

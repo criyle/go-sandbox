@@ -57,9 +57,11 @@ func (b *Builder) FilterNotExist() *Builder {
 
 func isBindMountFileOrNotExists(m Mount) (bool, error) {
 	if m.IsBindMount() {
-		if fi, err := os.Stat(m.Source); os.IsNotExist(err) {
+		fi, err := os.Stat(m.Source)
+		if err != nil {
 			return false, err
-		} else if !fi.IsDir() {
+		}
+		if !fi.IsDir() {
 			return true, err
 		}
 	}

@@ -122,3 +122,17 @@ func TestBuilder_FilterNotExist(t *testing.T) {
 		t.Errorf("unexpected mount: %+v", b.Mounts[0])
 	}
 }
+
+func TestBuilder_BuildReturnsStatError(t *testing.T) {
+	b := NewBuilder().WithBind("invalid\x00source", "dst", false)
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("Build panicked: %v", r)
+		}
+	}()
+
+	if _, err := b.Build(); err == nil {
+		t.Fatal("Build returned nil error for an invalid source path")
+	}
+}
