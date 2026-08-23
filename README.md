@@ -204,6 +204,10 @@ type Environment interface {
 - 3.5: prctl(PR_SET_NO_NEW_PRIVS)
 - 2.6.36: prlimit64
 
+The seccomp builder uses `SECCOMP_RET_KILL_PROCESS` for kill-default policies;
+therefore, Linux 4.14 or newer is required when using those policies. Older
+kernels are not supported by the current seccomp filter builder.
+
 ## Benchmarks
 
 ### ForkExec

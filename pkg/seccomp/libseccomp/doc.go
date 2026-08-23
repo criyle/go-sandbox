@@ -1,2 +1,3 @@
-// Package libseccomp provides a wrapper for "github.com/seccomp/libseccomp-golang"
+// Package libseccomp builds seccomp-BPF filters using
+// "github.com/elastic/go-seccomp-bpf".
 package libseccomp

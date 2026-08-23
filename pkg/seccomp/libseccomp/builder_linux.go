@@ -1,6 +1,7 @@
 package libseccomp
 
 import (
+	"fmt"
 	"syscall"
 
 	"github.com/criyle/go-sandbox/pkg/seccomp"
@@ -18,6 +19,10 @@ var actTrace = libseccomp.ActionTrace
 
 // Build builds the filter
 func (b *Builder) Build() (seccomp.Filter, error) {
+	if !isValidAction(b.Default) {
+		return nil, fmt.Errorf("invalid default seccomp action: %d", b.Default)
+	}
+
 	policy := libseccomp.Policy{
 		DefaultAction: ToSeccompAction(b.Default),
 		Syscalls: []libseccomp.SyscallGroup{

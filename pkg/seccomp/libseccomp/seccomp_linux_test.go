@@ -29,7 +29,7 @@ func TestBuildFilter(t *testing.T) {
 
 // BenchmarkBuildDefaultFilter is about 0.2ms/op
 func BenchmarkBuildDefaultFilter(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		builder := Builder{
 			Allow:   defaultSyscallAllows,
 			Trace:   defaultSyscallTraces,
@@ -41,9 +41,16 @@ func BenchmarkBuildDefaultFilter(b *testing.B) {
 
 func buildFilterMock() (seccomp.Filter, error) {
 	b := Builder{
-		Allow:   []string{"fork"},
+		Allow:   []string{"read"},
 		Trace:   []string{"execve"},
 		Default: ActionTrace,
 	}
 	return b.Build()
+}
+
+func TestBuildRejectsInvalidDefaultAction(t *testing.T) {
+	_, err := (&Builder{Default: 0}).Build()
+	if err == nil {
+		t.Fatal("Build accepted an invalid default action")
+	}
 }

@@ -23,3 +23,12 @@ const (
 func (a Action) Action() Action {
 	return Action(a & 0xffff)
 }
+
+func isValidAction(a Action) bool {
+	switch a {
+	case ActionAllow, ActionErrno, ActionTrace, ActionKill:
+		return true
+	default:
+		return false
+	}
+}
