@@ -1,5 +1,7 @@
-// Package pipe provides a wrapper to create a pipe and
-// collect at most max bytes from the reader side
+// Package pipe provides wrappers to create pipes and collect bounded output
+// from their reader side. NewBuffer retains max+1 bytes intentionally: the
+// extra byte is a sentinel that lets callers distinguish output at or below
+// the limit from output that exceeded it.
 package pipe
 
 import (
@@ -18,9 +20,16 @@ type Buffer struct {
 	Max    int64
 }
 
-// NewPipe create a pipe with a goroutine to copy its read-end to writer
-// returns the write end and signal for finish
-// caller need to close w
+// NewPipe creates a pipe with a goroutine that copies at most n bytes from its
+// read end to writer. It returns the write end and a signal that the bounded
+// copy has finished. Errors from the bounded copy and the subsequent drain are
+// intentionally ignored.
+//
+// Once n bytes have been copied, the goroutine closes done and continues
+// reading and discarding input until w is closed. This drain prevents the
+// producer on the other end from blocking or receiving SIGPIPE, but means
+// that done does not signal that the goroutine has exited. The caller must
+// close w to let the drain finish.
 func NewPipe(writer io.Writer, n int64) (<-chan struct{}, *os.File, error) {
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -37,9 +46,13 @@ func NewPipe(writer io.Writer, n int64) (<-chan struct{}, *os.File, error) {
 	return done, w, nil
 }
 
-// NewBuffer creates a os pipe, caller need to
-// caller need to close w
-// Notice: if rely on done for finish, w need be closed in parent process
+// NewBuffer creates an os pipe backed by a bytes.Buffer. It copies max+1
+// bytes, retaining one sentinel byte so callers can determine whether the
+// output exceeded max. Consequently, Buffer may contain max+1 bytes.
+//
+// Done signals that the bounded copy is complete; the pipe goroutine may
+// still be draining and discarding further input. The caller must close W,
+// including when relying on Done, so that drain can finish.
 func NewBuffer(max int64) (*Buffer, error) {
 	buffer := new(bytes.Buffer)
 	done, w, err := NewPipe(buffer, max+1)
