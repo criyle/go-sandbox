@@ -102,6 +102,8 @@ func forkAndExecInChild(r *Runner, argv0 *byte, argv, env []*byte, workdir, prof
 	for _, rlim := range r.RLimits {
 		_, _, err1 = rawSyscall(libc_setrlimit_trampoline_addr, uintptr(rlim.Res), uintptr(unsafe.Pointer(&rlim.Rlim)), 0)
 		if err1 != 0 {
+			// macOS rejects RLIMIT_DATA and RLIMIT_AS on supported
+			// configurations; these limits cannot be enforced here.
 			if err1 == syscall.EINVAL && (rlim.Res == syscall.RLIMIT_DATA || rlim.Res == syscall.RLIMIT_AS) {
 				continue
 			}

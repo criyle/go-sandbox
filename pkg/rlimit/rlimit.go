@@ -1,6 +1,7 @@
 //go:build linux || darwin
 
-// Package rlimit provides data structure for resource limits by setrlimit syscall on linux.
+// Package rlimit provides data structures for resource limits applied with
+// setrlimit/prlimit.
 package rlimit
 
 import (
@@ -14,12 +15,12 @@ import (
 // RLimits defines the rlimit applied by setrlimit syscall to traced process
 type RLimits struct {
 	CPU          uint64 // in s
-	CPUHard      uint64 // in s
-	Data         uint64 // in bytes
-	FileSize     uint64 // in bytes
-	Stack        uint64 // in bytes
-	AddressSpace uint64 // in bytes
-	OpenFile     uint64 // count
+	CPUHard      uint64 // hard CPU limit in s; if CPU is zero, also becomes the soft limit
+	Data         uint64 // in bytes; zero means unspecified
+	FileSize     uint64 // in bytes; zero means unspecified
+	Stack        uint64 // in bytes; zero means unspecified
+	AddressSpace uint64 // in bytes; zero means unspecified
+	OpenFile     uint64 // count; zero means unspecified
 	DisableCore  bool   // set core to 0
 }
 
@@ -35,16 +36,24 @@ func getRlimit(cur, max uint64) syscall.Rlimit {
 	return syscall.Rlimit{Cur: cur, Max: max}
 }
 
-// PrepareRLimit creates rlimit structures for tracee
-// TimeLimit in s, SizeLimit in byte
+// PrepareRLimit creates rlimit structures for the tracee.
+// Time limits are in seconds and size limits are in bytes. A zero-valued
+// numeric limit means unspecified, except that CPUHard is used as both the
+// soft and hard CPU limit when CPU is zero. On macOS, DATA and AS limits may
+// be rejected by setrlimit and are intentionally ignored by the Darwin
+// forkexec runner.
 func (r *RLimits) PrepareRLimit() []RLimit {
-	var ret []RLimit
-	if r.CPU > 0 {
-		cpuHard := max(r.CPUHard, r.CPU)
+	ret := make([]RLimit, 0, 7)
+	if r.CPU > 0 || r.CPUHard > 0 {
+		cpuSoft := r.CPU
+		if cpuSoft == 0 {
+			cpuSoft = r.CPUHard
+		}
+		cpuHard := max(r.CPUHard, cpuSoft)
 
 		ret = append(ret, RLimit{
 			Res:  syscall.RLIMIT_CPU,
-			Rlim: getRlimit(r.CPU, cpuHard),
+			Rlim: getRlimit(cpuSoft, cpuHard),
 		})
 	}
 	if r.Data > 0 {

@@ -24,6 +24,11 @@ func TestPrepareRLimit(t *testing.T) {
 			expect: []int{syscall.RLIMIT_CPU},
 		},
 		{
+			name:   "CPU hard only",
+			rl:     RLimits{CPUHard: 2},
+			expect: []int{syscall.RLIMIT_CPU},
+		},
+		{
 			name:   "Data only",
 			rl:     RLimits{Data: 1024},
 			expect: []int{syscall.RLIMIT_DATA},
@@ -52,6 +57,64 @@ func TestPrepareRLimit(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPrepareRLimitCPUValues(t *testing.T) {
+	tests := []struct {
+		name     string
+		rl       RLimits
+		wantSoft uint64
+		wantHard uint64
+	}{
+		{name: "hard only", rl: RLimits{CPUHard: 2}, wantSoft: 2, wantHard: 2},
+		{name: "hard below soft", rl: RLimits{CPU: 3, CPUHard: 2}, wantSoft: 3, wantHard: 3},
+		{name: "hard above soft", rl: RLimits{CPU: 2, CPUHard: 3}, wantSoft: 2, wantHard: 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rls := tt.rl.PrepareRLimit()
+			if len(rls) != 1 {
+				t.Fatalf("expected one rlimit, got %d", len(rls))
+			}
+			got := rls[0].Rlim
+			if got.Cur != tt.wantSoft || got.Max != tt.wantHard {
+				t.Errorf("got CPU limit {%d, %d}, want {%d, %d}", got.Cur, got.Max, tt.wantSoft, tt.wantHard)
+			}
+		})
+	}
+}
+
+func TestPrepareRLimitValues(t *testing.T) {
+	rl := RLimits{
+		CPU:          1,
+		CPUHard:      2,
+		Data:         3,
+		FileSize:     4,
+		Stack:        5,
+		AddressSpace: 6,
+		OpenFile:     7,
+		DisableCore:  true,
+	}
+	rls := rl.PrepareRLimit()
+
+	want := []syscall.Rlimit{
+		{Cur: 1, Max: 2},
+		{Cur: 3, Max: 3},
+		{Cur: 4, Max: 4},
+		{Cur: 5, Max: 5},
+		{Cur: 6, Max: 6},
+		{Cur: 7, Max: 7},
+		{Cur: 0, Max: 0},
+	}
+	if len(rls) != len(want) {
+		t.Fatalf("got %d rlimits, want %d", len(rls), len(want))
+	}
+	for i := range want {
+		if rls[i].Rlim != want[i] {
+			t.Errorf("rlimit %d: got %+v, want %+v", i, rls[i].Rlim, want[i])
+		}
 	}
 }
 
