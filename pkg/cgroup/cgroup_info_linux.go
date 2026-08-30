@@ -94,7 +94,7 @@ func GetCgroupV1Info() (map[string]Info, error) {
 	s := bufio.NewScanner(f)
 	for s.Scan() {
 		text := s.Text()
-		if text[0] == '#' {
+		if strings.TrimSpace(text) == "" || text[0] == '#' {
 			continue
 		}
 		parts := strings.Fields(text)
