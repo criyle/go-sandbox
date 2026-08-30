@@ -31,6 +31,12 @@ func (s *FileSet) IsInSetSmart(name string) bool {
 	if s.Set[name] {
 		return true
 	}
+	// /* grants access to direct children of the root, not to deeper paths.
+	// Check it before walking up the hierarchy because the walk loses the
+	// original depth information.
+	if strings.HasPrefix(name, "/") && !strings.Contains(strings.TrimPrefix(name, "/"), "/") && s.Set["/*"] {
+		return true
+	}
 	if name == "/" && s.SystemRoot {
 		return true
 	}
@@ -44,9 +50,6 @@ func (s *FileSet) IsInSetSmart(name string) bool {
 			return true
 		}
 		name = dirname(name)
-	}
-	if level == 1 && s.Set["/*"] {
-		return true
 	}
 	if s.Set["/"] {
 		return true
@@ -91,22 +94,29 @@ func NewFileSets() *FileSets {
 
 // IsWritableFile determines whether the file path inside the write set
 func (s *FileSets) IsWritableFile(name string) bool {
-	return s.Writable.IsInSetSmart(name) || s.Writable.IsInSetSmart(realPath(name))
+	resolved := realPath(name)
+	return s.Writable.IsInSetSmart(name) || s.Writable.IsInSetSmart(resolved)
 }
 
 // IsReadableFile determines whether the file path inside the read / write set
 func (s *FileSets) IsReadableFile(name string) bool {
-	return s.IsWritableFile(name) || s.Readable.IsInSetSmart(name) || s.Readable.IsInSetSmart(realPath(name))
+	resolved := realPath(name)
+	return s.Writable.IsInSetSmart(name) || s.Writable.IsInSetSmart(resolved) ||
+		s.Readable.IsInSetSmart(name) || s.Readable.IsInSetSmart(resolved)
 }
 
 // IsStatableFile determines whether the file path inside the stat / read / write set
 func (s *FileSets) IsStatableFile(name string) bool {
-	return s.IsReadableFile(name) || s.Statable.IsInSetSmart(name) || s.Statable.IsInSetSmart(realPath(name))
+	resolved := realPath(name)
+	return s.Writable.IsInSetSmart(name) || s.Writable.IsInSetSmart(resolved) ||
+		s.Readable.IsInSetSmart(name) || s.Readable.IsInSetSmart(resolved) ||
+		s.Statable.IsInSetSmart(name) || s.Statable.IsInSetSmart(resolved)
 }
 
 // IsSoftBanFile determines whether the file path inside the softban set
 func (s *FileSets) IsSoftBanFile(name string) bool {
-	return s.SoftBan.IsInSetSmart(name) || s.SoftBan.IsInSetSmart(realPath(name))
+	resolved := realPath(name)
+	return s.SoftBan.IsInSetSmart(name) || s.SoftBan.IsInSetSmart(resolved)
 }
 
 // AddFilePermission adds the file into fileSets according to the given permission

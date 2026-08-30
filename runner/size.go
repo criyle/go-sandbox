@@ -3,6 +3,7 @@ package runner
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 // Size stores number of byte for the object. E.g. Memory.
@@ -26,9 +27,17 @@ func (s Size) String() string {
 
 // Set parse the size value from string
 func (s *Size) Set(str string) error {
+	str = strings.TrimSpace(str)
+	if str == "" {
+		return fmt.Errorf("empty size")
+	}
+
 	switch str[len(str)-1] {
 	case 'b', 'B':
 		str = str[:len(str)-1]
+	}
+	if str == "" {
+		return fmt.Errorf("missing size value")
 	}
 
 	factor := 0
@@ -43,10 +52,16 @@ func (s *Size) Set(str string) error {
 		factor = 30
 		str = str[:len(str)-1]
 	}
+	if str == "" {
+		return fmt.Errorf("missing size value")
+	}
 
-	t, err := strconv.Atoi(str)
+	t, err := strconv.ParseUint(str, 10, 64)
 	if err != nil {
 		return err
+	}
+	if factor > 0 && t > ^uint64(0)>>factor {
+		return fmt.Errorf("size overflows uint64")
 	}
 	*s = Size(t << factor)
 	return nil

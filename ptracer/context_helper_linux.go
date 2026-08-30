@@ -13,7 +13,15 @@ func ptraceReadStr(pid int, addr uintptr, buff []byte) {
 	syscall.PtracePeekData(pid, addr, buff)
 }
 
-func processVMReadv(pid int, localIov, remoteIov []unix.Iovec,
+// rawIovec mirrors struct iovec while keeping remote tracee addresses as
+// integers. Converting an arbitrary tracee address to an unsafe Go pointer
+// triggers go vet's unsafe.Pointer check and is unnecessary for the syscall.
+type rawIovec struct {
+	base uintptr
+	len  uintptr
+}
+
+func processVMReadv(pid int, localIov, remoteIov []rawIovec,
 	flags uintptr) (r1, r2 uintptr, err syscall.Errno) {
 	return syscall.Syscall6(unix.SYS_PROCESS_VM_READV, uintptr(pid),
 		uintptr(unsafe.Pointer(&localIov[0])), uintptr(len(localIov)),
@@ -26,8 +34,8 @@ func vmRead(pid int, addr uintptr, buff []byte) (int, error) {
 	if l == 0 {
 		return 0, nil
 	}
-	localIov := getIovecs(&buff[0], l)
-	remoteIov := getIovecs((*byte)(unsafe.Pointer(addr)), l)
+	localIov := getIovecs(uintptr(unsafe.Pointer(&buff[0])), l)
+	remoteIov := getIovecs(addr, l)
 	n, _, err := processVMReadv(pid, localIov, remoteIov, uintptr(0))
 	if err == 0 {
 		return int(n), nil
@@ -35,8 +43,8 @@ func vmRead(pid int, addr uintptr, buff []byte) (int, error) {
 	return int(n), err
 }
 
-func getIovecs(base *byte, l int) []unix.Iovec {
-	return []unix.Iovec{getIovec(base, l)}
+func getIovecs(base uintptr, l int) []rawIovec {
+	return []rawIovec{{base: base, len: uintptr(l)}}
 }
 
 func vmReadStr(pid int, addr uintptr, buff []byte) error {

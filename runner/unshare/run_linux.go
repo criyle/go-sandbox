@@ -40,11 +40,18 @@ func (r *Runner) Run(c context.Context) (result runner.Result) {
 	}
 
 	var (
-		wstatus unix.WaitStatus // wait4 wait status
-		rusage  unix.Rusage     // wait4 rusage
-		status  = runner.StatusNormal
-		sTime   = time.Now() // start time
-		fTime   time.Time    // finish time for setup
+		wstatus    unix.WaitStatus // wait4 wait status
+		rusage     unix.Rusage     // wait4 rusage
+		status     = runner.StatusNormal
+		sTime      = time.Now() // start time
+		fTime      time.Time    // finish time for setup
+		rootDone   bool
+		rootStatus runner.Status
+		rootExit   int
+		cpuUsage   = make(map[int]time.Duration)
+		memUsage   = make(map[int]runner.Size)
+		totalCPU   time.Duration
+		totalMem   runner.Size
 	)
 
 	// Start the runner
@@ -75,9 +82,14 @@ func (r *Runner) Run(c context.Context) (result runner.Result) {
 
 	fTime = time.Now()
 	for {
-		_, err := unix.Wait4(pgid, &wstatus, 0, &rusage)
+		pid, err := unix.Wait4(-pgid, &wstatus, unix.WALL, &rusage)
 		if err == unix.EINTR {
 			continue
+		}
+		if err == unix.ECHILD && rootDone {
+			result.Status = rootStatus
+			result.ExitStatus = rootExit
+			return
 		}
 		r.println("wait4: ", wstatus)
 		if err != nil {
@@ -88,19 +100,27 @@ func (r *Runner) Run(c context.Context) (result runner.Result) {
 
 		// update resource usage and check against limits
 		userTime := time.Duration(rusage.Utime.Nano()) // ns
-		userMem := runner.Size(rusage.Maxrss << 10)    // bytes
+		if previous := cpuUsage[pid]; userTime > previous {
+			totalCPU += userTime - previous
+			cpuUsage[pid] = userTime
+		}
+		userMem := runner.Size(rusage.Maxrss << 10) // bytes
+		if previous := memUsage[pid]; userMem > previous {
+			totalMem += userMem - previous
+			memUsage[pid] = userMem
+		}
 
 		// check tle / mle
-		if userTime > r.Limit.TimeLimit {
+		if r.Limit.TimeLimit > 0 && totalCPU > r.Limit.TimeLimit {
 			status = runner.StatusTimeLimitExceeded
 		}
-		if userMem > r.Limit.MemoryLimit {
+		if r.Limit.MemoryLimit > 0 && totalMem > r.Limit.MemoryLimit {
 			status = runner.StatusMemoryLimitExceeded
 		}
 		result = runner.Result{
 			Status: status,
-			Time:   userTime,
-			Memory: userMem,
+			Time:   totalCPU,
+			Memory: totalMem,
 		}
 		if status != runner.StatusNormal {
 			return
@@ -108,28 +128,39 @@ func (r *Runner) Run(c context.Context) (result runner.Result) {
 
 		switch {
 		case wstatus.Exited():
-			result.Status = runner.StatusNormal
-			result.ExitStatus = wstatus.ExitStatus()
-			if result.ExitStatus != 0 {
-				result.Status = runner.StatusNonzeroExitStatus
+			if pid == pgid {
+				rootDone = true
+				rootExit = wstatus.ExitStatus()
+				rootStatus = runner.StatusNormal
+				if rootExit != 0 {
+					rootStatus = runner.StatusNonzeroExitStatus
+				}
 			}
-			return
+			if rootDone {
+				// The namespace init process exiting terminates the remaining
+				// processes. Drain their wait statuses before returning so their
+				// already-accounted resource usage is included.
+				continue
+			}
 
 		case wstatus.Signaled():
 			sig := wstatus.Signal()
+			if pid != pgid {
+				continue
+			}
+			rootDone = true
+			rootExit = int(sig)
 			switch sig {
 			case unix.SIGXCPU, unix.SIGKILL:
-				status = runner.StatusTimeLimitExceeded
+				rootStatus = runner.StatusTimeLimitExceeded
 			case unix.SIGXFSZ:
-				status = runner.StatusOutputLimitExceeded
+				rootStatus = runner.StatusOutputLimitExceeded
 			case unix.SIGSYS:
-				status = runner.StatusDisallowedSyscall
+				rootStatus = runner.StatusDisallowedSyscall
 			default:
-				status = runner.StatusSignalled
+				rootStatus = runner.StatusSignalled
 			}
-			result.Status = status
-			result.ExitStatus = int(sig)
-			return
+			continue
 		}
 	}
 }

@@ -39,6 +39,18 @@ func TestFileSet_IsInSetSmart(t *testing.T) {
 	}
 }
 
+func TestFileSet_RootWildcard(t *testing.T) {
+	fs := NewFileSet()
+	fs.Add("/*")
+
+	if !fs.IsInSetSmart("/bin") {
+		t.Fatal("root wildcard should match a direct child")
+	}
+	if fs.IsInSetSmart("/bin/sh") {
+		t.Fatal("root wildcard should not match a deeper path")
+	}
+}
+
 // Unit test for Add method
 func TestFileSet_Add(t *testing.T) {
 	// Create a new FileSet
