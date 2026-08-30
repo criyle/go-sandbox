@@ -14,6 +14,14 @@ import (
 // Trace start and traces all child process by runner in the calling goroutine
 // parameter done used to cancel work, start is used notify child starts
 func (t *Tracer) Trace(c context.Context) (result runner.Result) {
+	if t.Handler == nil {
+		t.Handler = noopHandler{}
+	}
+	if t.Runner == nil {
+		result.Status = runner.StatusRunnerError
+		result.Error = "nil runner"
+		return
+	}
 	// ptrace is thread based (kernel proc)
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -82,23 +90,36 @@ func (t *Tracer) trace(c context.Context, pgid int) (result runner.Result) {
 		if err != nil {
 			t.Handler.Debug("wait4 failed: ", err)
 			result.Status = runner.StatusRunnerError
-			result.Error = err.Error()
+			if c.Err() != nil {
+				result.Error = c.Err().Error()
+			} else {
+				result.Error = err.Error()
+			}
 			return
 		}
 		t.Handler.Debug("------ ", pid, " ------")
 
 		// update rusage
-		if pid == pgid {
-			userTime, userMem, curStatus := t.checkUsage(rusage)
+		if pid == pgid || ph.execved {
+			userTime, userMem, curStatus := ph.checkUsage(pid, rusage)
 			result.Status = curStatus
 			result.Time = userTime
 			result.Memory = userMem
 			if curStatus != runner.StatusNormal {
+				if c.Err() != nil {
+					result.Status = runner.StatusRunnerError
+					result.Error = c.Err().Error()
+				}
 				return
 			}
 		}
 
 		status, exitStatus, errStr, finished := ph.handle(pid, wstatus)
+		if c.Err() != nil && status == runner.StatusTimeLimitExceeded {
+			status = runner.StatusRunnerError
+			errStr = c.Err().Error()
+			finished = true
+		}
 		if finished || status != runner.StatusNormal {
 			result.Status = status
 			result.ExitStatus = exitStatus
@@ -108,32 +129,44 @@ func (t *Tracer) trace(c context.Context, pgid int) (result runner.Result) {
 	}
 }
 
-func (t *Tracer) checkUsage(rusage unix.Rusage) (time.Duration, runner.Size, runner.Status) {
-	status := runner.StatusNormal
-	// update resource usage and check against limits
-	userTime := time.Duration(rusage.Utime.Nano()) // ns
-	userMem := runner.Size(rusage.Maxrss << 10)    // bytes
-
-	// check tle / mle
-	if userTime > t.Limit.TimeLimit {
-		status = runner.StatusTimeLimitExceeded
-	}
-	if userMem > t.Limit.MemoryLimit {
-		status = runner.StatusMemoryLimitExceeded
-	}
-	return userTime, userMem, status
-}
-
 type ptraceHandle struct {
 	*Tracer
-	pgid    int
-	traced  map[int]bool
-	execved bool
-	fTime   time.Time
+	pgid        int
+	traced      map[int]bool
+	execved     bool
+	fTime       time.Time
+	usage       map[int]time.Duration
+	memoryUsage map[int]runner.Size
+	userTime    time.Duration
+	memory      runner.Size
 }
 
 func newPtraceHandle(t *Tracer, pgid int) *ptraceHandle {
-	return &ptraceHandle{t, pgid, make(map[int]bool), false, time.Time{}}
+	return &ptraceHandle{Tracer: t, pgid: pgid, traced: make(map[int]bool), usage: make(map[int]time.Duration), memoryUsage: make(map[int]runner.Size)}
+}
+
+func (ph *ptraceHandle) checkUsage(pid int, rusage unix.Rusage) (time.Duration, runner.Size, runner.Status) {
+	current := time.Duration(rusage.Utime.Nano())
+	if previous := ph.usage[pid]; current > previous {
+		ph.userTime += current - previous
+	}
+	ph.usage[pid] = current
+
+	memory := runner.Size(rusage.Maxrss) << 10
+	// Maxrss is a per-process maximum; retain the largest sample per process.
+	if previous := ph.memoryUsage[pid]; memory > previous {
+		ph.memory += memory - previous
+		ph.memoryUsage[pid] = memory
+	}
+
+	status := runner.StatusNormal
+	if ph.Limit.TimeLimit > 0 && ph.userTime > ph.Limit.TimeLimit {
+		status = runner.StatusTimeLimitExceeded
+	}
+	if ph.Limit.MemoryLimit > 0 && ph.memory > ph.Limit.MemoryLimit {
+		status = runner.StatusMemoryLimitExceeded
+	}
+	return ph.userTime, ph.memory, status
 }
 
 func (ph *ptraceHandle) handle(pid int, wstatus unix.WaitStatus) (status runner.Status, exitStatus int, errStr string, finished bool) {
@@ -177,7 +210,7 @@ func (ph *ptraceHandle) handle(pid int, wstatus unix.WaitStatus) (status runner.
 			exitStatus = int(sig)
 			return
 		}
-		unix.PtraceCont(pid, int(sig))
+		delete(ph.traced, pid)
 
 	case wstatus.Stopped():
 		// Set option if the process is newly forked
@@ -227,7 +260,10 @@ func (ph *ptraceHandle) handle(pid int, wstatus unix.WaitStatus) (status runner.
 			default:
 				ph.Handler.Debug("ptrace unexpected trap cause: ", trapCause)
 			}
-			unix.PtraceCont(pid, 0)
+			if err := unix.PtraceCont(pid, 0); err != nil {
+				status = runner.StatusRunnerError
+				errStr = err.Error()
+			}
 			return
 
 		// check if cpu rlimit hit
@@ -245,7 +281,10 @@ func (ph *ptraceHandle) handle(pid int, wstatus unix.WaitStatus) (status runner.
 			ph.Handler.Debug("ptrace unexpected stop signal: ", stopSig)
 		}
 		ph.Handler.Debug("ptrace stopped")
-		unix.PtraceCont(pid, int(stopSig))
+		if err := unix.PtraceCont(pid, int(stopSig)); err != nil {
+			status = runner.StatusRunnerError
+			errStr = err.Error()
+		}
 	}
 	return
 }

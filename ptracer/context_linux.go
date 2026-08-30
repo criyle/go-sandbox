@@ -2,6 +2,7 @@ package ptracer
 
 import (
 	"os"
+	"sync"
 	"syscall"
 )
 
@@ -15,10 +16,11 @@ type Context struct {
 }
 
 var (
-	// UseVMReadv determine whether use ProcessVMReadv syscall to read str
-	// initial true and becomes false if tried and failed with ENOSYS
+	// UseVMReadv determines whether to use process_vm_readv to read strings.
+	// It starts enabled and is disabled when that fast path is unavailable.
 	UseVMReadv = true
 	pageSize   = 4 << 10
+	vmReadvMu  sync.Mutex
 )
 
 func init() {
@@ -41,18 +43,26 @@ func getTrapContext(pid int) (*Context, error) {
 // GetString get the string from process data segment
 func (c *Context) GetString(addr uintptr) string {
 	buff := make([]byte, syscall.PathMax)
-	if UseVMReadv {
+	vmReadvMu.Lock()
+	useVMReadv := UseVMReadv
+	vmReadvMu.Unlock()
+	if useVMReadv {
 		if err := vmReadStr(c.Pid, addr, buff); err != nil {
-			// if ENOSYS, then disable this function
+			// Disable the fast path when it is unavailable or forbidden. An
+			// invalid tracee address is not global evidence that it is unusable.
 			if no, ok := err.(syscall.Errno); ok {
-				if no == syscall.ENOSYS {
+				if no == syscall.ENOSYS || no == syscall.EPERM || no == syscall.EACCES {
+					vmReadvMu.Lock()
 					UseVMReadv = false
+					vmReadvMu.Unlock()
 				}
 			}
 		} else {
 			return string(buff[:clen(buff)])
 		}
 	}
-	syscall.PtracePeekData(c.Pid, addr, buff)
+	if _, err := syscall.PtracePeekData(c.Pid, addr, buff); err != nil {
+		return ""
+	}
 	return string(buff[:clen(buff)])
 }

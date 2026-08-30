@@ -23,6 +23,9 @@ func processVMReadv(pid int, localIov, remoteIov []unix.Iovec,
 
 func vmRead(pid int, addr uintptr, buff []byte) (int, error) {
 	l := len(buff)
+	if l == 0 {
+		return 0, nil
+	}
 	localIov := getIovecs(&buff[0], l)
 	remoteIov := getIovecs((*byte)(unsafe.Pointer(addr)), l)
 	n, _, err := processVMReadv(pid, localIov, remoteIov, uintptr(0))
@@ -82,5 +85,5 @@ func clen(b []byte) int {
 			return i
 		}
 	}
-	return len(b) + 1
+	return len(b)
 }

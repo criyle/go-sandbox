@@ -36,3 +36,9 @@ type Handler interface {
 	// Debug prints debug information when in debug mode
 	Debug(v ...any)
 }
+
+// noopHandler allows a tracer to be used only for process supervision.
+type noopHandler struct{}
+
+func (noopHandler) Handle(*Context) TraceAction { return TraceAllow }
+func (noopHandler) Debug(...any)                {}
