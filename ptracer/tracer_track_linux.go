@@ -155,8 +155,13 @@ func (ph *ptraceHandle) checkUsage(pid int, rusage unix.Rusage) (time.Duration, 
 	memory := runner.Size(rusage.Maxrss) << 10
 	// Maxrss is a per-process maximum; retain the largest sample per process.
 	if previous := ph.memoryUsage[pid]; memory > previous {
-		ph.memory += memory - previous
 		ph.memoryUsage[pid] = memory
+		// wait4 reports per-process peak RSS, not a simultaneous process-tree
+		// snapshot. Taking the largest observed process peak avoids counting
+		// sequential children as if they were resident at the same time.
+		if memory > ph.memory {
+			ph.memory = memory
+		}
 	}
 
 	status := runner.StatusNormal

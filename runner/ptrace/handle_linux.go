@@ -35,9 +35,29 @@ func (h *tracerHandler) getStringAt(ctx *ptracer.Context, dirfd int, addr uint) 
 	return absPathAt(ctx.Pid, dirfd, ctx.GetString(uintptr(addr)))
 }
 
+// checkedPath preserves the syscall's original path for procfs policy checks.
+// The canonical path is still used for the file allowlist, but resolving first
+// would turn /proc/self/fd/* and similar aliases into their targets.
+func (h *tracerHandler) checkedPath(ctx *ptracer.Context, raw string, resolved string) (string, ptracer.TraceAction, bool) {
+	if blocked, action := h.checkProcPath(ctx.Pid, raw); blocked {
+		return resolved, action, true
+	}
+	return resolved, ptracer.TraceAllow, false
+}
+
+func (h *tracerHandler) getCheckedString(ctx *ptracer.Context, addr uint) (string, ptracer.TraceAction, bool) {
+	raw := ctx.GetString(uintptr(addr))
+	return h.checkedPath(ctx, absPathRaw(ctx.Pid, raw), absPath(ctx.Pid, raw))
+}
+
+func (h *tracerHandler) getCheckedStringAt(ctx *ptracer.Context, dirfd int, addr uint) (string, ptracer.TraceAction, bool) {
+	raw := ctx.GetString(uintptr(addr))
+	return h.checkedPath(ctx, absPathAtRaw(ctx.Pid, dirfd, raw), absPathAt(ctx.Pid, dirfd, raw))
+}
+
 func (h *tracerHandler) checkOpen(ctx *ptracer.Context, addr uint, flags uint) ptracer.TraceAction {
-	fn := h.getString(ctx, addr)
-	if blocked, action := h.checkProcPath(ctx.Pid, fn); blocked {
+	fn, action, blocked := h.getCheckedString(ctx, addr)
+	if blocked {
 		h.Debug("open proc policy: ", fn, getFileMode(flags))
 		return action
 	}
@@ -51,8 +71,8 @@ func (h *tracerHandler) checkOpen(ctx *ptracer.Context, addr uint, flags uint) p
 }
 
 func (h *tracerHandler) checkOpenAt(ctx *ptracer.Context, dirfd int, addr uint, flags uint) ptracer.TraceAction {
-	fn := h.getStringAt(ctx, dirfd, addr)
-	if blocked, action := h.checkProcPath(ctx.Pid, fn); blocked {
+	fn, action, blocked := h.getCheckedStringAt(ctx, dirfd, addr)
+	if blocked {
 		h.Debug("openat proc policy: ", fn, getFileMode(flags), "dirfd:", dirfd)
 		return action
 	}
@@ -66,8 +86,8 @@ func (h *tracerHandler) checkOpenAt(ctx *ptracer.Context, dirfd int, addr uint, 
 }
 
 func (h *tracerHandler) checkOpenAt2(ctx *ptracer.Context, dirfd int, addr uint, howAddr uint) ptracer.TraceAction {
-	fn := h.getStringAt(ctx, dirfd, addr)
-	if blocked, action := h.checkProcPath(ctx.Pid, fn); blocked {
+	fn, action, blocked := h.getCheckedStringAt(ctx, dirfd, addr)
+	if blocked {
 		h.Debug("openat2 proc policy: ", fn, "dirfd:", dirfd)
 		return action
 	}
@@ -89,8 +109,8 @@ func (h *tracerHandler) checkOpenAt2(ctx *ptracer.Context, dirfd int, addr uint,
 }
 
 func (h *tracerHandler) checkRead(ctx *ptracer.Context, addr uint) ptracer.TraceAction {
-	fn := h.getString(ctx, addr)
-	if blocked, action := h.checkProcPath(ctx.Pid, fn); blocked {
+	fn, action, blocked := h.getCheckedString(ctx, addr)
+	if blocked {
 		h.Debug("check read proc policy: ", fn)
 		return action
 	}
@@ -99,8 +119,8 @@ func (h *tracerHandler) checkRead(ctx *ptracer.Context, addr uint) ptracer.Trace
 }
 
 func (h *tracerHandler) checkReadAt(ctx *ptracer.Context, dirfd int, addr uint) ptracer.TraceAction {
-	fn := h.getStringAt(ctx, dirfd, addr)
-	if blocked, action := h.checkProcPath(ctx.Pid, fn); blocked {
+	fn, action, blocked := h.getCheckedStringAt(ctx, dirfd, addr)
+	if blocked {
 		h.Debug("check read proc policy: ", fn, "dirfd:", dirfd)
 		return action
 	}
@@ -109,8 +129,8 @@ func (h *tracerHandler) checkReadAt(ctx *ptracer.Context, dirfd int, addr uint) 
 }
 
 func (h *tracerHandler) checkWrite(ctx *ptracer.Context, addr uint) ptracer.TraceAction {
-	fn := h.getString(ctx, addr)
-	if blocked, action := h.checkProcPath(ctx.Pid, fn); blocked {
+	fn, action, blocked := h.getCheckedString(ctx, addr)
+	if blocked {
 		h.Debug("check write proc policy: ", fn)
 		return action
 	}
@@ -119,8 +139,8 @@ func (h *tracerHandler) checkWrite(ctx *ptracer.Context, addr uint) ptracer.Trac
 }
 
 func (h *tracerHandler) checkWriteAt(ctx *ptracer.Context, dirfd int, addr uint) ptracer.TraceAction {
-	fn := h.getStringAt(ctx, dirfd, addr)
-	if blocked, action := h.checkProcPath(ctx.Pid, fn); blocked {
+	fn, action, blocked := h.getCheckedStringAt(ctx, dirfd, addr)
+	if blocked {
 		h.Debug("check write proc policy: ", fn, "dirfd:", dirfd)
 		return action
 	}
@@ -129,8 +149,8 @@ func (h *tracerHandler) checkWriteAt(ctx *ptracer.Context, dirfd int, addr uint)
 }
 
 func (h *tracerHandler) checkStat(ctx *ptracer.Context, addr uint) ptracer.TraceAction {
-	fn := h.getString(ctx, addr)
-	if blocked, action := h.checkProcPath(ctx.Pid, fn); blocked {
+	fn, action, blocked := h.getCheckedString(ctx, addr)
+	if blocked {
 		h.Debug("check stat proc policy: ", fn)
 		return action
 	}
@@ -139,8 +159,8 @@ func (h *tracerHandler) checkStat(ctx *ptracer.Context, addr uint) ptracer.Trace
 }
 
 func (h *tracerHandler) checkStatAt(ctx *ptracer.Context, dirfd int, addr uint) ptracer.TraceAction {
-	fn := h.getStringAt(ctx, dirfd, addr)
-	if blocked, action := h.checkProcPath(ctx.Pid, fn); blocked {
+	fn, action, blocked := h.getCheckedStringAt(ctx, dirfd, addr)
+	if blocked {
 		h.Debug("check stat proc policy: ", fn, "dirfd:", dirfd)
 		return action
 	}
@@ -331,6 +351,13 @@ func absPath(pid int, p string) string {
 	return resolveTraceePath(pid, "/", p)
 }
 
+func absPathRaw(pid int, p string) string {
+	if !filepath.IsAbs(p) {
+		return filepath.Join(getProcCwd(pid), p)
+	}
+	return filepath.Clean(p)
+}
+
 func absPathAt(pid int, dirfd int, p string) string {
 	if filepath.IsAbs(p) {
 		return resolveTraceePath(pid, "/", p)
@@ -343,6 +370,20 @@ func absPathAt(pid int, dirfd int, p string) string {
 		return ""
 	}
 	return resolveTraceePath(pid, base, p)
+}
+
+func absPathAtRaw(pid int, dirfd int, p string) string {
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p)
+	}
+	if dirfd == atFDCWD {
+		return filepath.Join(getProcCwd(pid), p)
+	}
+	base := getProcFd(pid, dirfd)
+	if base == "" {
+		return ""
+	}
+	return filepath.Join(base, p)
 }
 
 func normalizeProcMagicPath(pid int, p string) string {

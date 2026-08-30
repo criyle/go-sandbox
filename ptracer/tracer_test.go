@@ -14,7 +14,7 @@ func TestClenDoesNotExceedBuffer(t *testing.T) {
 	}
 }
 
-func TestCheckUsageAggregatesProcesses(t *testing.T) {
+func TestCheckUsageTracksProcessPeaks(t *testing.T) {
 	tracer := &Tracer{Limit: runner.Limit{TimeLimit: time.Second, MemoryLimit: 10 << 20}}
 	ph := newPtraceHandle(tracer, 100)
 
@@ -33,7 +33,7 @@ func TestCheckUsageAggregatesProcesses(t *testing.T) {
 	if want := time.Second + 100*time.Millisecond; ph.userTime != want {
 		t.Fatalf("aggregated CPU time = %v, want %v", ph.userTime, want)
 	}
-	if want := runner.Size(8 << 20); ph.memory != want {
+	if want := runner.Size(4 << 20); ph.memory != want {
 		t.Fatalf("aggregated memory = %d, want %d", ph.memory, want)
 	}
 }

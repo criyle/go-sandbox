@@ -18,9 +18,12 @@ type Context struct {
 var (
 	// UseVMReadv determines whether to use process_vm_readv to read strings.
 	// It starts enabled and is disabled when that fast path is unavailable.
-	UseVMReadv = true
-	pageSize   = 4 << 10
-	vmReadvMu  sync.Mutex
+	UseVMReadv    = true
+	pageSize      = 4 << 10
+	vmReadvMu     sync.Mutex
+	stringBufPool = sync.Pool{New: func() any {
+		return make([]byte, syscall.PathMax)
+	}}
 )
 
 func init() {
@@ -42,7 +45,8 @@ func getTrapContext(pid int) (*Context, error) {
 
 // GetString get the string from process data segment
 func (c *Context) GetString(addr uintptr) string {
-	buff := make([]byte, syscall.PathMax)
+	buff := stringBufPool.Get().([]byte)
+	defer stringBufPool.Put(buff)
 	vmReadvMu.Lock()
 	useVMReadv := UseVMReadv
 	vmReadvMu.Unlock()

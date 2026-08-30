@@ -106,8 +106,13 @@ func (r *Runner) Run(c context.Context) (result runner.Result) {
 		}
 		userMem := runner.Size(rusage.Maxrss << 10) // bytes
 		if previous := memUsage[pid]; userMem > previous {
-			totalMem += userMem - previous
 			memUsage[pid] = userMem
+			// wait4 reports per-process peak RSS rather than a simultaneous
+			// process-tree snapshot. Keep the largest observed peak so
+			// sequential children do not accumulate into a false MLE.
+			if userMem > totalMem {
+				totalMem = userMem
+			}
 		}
 
 		// check tle / mle

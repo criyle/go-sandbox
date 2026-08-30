@@ -150,9 +150,50 @@ func GetAvailableController() (*Controllers, error) {
 // GetAvailableControllerWithPrefix returns available cgroup controller within the cgroup prefix
 func GetAvailableControllerWithPrefix(prefix string) (*Controllers, error) {
 	if DetectedCgroupType == TypeV1 {
-		return GetAvailableControllerV1()
+		if err := validateCgroupPath(prefix, true); err != nil {
+			return nil, err
+		}
+		controllers, err := GetAvailableControllerV1()
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range []struct {
+			name string
+			set  func(bool)
+		}{
+			{CPU, func(v bool) { controllers.CPU = v }},
+			{CPUSet, func(v bool) { controllers.CPUSet = v }},
+			{CPUAcct, func(v bool) { controllers.CPUAcct = v }},
+			{Memory, func(v bool) { controllers.Memory = v }},
+			{Pids, func(v bool) { controllers.Pids = v }},
+		} {
+			if !controllerEnabled(controllers, item.name) {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join(basePath, item.name, prefix)); err != nil {
+				item.set(false)
+			}
+		}
+		return controllers, nil
 	}
 	return getAvailableControllerV2(prefix)
+}
+
+func controllerEnabled(c *Controllers, name string) bool {
+	switch name {
+	case CPU:
+		return c.CPU
+	case CPUSet:
+		return c.CPUSet
+	case CPUAcct:
+		return c.CPUAcct
+	case Memory:
+		return c.Memory
+	case Pids:
+		return c.Pids
+	default:
+		return false
+	}
 }
 
 // GetAvailableControllerV1 reads /proc/cgroups and get all available controller as set
