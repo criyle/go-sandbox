@@ -11,8 +11,11 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"unsafe"
 
+	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
+	"golang.org/x/sys/unix"
 )
 
 type containerServer struct {
@@ -262,6 +265,28 @@ func initContainer(c containerConfig) error {
 			os.Stderr.Write(output)
 			return err
 		}
+	}
+	if err := installSeccomp(c.Seccomp); err != nil {
+		return fmt.Errorf("install seccomp in container init: %w", err)
+	}
+	return nil
+}
+
+// installSeccomp applies the container policy after namespace and filesystem
+// initialization is complete. Children inherit this filter and therefore do
+// not need to install it individually.
+func installSeccomp(filter seccomp.Filter) error {
+	prog := filter.SockFprog()
+	if prog == nil {
+		return nil
+	}
+	if err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0); err != nil {
+		return fmt.Errorf("set no_new_privs: %w", err)
+	}
+	_, _, errno := syscall.RawSyscall(unix.SYS_SECCOMP, unix.SECCOMP_SET_MODE_FILTER,
+		unix.SECCOMP_FILTER_FLAG_TSYNC, uintptr(unsafe.Pointer(prog)))
+	if errno != 0 {
+		return errno
 	}
 	return nil
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/pkg/mount"
+	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/pkg/unixsocket"
 	"github.com/criyle/go-sandbox/runner"
 	"golang.org/x/sys/unix"
@@ -70,6 +71,10 @@ type Builder struct {
 
 	// UnshareCgroupBeforeExec calls unshare cgroup before execution
 	UnshareCgroupBeforeExec bool
+
+	// Seccomp is sent during configuration and installed by the container init
+	// after filesystem initialization. Children inherit the filter.
+	Seccomp seccomp.Filter
 }
 
 // SymbolicLink defines symlinks to be created after mount
@@ -197,6 +202,7 @@ func (b *Builder) Build() (Environment, error) {
 		ContainerUID:  b.ContainerUID,
 		ContainerGID:  b.ContainerGID,
 		UnshareCgroup: b.UnshareCgroupBeforeExec,
+		Seccomp:       b.Seccomp,
 	}); err != nil {
 		c.Destroy()
 		return nil, err

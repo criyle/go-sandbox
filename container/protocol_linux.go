@@ -77,6 +77,8 @@ type containerConfig struct {
 	ContainerGID  int
 	Cred          bool
 	UnshareCgroup bool
+	// Seccomp is installed once by the container init after initialization.
+	Seccomp seccomp.Filter
 }
 
 // reply is the reply message send back to controller

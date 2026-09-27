@@ -89,12 +89,6 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 			NoSetGroups: true,
 		}
 	}
-
-	var seccomp *syscall.SockFprog
-	if cmd.Seccomp != nil {
-		seccomp = cmd.Seccomp.SockFprog()
-	}
-
 	r := forkexec.Runner{
 		Args:       cmd.Argv,
 		Env:        env,
@@ -107,8 +101,11 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 		SyncFunc:   syncFunc,
 		Credential: cred,
 		CTTY:       cmd.CTTY,
-		Seccomp:    seccomp,
-		CgroupFd:   cgroupFd,
+		// The container init installs c.Seccomp during initialization. The
+		// child inherits it, so installing another filter here is unnecessary
+		// and would repeat kernel validation for every workload.
+		Seccomp:  nil,
+		CgroupFd: cgroupFd,
 
 		UnshareCgroupAfterSync: c.UnshareCgroup,
 	}
