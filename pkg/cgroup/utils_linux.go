@@ -58,14 +58,24 @@ func CreateV1ControllerPath(controller, prefix string) (string, error) {
 
 const initPath = "init"
 
-// EnableV2Nesting migrates all process in the container to nested /init path
-// and enables all available controllers in the root cgroup
+// EnableV2Nesting migrates all processes in the cgroup root to a nested /init
+// path, allowing controllers to be enabled in the root cgroup afterward.
 func EnableV2Nesting() error {
+	return EnableV2NestingAt("")
+}
+
+// EnableV2NestingAt migrates all processes in prefix to its nested /init path,
+// allowing controllers to be enabled in that cgroup afterward.
+func EnableV2NestingAt(prefix string) error {
 	if DetectType() != TypeV2 {
 		return nil
 	}
+	if err := validateCgroupPath(prefix, true); err != nil {
+		return err
+	}
 
-	p, err := readFile(filepath.Join(basePath, cgroupProcs))
+	parent := filepath.Join(basePath, prefix)
+	p, err := readFile(filepath.Join(parent, cgroupProcs))
 	if err != nil {
 		return err
 	}
@@ -75,11 +85,12 @@ func EnableV2Nesting() error {
 	}
 
 	// mkdir init
-	if err := os.Mkdir(filepath.Join(basePath, initPath), dirPerm); err != nil && !errors.Is(err, os.ErrExist) {
+	init := filepath.Join(parent, initPath)
+	if err := os.Mkdir(init, dirPerm); err != nil && !errors.Is(err, os.ErrExist) {
 		return err
 	}
 	// move all process into init cgroup
-	procFile, err := os.OpenFile(filepath.Join(basePath, initPath, cgroupProcs), os.O_RDWR, filePerm)
+	procFile, err := os.OpenFile(filepath.Join(init, cgroupProcs), os.O_RDWR, filePerm)
 	if err != nil {
 		return err
 	}
