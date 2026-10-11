@@ -96,6 +96,11 @@ func EnableV2NestingAt(prefix string) error {
 	}
 	for _, v := range procs {
 		if _, err := procFile.WriteString(v); err != nil {
+			// A process may exit after reading cgroup.procs but before it is
+			// moved. The kernel reports ESRCH for that stale PID.
+			if errors.Is(err, syscall.ESRCH) {
+				continue
+			}
 			procFile.Close()
 			return err
 		}
