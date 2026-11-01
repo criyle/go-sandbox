@@ -215,7 +215,7 @@ func monotonicTimeNS() int64 {
 	if err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &ts); err != nil {
 		return 0
 	}
-	return ts.Sec*1e9 + ts.Nsec
+	return int64(ts.Sec)*1e9 + int64(ts.Nsec)
 }
 
 func (c *containerServer) serve() error {
