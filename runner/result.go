@@ -18,6 +18,8 @@ type Result struct {
 	// metrics for the program runner
 	SetUpTime   time.Duration
 	RunningTime time.Duration
+	// ExitTimeNS is CLOCK_MONOTONIC time at the supervised process exit, when available.
+	ExitTimeNS int64
 }
 
 func (r Result) String() string {

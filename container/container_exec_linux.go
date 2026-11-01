@@ -199,6 +199,7 @@ func convertReply(ret waitPidResult) reply {
 				ExitStatus: exitStatus,
 				Time:       userTime,
 				Memory:     userMem,
+				ExitTimeNS: ret.ExitTimeNS,
 			},
 		}
 
@@ -220,6 +221,7 @@ func convertReply(ret waitPidResult) reply {
 				Status:     status,
 				Time:       userTime,
 				Memory:     userMem,
+				ExitTimeNS: ret.ExitTimeNS,
 			},
 		}
 

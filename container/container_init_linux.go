@@ -52,6 +52,7 @@ type sendReply struct {
 type waitPidResult struct {
 	WaitStatus syscall.WaitStatus
 	Rusage     syscall.Rusage
+	ExitTimeNS int64
 	Err        error
 }
 
@@ -191,6 +192,7 @@ func (c *containerServer) waitLoop() {
 			c.waitPidResult <- waitPidResult{
 				WaitStatus: waitStatus,
 				Rusage:     rusage,
+				ExitTimeNS: monotonicTimeNS(),
 			}
 
 		case <-c.waitAll:
@@ -206,6 +208,14 @@ func (c *containerServer) waitLoop() {
 			c.waitAllDone <- struct{}{}
 		}
 	}
+}
+
+func monotonicTimeNS() int64 {
+	var ts unix.Timespec
+	if err := unix.ClockGettime(unix.CLOCK_MONOTONIC, &ts); err != nil {
+		return 0
+	}
+	return ts.Sec*1e9 + ts.Nsec
 }
 
 func (c *containerServer) serve() error {

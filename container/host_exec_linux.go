@@ -159,6 +159,7 @@ func convertReplyResult(reply reply, sTime, mTime time.Time, err error) runner.R
 		Memory:      reply.ExecReply.Memory,
 		SetUpTime:   mTime.Sub(sTime),
 		RunningTime: time.Since(mTime),
+		ExitTimeNS:  reply.ExecReply.ExitTimeNS,
 	}
 }
 

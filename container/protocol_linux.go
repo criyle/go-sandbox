@@ -100,6 +100,7 @@ type execReply struct {
 	Status     runner.Status // return status
 	Time       time.Duration // waitpid user CPU (ns)
 	Memory     runner.Size   // waitpid user memory (byte)
+	ExitTimeNS int64         // CLOCK_MONOTONIC timestamp from wait4
 }
 
 func (e *errorReply) Error() string {
