@@ -202,6 +202,23 @@ func (c *V1) SetMemoryLimit(i uint64) error {
 	return c.memory.WriteUint("memory.limit_in_bytes", i)
 }
 
+// SetMemorySwapLimit disables swap by setting memory + swap equal to memory.
+func (c *V1) SetMemorySwapLimit(memory uint64) error {
+	if c.memory == nil {
+		return ErrNotInitialized
+	}
+	return c.memory.WriteUint("memory.memsw.limit_in_bytes", memory)
+}
+
+// CheckMemorySwapLimit reports whether memory+swap accounting is available.
+func (c *V1) CheckMemorySwapLimit() error {
+	if c.memory == nil {
+		return ErrNotInitialized
+	}
+	_, err := os.Stat(filepath.Join(c.memory.path, "memory.memsw.limit_in_bytes"))
+	return err
+}
+
 // SetProcLimit write pids.max
 func (c *V1) SetProcLimit(i uint64) error {
 	return c.pids.WriteUint("pids.max", i)

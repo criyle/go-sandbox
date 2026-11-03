@@ -208,6 +208,23 @@ func (c *V2) SetMemoryLimit(l uint64) error {
 	return c.WriteUint("memory.max", l)
 }
 
+// SetMemorySwapLimit disables swap for the cgroup.
+func (c *V2) SetMemorySwapLimit(_ uint64) error {
+	if !c.control.Memory {
+		return ErrNotInitialized
+	}
+	return c.WriteUint("memory.swap.max", 0)
+}
+
+// CheckMemorySwapLimit reports whether the memory swap controller is available.
+func (c *V2) CheckMemorySwapLimit() error {
+	if !c.control.Memory {
+		return ErrNotInitialized
+	}
+	_, err := os.Stat(filepath.Join(c.path, "memory.swap.max"))
+	return err
+}
+
 // SetProcLimit pids.max
 func (c *V2) SetProcLimit(l uint64) error {
 	if !c.control.Pids {

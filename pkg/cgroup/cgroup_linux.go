@@ -45,6 +45,12 @@ type Cgroup interface {
 	// SetMemoryLimit sets memory.limit_in_bytes
 	SetMemoryLimit(uint64) error
 
+	// SetMemorySwapLimit disables swap for the configured memory limit.
+	SetMemorySwapLimit(memory uint64) error
+
+	// CheckMemorySwapLimit reports whether this cgroup supports swap limits.
+	CheckMemorySwapLimit() error
+
 	// SetProcLimit sets pids.max
 	SetProcLimit(uint64) error
 
