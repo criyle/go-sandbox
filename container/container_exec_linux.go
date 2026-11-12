@@ -120,13 +120,13 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 	}
 	if cmd.SyncAfter {
 		if err := syncPid(1); err != nil {
-			syscall.Kill(-1, syscall.SIGKILL)
+			syscall.Kill(-pid, syscall.SIGKILL)
 
 			c.waitPid <- pid
 			ret := <-c.waitPidResult
 			err := c.sendReply(convertReply(ret), unixsocket.Msg{})
 
-			c.waitAll <- struct{}{}
+			c.waitAll <- pid
 			<-c.waitAllDone
 			return err
 		}
@@ -149,17 +149,16 @@ func (c *containerServer) handleExecveStarted(pid int) error {
 		return c.err
 
 	case <-c.recvCh: // kill cmd received
-		syscall.Kill(-1, syscall.SIGKILL)
+		syscall.Kill(-pid, syscall.SIGKILL)
 		ret = <-c.waitPidResult
-		c.waitAll <- struct{}{}
+		c.waitAll <- pid
 
 		if err := c.sendReply(convertReply(ret), unixsocket.Msg{}); err != nil {
 			return err
 		}
 
 	case ret = <-c.waitPidResult: // child process returned
-		syscall.Kill(-1, syscall.SIGKILL)
-		c.waitAll <- struct{}{}
+		c.waitAll <- pid
 
 		if err := c.sendReply(convertReply(ret), unixsocket.Msg{}); err != nil {
 			return err
