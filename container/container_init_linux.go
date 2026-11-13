@@ -33,7 +33,7 @@ type containerServer struct {
 	waitPid       chan int
 	waitPidResult chan waitPidResult
 
-	waitAll     chan struct{}
+	waitAll     chan int // workload pgid
 	waitAllDone chan struct{}
 }
 
@@ -114,7 +114,7 @@ func Init() (err error) {
 		sendCh:        make(chan sendReply, 1),
 		recvCh:        make(chan recvCmd, 1),
 		waitPid:       make(chan int),
-		waitAll:       make(chan struct{}),
+		waitAll:       make(chan int),
 		waitPidResult: make(chan waitPidResult, 1),
 		waitAllDone:   make(chan struct{}, 1),
 	}
@@ -195,17 +195,37 @@ func (c *containerServer) waitLoop() {
 				ExitTimeNS: monotonicTimeNS(),
 			}
 
-		case <-c.waitAll:
-			for {
-				_, err := syscall.Wait4(-1, nil, 0, nil)
-				if err == syscall.EINTR {
-					continue
-				}
-				if err != nil {
-					break
-				}
-			}
+		case pgid := <-c.waitAll:
+			killNamespace(pgid)
 			c.waitAllDone <- struct{}{}
+		}
+	}
+}
+
+// killNamespace kills and waits for every process in this pid namespace except
+// init. Init is pid 1: every live process here descends from it and orphans are
+// reparented to it, so ECHILD from wait4(-1) means init is alone.
+func killNamespace(pgid int) {
+	// forkexec makes the workload a session leader. kill(-pgid) signals only
+	// that group, and a concurrent fork cannot produce a member it misses, so
+	// waiting for the group terminates.
+	syscall.Kill(-pgid, syscall.SIGKILL)
+	for wait4(-pgid, 0) == nil {
+	}
+	// Survivors left the group via setsid or setpgid. Only then use kill(-1),
+	// which walks every task on the host under tasklist_lock.
+	if err := wait4(-1, syscall.WNOHANG); err != syscall.ECHILD {
+		syscall.Kill(-1, syscall.SIGKILL)
+	}
+	for wait4(-1, 0) == nil {
+	}
+}
+
+func wait4(pid int, options int) error {
+	for {
+		_, err := syscall.Wait4(pid, nil, options, nil)
+		if err != syscall.EINTR {
+			return err
 		}
 	}
 }
