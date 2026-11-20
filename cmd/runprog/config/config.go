@@ -16,6 +16,10 @@ var (
 		"/dev/urandom",
 		"/proc/meminfo",
 		"/etc/localtime",
+        "/usr/lib/libstdc++.so.6",
+        "/usr/lib/libc.so.6",
+        "/usr/lib/libm.so.6",
+        "/usr/lib/libgcc_s.so.1",
 	}
 
 	// default write permission files
@@ -71,6 +75,17 @@ var (
 		"clock_gettime",
 
 		"restart_syscall",
+
+
+        "futex",
+        "gettid",
+        "getpid",
+        "prlimit64",
+        "getrandom",
+        "set_tid_address",
+        "set_robust_list",
+        "rseq",
+        "newfstatat",
 	}
 
 	// default syscalls to trace
@@ -98,71 +113,11 @@ var (
 	// config for different type of program
 	// workpath and arg0 have additional read / stat permission
 	runptraceConfig = map[string]ProgramConfig{
-		"python2.7": {
-			Syscall: SyscallConfig{
-				ExtraAllow: []string{
-					"futex", "getdents", "getdents64", "prlimit64", "getpid", "sysinfo",
-				},
-				ExtraCount: map[string]int{
-					"set_tid_address": 1,
-					"set_robust_list": 1,
-				},
-			},
-			FileAccess: FileAccessConfig{
-				ExtraRead: []string{
-					"/usr/bin/python2.7",
-					"/usr/lib/python2.7/",
-					"/usr/bin/lib/python2.7/",
-					"/usr/local/lib/python2.7/",
-					"/usr/lib/pymodules/python2.7/",
-					"/usr/bin/Modules/",
-					"/usr/bin/pybuilddir.txt",
-					"/usr/lib/locale/",
-					"./answer.code",
-				},
-				ExtraStat: []string{
-					"/usr", "/usr/bin",
-				},
-			},
-			RunCommand: []string{"/usr/bin/python2.7", "-E", "-s", "-B"},
-		},
-		"python3": {
-			Syscall: SyscallConfig{
-				ExtraAllow: []string{
-					"futex", "getdents", "getdents64", "prlimit64", "getpid", "sysinfo", "getrandom",
-				},
-				ExtraCount: map[string]int{
-					"set_tid_address": 1,
-					"set_robust_list": 1,
-				},
-			},
-			FileAccess: FileAccessConfig{
-				ExtraRead: []string{
-					"/usr/bin/python3",
-					"/usr/lib/python3/",
-					"/usr/bin/python3.6",
-					"/usr/lib/python3.6/",
-					"/usr/bin/lib/python3.6/",
-					"/usr/local/lib/python3.6/",
-					"/usr/bin/pyvenv.cfg",
-					"/usr/pyvenv.cfg",
-					"/usr/bin/Modules",
-					"/usr/bin/pybuilddir.txt",
-					"/usr/lib/dist-python",
-					"/usr/lib/locale/",
-					"./answer.code",
-				},
-				ExtraStat: []string{
-					"/usr", "/usr/bin", "/usr/lib", "/usr/lib/python36.zip",
-				},
-			},
-			RunCommand: []string{"/usr/bin/python3", "-I", "-B"},
-		},
 		"compiler": {
 			Syscall: SyscallConfig{
 				ExtraAllow: []string{
-					"gettid", "set_tid_address", "set_robust_list", "futex",
-					"getpid", "vfork", "fork", "clone", "execve", "wait4",
+					"set_tid_address", "set_robust_list", "futex",
+					"vfork", "fork", "clone", "execve", "wait4",
 					"clock_gettime", "clock_getres",
 					"setrlimit", "pipe",
 					"getdents64", "getdents",
