@@ -106,7 +106,11 @@ func (c *containerServer) handleExecve(cmd *execCmd, msg unixsocket.Msg) error {
 		// and would repeat kernel validation for every workload.
 		Seccomp:  nil,
 		CgroupFd: cgroupFd,
-
+		// Give every exec its own IPC namespace so SysV IPC objects created by
+		// one command cannot outlive it or be observed by later commands that
+		// reuse this container. Processes forked by the workload still share
+		// the namespace.
+		CloneFlags:             syscall.CLONE_NEWIPC,
 		UnshareCgroupAfterSync: c.UnshareCgroup,
 	}
 	// starts the runner, error is handled same as wait4 to make communication equal

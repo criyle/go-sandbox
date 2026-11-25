@@ -80,6 +80,16 @@ var tests []testCase = []testCase{
 		expected: runner.StatusNormal,
 	},
 	{
+		name: "SuccessWithSyncAfterExec",
+		param: ExecveParam{
+			Args:          []string{"/bin/true"},
+			Env:           []string{"PATH=/bin"},
+			SyncFunc:      func(p int) error { return nil },
+			SyncAfterExec: true,
+		},
+		expected: runner.StatusNormal,
+	},
+	{
 		name: "NotExists",
 		param: ExecveParam{
 			Args: []string{"not_exists"},
